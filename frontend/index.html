@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedSafe - Sistema de Contra-indicativos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .glass-morphism {
+            background: rgba(255, 255, 255, 0.25);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        .risk-critical { background: linear-gradient(135deg, #ff6b6b, #ee5a24); }
+        .risk-high { background: linear-gradient(135deg, #ffa502, #ff6348); }
+        .risk-medium { background: linear-gradient(135deg, #f39c12, #e67e22); }
+        .risk-low { background: linear-gradient(135deg, #00b894, #00a085); }
+        
+        .step-indicator {
+            transition: all 0.3s ease;
+        }
+        .step-indicator.active {
+            background: #667eea;
+            color: white;
+        }
+        .step-indicator.completed {
+            background: #00b894;
+            color: white;
+        }
+        
+        .medication-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .medication-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        
+        .pulse-animation {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        #three-container {
+            border-radius: 15px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <header class="gradient-bg shadow-lg">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-white p-2 rounded-full">
+                        <i class="fas fa-pills text-2xl text-blue-600"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-white">MedSafe</h1>
+                        <p class="text-blue-100 text-sm">Sistema de Contra-indicativos de Medicamentos</p>
+                    </div>
+                </div>
+                <div class="text-right text-white">
+                    <p class="text-sm">Baseado em diretrizes</p>
+                    <p class="font-semibold">OMS & ANVISA</p>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-6 py-8">
+        <!-- Progress Indicator -->
+        <div class="mb-8">
+            <div class="flex items-center justify-center space-x-4">
+                <div class="step-indicator active flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 text-gray-600 font-semibold">
+                    1
+                </div>
+                <div class="w-20 h-1 bg-gray-200 rounded"></div>
+                <div class="step-indicator flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 text-gray-600 font-semibold">
+                    2
+                </div>
+                <div class="w-20 h-1 bg-gray-200 rounded"></div>
+                <div class="step-indicator flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 text-gray-600 font-semibold">
+                    3
+                </div>
+                <div class="w-20 h-1 bg-gray-200 rounded"></div>
+                <div class="step-indicator flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 text-gray-600 font-semibold">
+                    4
+                </div>
+            </div>
+            <div class="flex justify-center mt-2 space-x-16 text-sm text-gray-600">
+                <span>Anamnese</span>
+                <span>Medicamento</span>
+                <span>Análise</span>
+                <span>Resultado</span>
+            </div>
+        </div>
+
+        <!-- Step 1: Patient Data -->
+        <div id="step-1" class="step-content fade-in">
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-xl p-8">
+                    <div class="text-center mb-8">
+                        <h2 class="text-3xl font-bold text-gray-800 mb-2">Anamnese Digital</h2>
+                        <p class="text-gray-600">Preencha os dados para uma análise personalizada e segura</p>
+                    </div>
+
+                    <form id="patient-form" class="space-y-6">
+                        <div class="grid md:grid-cols-2 gap-6">
+                            <!-- Dados Básicos -->
+                            <div class="space-y-4">
+                                <h3 class="text-lg font-semibold text-gray-800 border-b pb-2">Dados Básicos</h3>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Idade *</label>
+                                    <input type="number" id="age" required min="0" max="120" 
+                                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Gênero *</label>
+                                    <select id="gender" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                        <option value="">Selecione...</option>
+                                        <option value="masculino">Masculino</option>
+                                        <option value="feminino">Feminino</option>
+                                        <option value="outro">Outro</option>
+                                    </select>
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Peso aproximado (kg)</label>
+                                    <input type="number" id="weight" min="1" max="300" step="0.1"
+                                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                </div>
+                            </div>
+
+                            <!-- Condições Especiais -->
+                            <div class="space-y-4">
+                                <h3 class="text-lg font-semibold text-gray-800 border-b pb-2">Condições Especiais</h3>
+                                
+                                <div id="pregnancy-section">
+                                    <label class="flex items-center space-x-3">
+                                        <input type="checkbox" id="pregnancy" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
+                                        <span class="text-sm font-medium text-gray-700">Gravidez</span>
+                                    </label>
+                                </div>
+                                
+                                <div id="breastfeeding-section">
+                                    <label class="flex items-center space-x-3">
+                                        <input type="checkbox" id="breastfeeding" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
+                                        <span class="text-sm font-medium text-gray-700">Amamentação</span>
+                                    </label>
+                                </div>
+                                
+                                <div>
+                                    <label class="flex items-center space-x-3">
+                                        <input type="checkbox" id="alcohol-use" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
+                                        <span class="text-sm font-medium text-gray-700">Uso regular de álcool</span>
+                                    </label>
+                                </div>
+                                
+                                <div>
+                                    <label class="flex items-center space-x-3">
+                                        <input type="checkbox" id="smoking" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
+                                        <span class="text-sm font-medium text-gray-700">Tabagismo</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Condições Médicas -->
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-800 border-b pb-2 mb-4">Condições Médicas</h3>
+                            <div class="grid md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Doenças/Condições</label>
+                                    <textarea id="conditions" rows="3" placeholder="Ex: hipertensão, diabetes, doença renal..."
+                                              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Alergias Conhecidas</label>
+                                    <textarea id="allergies" rows="3" placeholder="Ex: penicilina, aspirina, lactose..."
+                                              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Medicamentos Atuais -->
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-800 border-b pb-2 mb-4">Medicamentos e Suplementos</h3>
+                            <div class="grid md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Medicamentos em Uso</label>
+                                    <textarea id="current-medications" rows="3" placeholder="Ex: losartana 50mg, metformina 850mg..."
+                                              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Suplementos/Fitoterápicos</label>
+                                    <textarea id="supplements" rows="3" placeholder="Ex: vitamina D, omega 3, ginkgo biloba..."
+                                              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end">
+                            <button type="submit" class="px-8 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors">
+                                Continuar para Medicamento
+                                <i class="fas fa-arrow-right ml-2"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Medication Input -->
+        <div id="step-2" class="step-content hidden">
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-xl p-8">
+                    <div class="text-center mb-8">
+                        <h2 class="text-3xl font-bold text-gray-800 mb-2">Identificação do Medicamento</h2>
+                        <p class="text-gray-600">Digite o nome ou carregue uma foto da embalagem</p>
+                    </div>
+
+                    <div class="grid md:grid-cols-2 gap-8">
+                        <!-- Text Input -->
+                        <div class="space-y-4">
+                            <h3 class="text-lg font-semibold text-gray-800">Busca por Nome</h3>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Nome do Medicamento</label>
+                                <input type="text" id="medication-search" placeholder="Ex: Dipirona, Paracetamol..."
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <div id="medication-suggestions" class="mt-2 space-y-2 hidden"></div>
+                            </div>
+                        </div>
+
+                        <!-- Image Upload -->
+                        <div class="space-y-4">
+                            <h3 class="text-lg font-semibold text-gray-800">Upload de Imagem</h3>
+                            <div id="image-upload-area" class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors cursor-pointer">
+                                <i class="fas fa-camera text-4xl text-gray-400 mb-4"></i>
+                                <p class="text-gray-600 mb-2">Clique para carregar ou arraste uma imagem</p>
+                                <p class="text-sm text-gray-500">JPG, PNG até 10MB</p>
+                                <input type="file" id="image-upload" accept="image/*" class="hidden">
+                            </div>
+                            <div id="image-preview" class="hidden">
+                                <img id="preview-img" class="w-full h-48 object-cover rounded-lg">
+                                <div id="ocr-result" class="mt-4 p-4 bg-gray-50 rounded-lg hidden">
+                                    <h4 class="font-semibold text-gray-800 mb-2">Texto Identificado:</h4>
+                                    <p id="ocr-text" class="text-sm text-gray-600"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-8 flex justify-between">
+                        <button id="back-to-step1" class="px-6 py-3 bg-gray-500 text-white rounded-lg font-semibold hover:bg-gray-600 transition-colors">
+                            <i class="fas fa-arrow-left mr-2"></i>
+                            Voltar
+                        </button>
+                        <button id="analyze-medication" class="px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
+                            Analisar Medicamento
+                            <i class="fas fa-search ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Analysis Loading -->
+        <div id="step-3" class="step-content hidden">
+            <div class="max-w-2xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-xl p-8 text-center">
+                    <div class="mb-8">
+                        <div class="pulse-animation inline-block">
+                            <i class="fas fa-cog fa-spin text-6xl text-blue-600"></i>
+                        </div>
+                        <h2 class="text-2xl font-bold text-gray-800 mt-4 mb-2">Analisando Medicamento</h2>
+                        <p class="text-gray-600">Aplicando diretrizes OMS e ANVISA...</p>
+                    </div>
+                    
+                    <div class="space-y-4 text-left">
+                        <div class="flex items-center space-x-3">
+                            <i class="fas fa-check-circle text-green-500"></i>
+                            <span class="text-gray-700">Verificando contraindicações</span>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <i class="fas fa-spinner fa-spin text-blue-500"></i>
+                            <span class="text-gray-700">Analisando interações medicamentosas</span>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <i class="fas fa-clock text-gray-400"></i>
+                            <span class="text-gray-500">Consultando base OMS/ANVISA</span>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <i class="fas fa-clock text-gray-400"></i>
+                            <span class="text-gray-500">Gerando recomendações</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 4: Results -->
+        <div id="step-4" class="step-content hidden">
+            <div class="max-w-6xl mx-auto space-y-8">
+                <!-- Risk Overview -->
+                <div id="risk-overview" class="bg-white rounded-2xl shadow-xl p-8">
+                    <div class="text-center mb-8">
+                        <h2 class="text-3xl font-bold text-gray-800 mb-2">Resultado da Análise</h2>
+                        <p class="text-gray-600">Baseado em diretrizes OMS e ANVISA</p>
+                    </div>
+                    
+                    <div id="overall-risk-card" class="risk-low p-6 rounded-xl text-white text-center mb-8">
+                        <div class="text-4xl font-bold mb-2" id="risk-level-text">RISCO BAIXO</div>
+                        <p class="text-lg opacity-90" id="risk-description">Medicamento seguro para suas condições</p>
+                    </div>
+                </div>
+
+                <!-- Detailed Results -->
+                <div class="grid lg:grid-cols-2 gap-8">
+                    <!-- Contraindications -->
+                    <div class="bg-white rounded-2xl shadow-xl p-6">
+                        <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                            <i class="fas fa-exclamation-triangle text-red-500 mr-3"></i>
+                            Contraindicações
+                        </h3>
+                        <div id="contraindications-list" class="space-y-3">
+                            <!-- Will be populated by JavaScript -->
+                        </div>
+                    </div>
+
+                    <!-- Drug Interactions -->
+                    <div class="bg-white rounded-2xl shadow-xl p-6">
+                        <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                            <i class="fas fa-exchange-alt text-orange-500 mr-3"></i>
+                            Interações
+                        </h3>
+                        <div id="interactions-list" class="space-y-3">
+                            <!-- Will be populated by JavaScript -->
+                        </div>
+                    </div>
+
+                    <!-- Adverse Reactions -->
+                    <div class="bg-white rounded-2xl shadow-xl p-6">
+                        <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                            <i class="fas fa-heart-pulse text-blue-500 mr-3"></i>
+                            Reações Adversas
+                        </h3>
+                        <div id="adverse-reactions-list" class="space-y-3">
+                            <!-- Will be populated by JavaScript -->
+                        </div>
+                    </div>
+
+                    <!-- Recommendations -->
+                    <div class="bg-white rounded-2xl shadow-xl p-6">
+                        <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                            <i class="fas fa-user-md text-green-500 mr-3"></i>
+                            Recomendações
+                        </h3>
+                        <div id="recommendations-list" class="space-y-3">
+                            <!-- Will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3D Visualization -->
+                <div class="bg-white rounded-2xl shadow-xl p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-gray-800">Visualização 3D</h3>
+                        <button id="toggle-3d-view" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                            <i class="fas fa-cube mr-2"></i>
+                            Mostrar Grafo de Interações
+                        </button>
+                    </div>
+                    <div id="three-container" class="w-full h-96 bg-gray-100"></div>
+                </div>
+
+                <!-- Summary Text -->
+                <div class="bg-white rounded-2xl shadow-xl p-8">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">Resumo Explicativo</h3>
+                    <div id="summary-text" class="prose max-w-none text-gray-700">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                    
+                    <div class="mt-6 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded">
+                        <div class="flex">
+                            <i class="fas fa-exclamation-triangle text-yellow-400 mr-3 mt-1"></i>
+                            <div>
+                                <p class="font-semibold text-yellow-800">Importante</p>
+                                <p class="text-sm text-yellow-700 mt-1">
+                                    Esta é uma ferramenta de apoio informativo baseada em diretrizes OMS e ANVISA. 
+                                    Sempre consulte seu médico antes de usar qualquer medicamento.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex justify-center space-x-4">
+                    <button id="new-analysis" class="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors">
+                        <i class="fas fa-plus mr-2"></i>
+                        Nova Análise
+                    </button>
+                    <button id="download-report" class="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors">
+                        <i class="fas fa-download mr-2"></i>
+                        Baixar Relatório
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-8 mt-16">
+        <div class="container mx-auto px-6 text-center">
+            <p class="mb-2">&copy; 2024 MedSafe - Sistema de Contra-indicativos de Medicamentos</p>
+            <p class="text-sm text-gray-400">
+                Desenvolvido com base em diretrizes da OMS e regulamentações ANVISA (RDC 47/2009, 94/2008, 96/2008)
+            </p>
+            <p class="text-xs text-gray-500 mt-2">
+                Processamento local com AG2/Ollama - Seus dados não são enviados para servidores externos
+            </p>
+        </div>
+    </footer>
+
+    <script src="js/app.js"></script>
+    <script src="js/three-visualization.js"></script>
+</body>
+</html>
