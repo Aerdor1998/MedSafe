@@ -124,7 +124,23 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y tesseract-ocr tesseract-ocr-por libgl1-mesa-glx
+          
+          # Install tesseract core
+          sudo apt-get install -y --no-install-recommends tesseract-ocr
+          
+          # Install Portuguese language pack if available (skip safely if not)
+          if apt-cache show tesseract-ocr-por >/dev/null 2>&1; then
+            sudo apt-get install -y --no-install-recommends tesseract-ocr-por
+          else
+            echo "tesseract-ocr-por not found in apt, skipping"
+          fi
+          
+          # Install GL runtime: try the common package names as fallbacks
+          if ! sudo apt-get install -y --no-install-recommends libgl1; then
+            if ! sudo apt-get install -y --no-install-recommends libgl1-mesa-glx; then
+              sudo apt-get install -y --no-install-recommends libgl1-mesa-dri
+            fi
+          fi
       
       - name: Install Python dependencies
         run: |

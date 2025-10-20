@@ -19,7 +19,6 @@ email-validator>=2.1.0,<3.0.0
 # Autenticação e segurança
 python-jose[cryptography]>=3.3.0,<4.0.0
 passlib[bcrypt]>=1.7.4,<2.0.0
-python-multipart>=0.0.6,<0.1.0
 
 # HTTP client
 httpx>=0.25.2,<0.26.0
