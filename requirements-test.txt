@@ -1,0 +1,11 @@
+# MedSafe - Dependências para Testes
+# Arquivo separado para evitar conflitos de dependências no CI
+
+# Framework de testes
+pytest>=7.4.3
+pytest-asyncio>=0.21.1
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+
+# HTTP client para testes (se não estiver em requirements.txt)
+# httpx já está em requirements.txt

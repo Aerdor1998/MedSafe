@@ -1,0 +1,13 @@
+# MedSafe - Dependências para Lint e Qualidade de Código
+# Arquivo separado para evitar conflitos de dependências no CI
+
+# Formatação e linting
+black>=23.11.0
+flake8>=6.1.0
+isort>=5.12.0
+mypy>=1.7.1
+pylint>=3.0.0
+
+# Testes (necessário para verificações)
+pytest>=7.4.3
+pytest-asyncio>=0.21.1

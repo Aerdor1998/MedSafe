@@ -1,38 +1,30 @@
 # MedSafe - Dependências de Desenvolvimento
+# Para desenvolvimento local completo
 
 # Incluir dependências de produção
 -r requirements.txt
 
-# Testes
-pytest>=7.4.3,<8.0.0
-pytest-asyncio>=0.21.1,<0.22.0
-pytest-cov>=4.1.0,<5.0.0
-pytest-mock>=3.12.0,<4.0.0
+# Incluir ferramentas de lint
+-r requirements-lint.txt
 
-# Qualidade de código
-black>=23.11.0,<24.0.0
-flake8>=6.1.0,<7.0.0
-mypy>=1.7.1,<2.0.0
-isort>=5.12.0,<6.0.0
-pylint>=3.0.0,<4.0.0
+# Incluir ferramentas de teste
+-r requirements-test.txt
 
-# Segurança
-bandit>=1.7.5,<2.0.0
-safety>=2.3.5,<3.0.0
-semgrep>=1.45.0,<2.0.0
+# Segurança (versões sem limite superior para evitar conflitos)
+bandit>=1.7.5
+safety>=2.3.5
+semgrep>=1.45.0
 
 # Testes de carga
-locust>=2.17.0,<3.0.0
+locust>=2.17.0
 
-# Documentation
-mkdocs>=1.5.3,<2.0.0
-mkdocs-material>=9.4.14,<10.0.0
+# Documentação
+mkdocs>=1.5.3
+mkdocs-material>=9.4.14
 
 # Debug
-ipdb>=0.13.13,<0.14.0
-ipython>=8.17.2,<9.0.0
+ipdb>=0.13.13
+ipython>=8.17.2
 
 # Pre-commit hooks
-pre-commit>=3.5.0,<4.0.0
-
-
+pre-commit>=3.5.0
