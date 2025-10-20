@@ -408,7 +408,6 @@ async def analyze_medication_legacy(
 
 
 # Montar arquivos estáticos
-import os
 from pathlib import Path
 
 # Obter diretório raiz do projeto

@@ -78,7 +78,7 @@ class SecureFileUpload:
         if not mime_type or mime_type not in SecureFileUpload.ALLOWED_MIME_TYPES:
             raise HTTPException(
                 400,
-                f"Unsupported file type. Allowed: JPEG, PNG, PDF"
+                "Unsupported file type. Allowed: JPEG, PNG, PDF"
             )
 
         return mime_type
@@ -160,9 +160,6 @@ class SecureFileUpload:
 
         # Gerar hash do conteúdo para nome único
         file_hash = hashlib.sha256(content).hexdigest()[:16]
-
-        # Obter extensão
-        extension = Path(safe_filename).suffix
 
         # Criar nome final
         final_filename = f"{file_hash}_{safe_filename}"

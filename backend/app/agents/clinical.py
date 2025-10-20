@@ -282,7 +282,6 @@ class ClinicalRulesAgent:
     ) -> List[Dict[str, Any]]:
         """Verificar necessidade de ajustes de dosagem"""
         adjustments = []
-        med_lower = medication.lower()
 
         # Ajuste por idade (idosos)
         if age >= 65:
