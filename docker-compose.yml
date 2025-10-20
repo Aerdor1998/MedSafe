@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  # Ollama com modelos pré-carregados
+  ollama:
+    image: ollama/ollama:latest
+    container_name: medsafe_ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - medsafe_network
+    command: >
+      sh -c "
+        ollama serve &
+        sleep 10 &&
+        ollama pull qwen3:4b &&
+        ollama pull qwen2.5vl:7b &&
+        wait
+      "
+
+  # PostgreSQL with pgvector
+  db:
+    image: ankane/pgvector:latest
+    container_name: medsafe_db
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-medsafe}
+      - POSTGRES_USER=${POSTGRES_USER:-medsafe}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - medsafe_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-medsafe}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # API MedSafe
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: medsafe_api
+    environment:
+      - DEBUG=${DEBUG:-false}
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-medsafe}
+      - POSTGRES_USER=${POSTGRES_USER:-medsafe}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_LLM=${OLLAMA_LLM:-qwen2.5:7b}
+      - OLLAMA_VLM=${OLLAMA_VLM:-qwen2.5vl:7b}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - TESSERACT_CMD=/usr/bin/tesseract
+      - OCR_LANG=por+eng
+    volumes:
+      - ./backend:/app/backend
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./static:/app/static
+      - ./frontend:/app/frontend
+    ports:
+      - "8000:8000"
+    depends_on:
+      ollama:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - medsafe_network
+
+volumes:
+  ollama_data:
+    driver: local
+  postgres_data:
+    driver: local
+
+networks:
+  medsafe_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

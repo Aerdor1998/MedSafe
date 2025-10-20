@@ -1,87 +1,154 @@
 #!/bin/bash
 
-# MedSafe Startup Script
-# Sistema de Contra-indicativos de Medicamentos
+# ========================================
+# MedSafe - Script de Inicialização
+# ========================================
 
-echo "=========================================="
-echo "🏥 MedSafe - Sistema de Contra-indicativos"
-echo "   Baseado em diretrizes OMS e ANVISA"
-echo "=========================================="
+set -e  # Parar em caso de erro
 
-# Verificar se está no diretório correto
-if [ ! -f "requirements.txt" ]; then
-    echo "❌ Execute este script na raiz do projeto MedSafe"
-    exit 1
-fi
+echo "========================================"
+echo "🏥 MedSafe - Iniciando Aplicação"
+echo "========================================"
+echo ""
 
-# Verificar Python
-if ! command -v python3 &> /dev/null; then
-    echo "❌ Python 3 não encontrado"
-    exit 1
-fi
+# Cores para output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
 
-echo "✅ Python encontrado: $(python3 --version)"
+# Diretório do projeto
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$PROJECT_DIR"
 
-# Verificar Tesseract
-if ! command -v tesseract &> /dev/null; then
-    echo "⚠️  Tesseract OCR não encontrado"
-    echo "   Instale com: sudo apt-get install tesseract-ocr tesseract-ocr-por"
+# ========================================
+# 1. Verificar e Iniciar PostgreSQL
+# ========================================
+echo "📊 Passo 1/3: Verificando PostgreSQL..."
+
+if docker ps | grep -q medsafe-postgres; then
+    echo -e "${GREEN}✅ PostgreSQL já está rodando${NC}"
 else
-    echo "✅ Tesseract encontrado: $(tesseract --version | head -1)"
+    echo "   Iniciando container PostgreSQL..."
+    docker start medsafe-postgres > /dev/null 2>&1 || {
+        echo -e "${RED}❌ Erro ao iniciar PostgreSQL${NC}"
+        echo "   Tente: docker start medsafe-postgres"
+        exit 1
+    }
+    echo -e "${GREEN}✅ PostgreSQL iniciado${NC}"
+    echo "   Aguardando inicialização..."
+    sleep 5
 fi
 
-# Verificar Ollama
-if ! command -v ollama &> /dev/null; then
-    echo "⚠️  Ollama não encontrado - funcionalidade de IA será limitada"
-    echo "   Instale com: curl -fsSL https://ollama.com/install.sh | sh"
-else
-    echo "✅ Ollama encontrado"
-    
-    # Verificar se os modelos necessários estão instalados
-    if ! ollama list | grep -q "qwen3:4b"; then
-        echo "📥 Configurando modelos Ollama..."
-        python setup_ollama.py
+# Verificar conexão
+docker exec medsafe-postgres pg_isready -U medsafe > /dev/null 2>&1 || {
+    echo -e "${YELLOW}⚠️  PostgreSQL ainda inicializando, aguardando...${NC}"
+    sleep 3
+}
+
+echo ""
+
+# ========================================
+# 2. Ativar Ambiente Virtual
+# ========================================
+echo "🐍 Passo 2/3: Configurando ambiente Python..."
+
+if [ ! -d ".venv" ]; then
+    echo -e "${RED}❌ Ambiente virtual não encontrado${NC}"
+    echo "   Criando ambiente virtual..."
+    python3 -m venv .venv
+fi
+
+source .venv/bin/activate
+
+# Verificar se pip funciona
+if ! python -m pip --version > /dev/null 2>&1; then
+    echo -e "${YELLOW}⚠️  Atualizando pip...${NC}"
+    python -m ensurepip --upgrade > /dev/null 2>&1
+fi
+
+echo -e "${GREEN}✅ Ambiente Python pronto${NC}"
+echo ""
+
+# ========================================
+# 3. Iniciar Servidor FastAPI
+# ========================================
+echo "🚀 Passo 3/3: Iniciando servidor FastAPI..."
+
+# Verificar se já está rodando
+if pgrep -f "uvicorn.*backend.app.main" > /dev/null; then
+    echo -e "${YELLOW}⚠️  Servidor já está rodando. Parando primeiro...${NC}"
+    pkill -f "uvicorn.*backend.app.main"
+    sleep 2
+fi
+
+# Limpar log antigo
+rm -f /tmp/medsafe.log
+
+# Iniciar servidor em background
+nohup python -m uvicorn backend.app.main:app \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --reload \
+    > /tmp/medsafe.log 2>&1 &
+
+SERVER_PID=$!
+echo "   Servidor iniciando (PID: $SERVER_PID)..."
+echo "   Aguardando inicialização..."
+
+# Aguardar servidor ficar pronto
+MAX_WAIT=15
+COUNTER=0
+while [ $COUNTER -lt $MAX_WAIT ]; do
+    if curl -s http://localhost:8000/healthz > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ Servidor FastAPI pronto!${NC}"
+        break
     fi
+    sleep 1
+    COUNTER=$((COUNTER + 1))
+    echo -n "."
+done
+
+echo ""
+
+if [ $COUNTER -eq $MAX_WAIT ]; then
+    echo -e "${RED}❌ Timeout aguardando servidor${NC}"
+    echo "   Verifique os logs: tail -f /tmp/medsafe.log"
+    exit 1
 fi
 
-# Criar ambiente virtual se não existir
-if [ ! -d "venv" ]; then
-    echo "📦 Criando ambiente virtual..."
-    python3 -m venv venv
+echo ""
+
+# ========================================
+# Status Final
+# ========================================
+echo "========================================"
+echo "✅ MedSafe Iniciado com Sucesso!"
+echo "========================================"
+echo ""
+echo "📍 URLs Disponíveis:"
+echo "   🌐 Interface Web:    http://localhost:8000"
+echo "   📚 API Docs:         http://localhost:8000/docs"
+echo "   📖 ReDoc:            http://localhost:8000/redoc"
+echo ""
+echo "📊 Status dos Serviços:"
+if docker ps | grep -q medsafe-postgres; then
+    echo -e "   ${GREEN}✅ PostgreSQL: Rodando (porta 5432)${NC}"
+else
+    echo -e "   ${RED}❌ PostgreSQL: Parado${NC}"
 fi
 
-# Ativar ambiente virtual
-echo "🔧 Ativando ambiente virtual..."
-source venv/bin/activate
-
-# Instalar dependências
-echo "📦 Instalando dependências Python..."
-pip install -r requirements.txt
-
-# Criar diretórios necessários
-echo "📁 Criando diretórios..."
-mkdir -p data logs static/uploads
-
-# Configurar variáveis de ambiente
-export PYTHONPATH="${PYTHONPATH}:$(pwd)/backend"
+if pgrep -f "uvicorn.*backend.app.main" > /dev/null; then
+    echo -e "   ${GREEN}✅ FastAPI: Rodando (porta 8000)${NC}"
+else
+    echo -e "   ${RED}❌ FastAPI: Parado${NC}"
+fi
 
 echo ""
-echo "=========================================="
-echo "✅ Sistema pronto!"
-echo "📋 Funcionalidades:"
-echo "   • Anamnese digital interativa"
-echo "   • OCR para reconhecimento de medicamentos"
-echo "   • Análise baseada em diretrizes OMS/ANVISA"
-echo "   • Visualização 3D com Three.js"
-echo "   • Processamento local (Ollama qwen3:4b + qwen2.5vl:7b)"
-echo "   • Auditoria para farmacovigilância"
-echo "=========================================="
+echo "📝 Comandos Úteis:"
+echo "   Ver logs:     tail -f /tmp/medsafe.log"
+echo "   Parar tudo:   ./stop.sh"
+echo "   Status:       ./status.sh"
 echo ""
-echo "🚀 Iniciando MedSafe..."
-echo "📍 Acesse: http://localhost:8000"
-echo "⏹️  Pressione Ctrl+C para parar"
-echo ""
-
-# Iniciar aplicação
-cd backend
-python main.py
+echo "🎉 Pronto para usar!"
+echo "========================================"

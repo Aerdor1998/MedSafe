@@ -61,23 +61,31 @@ def setup_database():
     print("🗄️  Configurando banco de dados...")
     
     try:
-        from models.database import init_db
+        from app.db.database import init_db
         init_db()
         print("✅ Banco de dados configurado")
         return True
     except Exception as e:
-        print(f"❌ Erro ao configurar banco: {e}")
-        return False
+        print(f"⚠️  Aviso ao configurar banco: {e}")
+        print("   O banco será inicializado quando a aplicação iniciar")
+        return True  # Continuar mesmo sem o banco configurado aqui
 
 def start_server():
     """Iniciar servidor FastAPI"""
     print("🚀 Iniciando MedSafe...")
     print("📍 Acesse: http://localhost:8000")
+    print("📍 Documentação: http://localhost:8000/docs")
     print("⏹️  Pressione Ctrl+C para parar")
     
     try:
-        os.chdir("backend")
-        subprocess.run([sys.executable, "main.py"], check=True)
+        # Usar uvicorn para iniciar a aplicação
+        subprocess.run([
+            sys.executable, "-m", "uvicorn",
+            "backend.app.main:app",
+            "--host", "0.0.0.0",
+            "--port", "8000",
+            "--reload"
+        ], check=True)
     except KeyboardInterrupt:
         print("\n👋 MedSafe encerrado")
     except Exception as e:

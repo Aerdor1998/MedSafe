@@ -1,37 +1,48 @@
-FROM ubuntu:22.04
+FROM python:3.10-slim
 
-# Evitar prompts interativos durante a instalação
+# Evitar prompts interativos
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Instalar dependências básicas e Tesseract
+# Instalar dependências do sistema
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 \
-    python3-pip \
-    python3-venv \
-    curl \
-    git \
     tesseract-ocr \
     tesseract-ocr-por \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    curl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Instalar Ollama
-RUN curl -fsSL https://ollama.com/install.sh | sh
+# Criar usuário não-privilegiado
+RUN groupadd -r medsafe && useradd -r -g medsafe medsafe
 
 # Configurar diretório de trabalho
 WORKDIR /app
 
-# Copiar arquivos da aplicação
-COPY . .
-
-# Criar e ativar ambiente virtual
-RUN python3 -m venv venv
-ENV PATH="/app/venv/bin:$PATH"
+# Copiar requirements primeiro (cache layer)
+COPY requirements.txt ./
 
 # Instalar dependências Python
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Expor a porta da API
-EXPOSE 7860
+# Copiar aplicação
+COPY backend/ ./backend/
+COPY frontend/ ./frontend/
+COPY static/ ./static/
 
-# Script de inicialização
-CMD ["bash", "start_hf.sh"]
+# Criar diretórios com permissões corretas
+RUN mkdir -p logs data static/uploads && \
+    chown -R medsafe:medsafe /app
+
+# Mudar para usuário não-privilegiado
+USER medsafe
+
+# Expor porta
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/healthz || exit 1
+
+# Usar uvicorn diretamente (melhor para produção)
+CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

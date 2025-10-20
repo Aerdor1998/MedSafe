@@ -1,0 +1,169 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+dist/
+*.egg-info/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.production
+.env.*.local
+config.env
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data/medsafe.db
+data/*.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Uploads
+static/uploads/*
+!static/uploads/.gitkeep
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Backups
+*_backup_*/
+backup_*.sql
+*.bak
+
+# Temporary
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+
+# Documentation temporária
+COMO_TESTAR.md
+CORRECOES_FINAIS.md
+ERRO_CORRIGIDO.md
+ERROR_FIXES.md
+RESUMO_CORRECOES.md
+TESTE_SUCESSO.md
+TEST_SUMMARY.md
+START_MVP.md
+MVP_PRODUCTION_READY.md
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath
+*.sage.py
+
+# Spyder
+.spyderproject
+.spyproject
+
+# Rope
+.ropeproject
+
+# mkdocs
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre/
+
+# MacOS
+.AppleDouble
+.LSOverride
+Icon
+
+# Windows
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-*
+
+# Node modules (se houver frontend)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build artifacts
+*.pyc
+*.pyo
+*.pyd
+
+# Terraform (se usar)
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Kubernetes (se usar)
+*.kubeconfig
+
+# Secrets
+secrets.yaml
+secrets.yml
+secrets.json
+*.pem
+*.key
+*.crt
+
+# Docker
+.dockerignore
+
+# Ollama models (grandes)
+*.gguf
+models/*.bin
+

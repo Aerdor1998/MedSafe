@@ -13,8 +13,8 @@ class MedSafeApp {
         
         // Define a URL da API baseada no ambiente
         this.apiUrl = window.location.hostname.includes('hf.space')
-            ? `https://YOUR_SPACE_NAME.hf.space` // Substitua pelo seu nome do Hugging Face Space
-            : 'http://localhost:8000';
+            ? `https://medsafe-mvp.hf.space` // Hugging Face Space
+            : 'http://localhost:8000'; // Porta do backend FastAPI
         
         this.init();
     }
@@ -354,13 +354,25 @@ class MedSafeApp {
     }
 
     async analyzeMedication() {
+        console.log('🚀 analyzeMedication iniciado');
+        
         const medicationName = document.getElementById('medication-search').value.trim();
+        console.log('💊 Medicamento:', medicationName);
         
         if (!medicationName) {
             alert('Por favor, identifique um medicamento antes de continuar.');
             return;
         }
 
+        // Verificar se patientData foi preenchido
+        if (!this.patientData || Object.keys(this.patientData).length === 0) {
+            console.error('❌ patientData está vazio!', this.patientData);
+            alert('Erro: Dados do paciente não foram coletados. Por favor, preencha o formulário inicial.');
+            this.goToStep(1);
+            return;
+        }
+
+        console.log('👤 Dados do paciente:', this.patientData);
         this.medicationData.name = medicationName;
         this.goToStep(3);
 
@@ -369,6 +381,10 @@ class MedSafeApp {
             const formData = new FormData();
             formData.append('patient_data', JSON.stringify(this.patientData));
             formData.append('medication_text', medicationName);
+            
+            console.log('📦 FormData preparado');
+            console.log('   - patient_data:', JSON.stringify(this.patientData));
+            console.log('   - medication_text:', medicationName);
 
             // Add image if uploaded
             const imageInput = document.getElementById('image-upload');
@@ -376,14 +392,25 @@ class MedSafeApp {
                 formData.append('image', imageInput.files[0]);
             }
 
-            // Call analysis API
+            // Criar AbortController com timeout de 120 segundos
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+            // Call analysis API com timeout
+            console.log('🌐 Enviando requisição para:', `${this.apiUrl}/api/analyze`);
+            
             const response = await fetch(`${this.apiUrl}/api/analyze`, {
                 method: 'POST',
-                body: formData
+                body: formData,
+                signal: controller.signal
             });
 
+            console.log('📡 Resposta recebida:', response.status, response.statusText);
+            clearTimeout(timeoutId);
+
             if (!response.ok) {
-                throw new Error('Erro na análise');
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Erro na análise do servidor');
             }
 
             this.analysisResult = await response.json();
@@ -392,11 +419,25 @@ class MedSafeApp {
             setTimeout(() => {
                 this.displayAnalysisResult();
                 this.goToStep(4);
-            }, 2000); // Simulate processing time
+            }, 1500);
 
         } catch (error) {
-            console.error('Erro na análise:', error);
-            alert('Erro ao analisar medicamento. Tente novamente.');
+            console.error('❌ ERRO NA ANÁLISE:', error);
+            console.error('   Tipo:', error.name);
+            console.error('   Mensagem:', error.message);
+            console.error('   Stack:', error.stack);
+            
+            let errorMessage = 'Erro ao analisar medicamento. Tente novamente.';
+            
+            if (error.name === 'AbortError') {
+                errorMessage = 'A análise está demorando muito (>2min). Verifique se o Ollama está rodando e tente novamente.';
+            } else if (error.message && error.message !== 'Failed to fetch') {
+                errorMessage = error.message;
+            } else if (error.message === 'Failed to fetch') {
+                errorMessage = 'Erro de conexão com o servidor. Verifique se o backend está rodando em ' + this.apiUrl;
+            }
+            
+            alert(errorMessage);
             this.goToStep(2);
         }
     }
@@ -420,39 +461,44 @@ class MedSafeApp {
         const riskText = document.getElementById('risk-level-text');
         const riskDescription = document.getElementById('risk-description');
         
-        const risk = this.analysisResult.overall_risk;
+        // Mapear do formato do backend (analysis.risk_level)
+        const risk = this.analysisResult.analysis?.risk_level || 'low';
         
         // Remove all risk classes
         riskCard.classList.remove('risk-low', 'risk-medium', 'risk-high', 'risk-critical');
         
-        // Add appropriate class and content
+        // Add appropriate class and content (backend retorna em inglês)
         switch(risk) {
-            case 'baixo':
+            case 'low':
                 riskCard.classList.add('risk-low');
                 riskText.textContent = 'RISCO BAIXO';
                 riskDescription.textContent = 'Medicamento seguro para suas condições';
                 break;
-            case 'medio':
+            case 'medium':
                 riskCard.classList.add('risk-medium');
                 riskText.textContent = 'RISCO MÉDIO';
                 riskDescription.textContent = 'Usar com cautela e monitoramento';
                 break;
-            case 'alto':
+            case 'high':
                 riskCard.classList.add('risk-high');
                 riskText.textContent = 'RISCO ALTO';
                 riskDescription.textContent = 'Requer supervisão médica rigorosa';
                 break;
-            case 'critico':
+            case 'critical':
                 riskCard.classList.add('risk-critical');
                 riskText.textContent = 'RISCO CRÍTICO';
                 riskDescription.textContent = 'CONTRAINDICADO - Não usar';
                 break;
+            default:
+                riskCard.classList.add('risk-low');
+                riskText.textContent = 'RISCO BAIXO';
+                riskDescription.textContent = 'Análise concluída';
         }
     }
 
     displayContraindications() {
         const container = document.getElementById('contraindications-list');
-        const contraindications = this.analysisResult.contraindications;
+        const contraindications = this.analysisResult.analysis?.contraindications || [];
 
         if (contraindications.length === 0) {
             container.innerHTML = '<p class="text-gray-500 italic">Nenhuma contraindicação identificada</p>';
@@ -471,7 +517,7 @@ class MedSafeApp {
 
     displayInteractions() {
         const container = document.getElementById('interactions-list');
-        const interactions = this.analysisResult.drug_interactions;
+        const interactions = this.analysisResult.analysis?.interactions || [];
 
         if (interactions.length === 0) {
             container.innerHTML = '<p class="text-gray-500 italic">Nenhuma interação identificada</p>';
@@ -490,7 +536,7 @@ class MedSafeApp {
 
     displayAdverseReactions() {
         const container = document.getElementById('adverse-reactions-list');
-        const reactions = this.analysisResult.adverse_reactions;
+        const reactions = this.analysisResult.analysis?.adverse_reactions || [];
 
         if (reactions.length === 0) {
             container.innerHTML = '<p class="text-gray-500 italic">Nenhuma reação adversa específica identificada</p>';
@@ -516,7 +562,12 @@ class MedSafeApp {
 
     displayRecommendations() {
         const container = document.getElementById('recommendations-list');
-        const recommendations = this.analysisResult.recommendations;
+        const recommendations = this.analysisResult.analysis?.recommendations || [];
+
+        if (recommendations.length === 0) {
+            container.innerHTML = '<p class="text-gray-500 italic">Nenhuma recomendação específica</p>';
+            return;
+        }
 
         container.innerHTML = recommendations.map(item => {
             const priorityColor = this.getPriorityColor(item.priority);
@@ -541,7 +592,10 @@ class MedSafeApp {
 
     displaySummary() {
         const container = document.getElementById('summary-text');
-        container.innerHTML = this.formatSummaryText(this.analysisResult.summary);
+        const summary = this.analysisResult.analysis?.analysis_notes || 
+                       this.analysisResult.analysis?.summary ||
+                       'Análise concluída com sucesso. Os resultados detalhados estão disponíveis nas seções acima.';
+        container.innerHTML = this.formatSummaryText(summary);
     }
 
     formatSummaryText(text) {
@@ -667,4 +721,4 @@ class MedSafeApp {
 // Initialize app when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.medSafeApp = new MedSafeApp();
-});
+});/* Cache buster: 1759932159 */
