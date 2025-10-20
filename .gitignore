@@ -58,6 +58,10 @@ yarn-error.log*
 static/uploads/*
 !static/uploads/.gitkeep
 
+# Imagens (incluir todas)
+# !imgs/
+# !imgs/**/*
+
 # Coverage
 htmlcov/
 .coverage
