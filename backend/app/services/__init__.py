@@ -8,4 +8,3 @@ __all__ = [
     'DrugInteractionService',
     'get_interaction_service'
 ]
-

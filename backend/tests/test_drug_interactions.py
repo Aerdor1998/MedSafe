@@ -14,16 +14,16 @@ from models.schemas import MedicationInfo, DrugInteraction, RiskLevel
 async def test_drug_interactions_warfarin_aspirin():
     """Testar interação crítica conhecida: Warfarina + Aspirina"""
     service = DrugService()
-    
+
     interactions = await service.get_drug_interactions(
         medication="Aspirin",
         current_medications=["Warfarin"]
     )
-    
+
     # Teste verifica que funciona sem erro
     # Pode ou não encontrar dependendo dos nomes exatos no CSV
     assert isinstance(interactions, list)
-    
+
     if len(interactions) > 0:
         # Verificar estrutura se encontrar
         interaction = interactions[0]
@@ -35,12 +35,12 @@ async def test_drug_interactions_warfarin_aspirin():
 async def test_drug_interactions_metformina_insulina():
     """Testar interação conhecida: Metformina + Insulina"""
     service = DrugService()
-    
+
     interactions = await service.get_drug_interactions(
         medication="Metformin",
         current_medications=["Insulin"]
     )
-    
+
     # Pode ou não encontrar (depende da base de dados)
     # Teste apenas verifica que não há erro
     assert isinstance(interactions, list)
@@ -53,12 +53,12 @@ async def test_drug_interactions_metformina_insulina():
 async def test_drug_interactions_no_current_meds():
     """Testar quando paciente não usa outros medicamentos"""
     service = DrugService()
-    
+
     interactions = await service.get_drug_interactions(
         medication="Paracetamol",
         current_medications=[]
     )
-    
+
     # Não deve encontrar interações
     assert len(interactions) == 0
 
@@ -66,15 +66,15 @@ async def test_drug_interactions_no_current_meds():
 async def test_drug_interactions_multiple_medications():
     """Testar com múltiplos medicamentos atuais"""
     service = DrugService()
-    
+
     interactions = await service.get_drug_interactions(
         medication="Ibuprofen",
         current_medications=["Warfarin", "Aspirin", "Metformin"]
     )
-    
+
     # Deve buscar para cada medicamento
     assert isinstance(interactions, list)
-    
+
     # Verificar que cada interação tem os campos necessários
     for interaction in interactions:
         assert isinstance(interaction.interacting_drug, str)
@@ -86,9 +86,9 @@ async def test_drug_interactions_multiple_medications():
 async def test_medication_info_dipirona():
     """Testar busca de informações da Dipirona"""
     service = DrugService()
-    
+
     med_info = await service.get_medication_info("Dipirona")
-    
+
     assert isinstance(med_info, MedicationInfo)
     assert "dipirona" in med_info.name.lower() or "dipirona" in med_info.active_ingredient.lower()
     assert med_info.therapeutic_class is not None
@@ -97,9 +97,9 @@ async def test_medication_info_dipirona():
 async def test_medication_info_generic_name():
     """Testar busca por princípio ativo"""
     service = DrugService()
-    
+
     med_info = await service.get_medication_info("paracetamol")
-    
+
     assert isinstance(med_info, MedicationInfo)
     assert "paracetamol" in med_info.active_ingredient.lower()
 
@@ -107,16 +107,16 @@ async def test_medication_info_generic_name():
 async def test_medication_normalize():
     """Testar normalização de nomes de medicamentos"""
     service = DrugService()
-    
+
     # Testar com sufixos
     normalized1 = service._normalize_medication_name("Dipirona 500mg")
     normalized2 = service._normalize_medication_name("Dipirona comprimido")
     normalized3 = service._normalize_medication_name("DIPIRONA")
-    
+
     assert "dipirona" in normalized1
     assert "dipirona" in normalized2
     assert "dipirona" in normalized3
-    
+
     # Deve remover sufixos
     assert "mg" not in normalized1
     assert "comprimido" not in normalized2
@@ -125,7 +125,7 @@ async def test_medication_normalize():
 async def test_severity_mapping():
     """Testar mapeamento de severidade para risk level"""
     service = DrugService()
-    
+
     assert service._map_severity_to_risk("baixa") == RiskLevel.LOW
     assert service._map_severity_to_risk("moderada") == RiskLevel.MEDIUM
     assert service._map_severity_to_risk("alta") == RiskLevel.HIGH
@@ -135,28 +135,27 @@ async def test_severity_mapping():
 def test_database_has_interactions():
     """Testar se o banco possui interações do CSV"""
     from models.database import get_db_connection
-    
+
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     cursor.execute("SELECT COUNT(*) as count FROM drug_interactions WHERE source = 'CSV Import'")
     result = cursor.fetchone()
-    
+
     assert result['count'] > 190000, f"Esperava > 190000 interações, encontrou {result['count']}"
-    
+
     conn.close()
 
 def test_database_connection():
     """Testar conexão com o banco de dados"""
     from models.database import get_db_connection
-    
+
     conn = get_db_connection()
     assert conn is not None
-    
+
     cursor = conn.cursor()
     cursor.execute("SELECT 1")
     result = cursor.fetchone()
-    
+
     assert result is not None
     conn.close()
-

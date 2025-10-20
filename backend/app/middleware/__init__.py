@@ -12,5 +12,3 @@ __all__ = [
     "LoggingMiddleware",
     "MetricsMiddleware",
 ]
-
-

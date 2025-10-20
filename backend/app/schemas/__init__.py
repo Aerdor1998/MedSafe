@@ -11,11 +11,11 @@ from .ingest import IngestRequest, IngestResponse
 
 __all__ = [
     "BaseSchema",
-    "TriageCreate", 
+    "TriageCreate",
     "TriageResponse",
     "TriageReport",
     "VisionRequest",
-    "VisionResponse", 
+    "VisionResponse",
     "ReportCreate",
     "ReportResponse",
     "MedicationSearch",
@@ -24,4 +24,3 @@ __all__ = [
     "IngestRequest",
     "IngestResponse"
 ]
-

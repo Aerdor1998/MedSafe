@@ -33,7 +33,7 @@ class User(UserBase):
     id: str
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
+
     class Config:
         from_attributes = True
 
@@ -63,5 +63,3 @@ class LoginRequest(BaseModel):
 class RefreshTokenRequest(BaseModel):
     """Schema de requisição de refresh token"""
     refresh_token: str
-
-

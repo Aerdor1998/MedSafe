@@ -40,23 +40,23 @@ async def lifespan(app: FastAPI):
     """Inicializar e limpar recursos da aplicação"""
     # Inicialização
     logger.info("🚀 Iniciando MedSafe API...")
-    
+
     try:
         # Inicializar banco de dados
         init_db()
         logger.info("✅ Banco de dados inicializado")
-        
+
         # Verificar saúde dos serviços
         await check_services_health()
-        
+
         logger.info("✅ MedSafe API iniciada com sucesso!")
-        
+
     except Exception as e:
         logger.error(f"❌ Erro na inicialização: {e}")
         raise
-    
+
     yield
-    
+
     # Limpeza
     logger.info("🔄 Encerrando MedSafe API...")
 
@@ -96,7 +96,7 @@ async def check_services_health():
     # Verificar banco de dados
     if not check_db_health():
         raise Exception("Banco de dados não está saudável")
-    
+
     # Verificar Ollama
     try:
         import requests
@@ -113,7 +113,7 @@ async def health_check():
     """Verificar saúde da API"""
     try:
         db_healthy = check_db_health()
-        
+
         return {
             "status": "healthy" if db_healthy else "unhealthy",
             "timestamp": datetime.now().isoformat(),
@@ -137,7 +137,7 @@ async def metrics():
     """Métricas Prometheus da aplicação"""
     try:
         db_stats = get_db_stats()
-        
+
         return {
             "medsafe_requests_total": 0,  # Implementar contador
             "medsafe_analysis_duration_seconds": 0,  # Implementar métrica
@@ -162,7 +162,7 @@ async def create_triage(
     try:
         # Gerar ID da sessão
         session_id = str(uuid.uuid4())
-        
+
         # Criar triagem no banco
         from .db.database import get_db_context
         with get_db_context() as db:
@@ -179,18 +179,18 @@ async def create_triage(
                 notes=triage_data.notes,
                 status="pending"
             )
-            
+
             db.add(triage)
             db.commit()
             db.refresh(triage)
-        
+
         # Disparar análise em background
         background_tasks.add_task(
             captain_agent.orchestrate_analysis,
             triage_data.model_dump(),
             None
         )
-        
+
         return TriageResponse(
             id=str(triage.id),
             user_id=triage.user_id,
@@ -207,7 +207,7 @@ async def create_triage(
             notes=triage.notes,
             created_at=triage.created_at
         )
-        
+
     except Exception as e:
         logger.error(f"Erro ao criar triagem: {e}")
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
@@ -220,10 +220,10 @@ async def get_triage_report(triage_id: str):
         from .db.database import get_db_context
         with get_db_context() as db:
             report = db.query(Report).filter(Report.triage_id == triage_id).first()
-            
+
             if not report:
                 raise HTTPException(status_code=404, detail="Relatório não encontrado")
-            
+
             return TriageReport(
                 triage_id=str(report.triage_id),
                 risk_level=report.risk_level,
@@ -236,7 +236,7 @@ async def get_triage_report(triage_id: str):
                 model_used=report.model_used,
                 confidence_score=report.confidence_score
             )
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -252,28 +252,28 @@ async def analyze_vision(
     """Analisar imagem/PDF com VisionAgent"""
     try:
         from .utils.file_upload import SecureFileUpload
-        
+
         # Upload seguro do arquivo
         file_path = await SecureFileUpload.save_upload_file(file)
-        
+
         # Preparar dados para análise
         image_data = {
             "file_path": str(file_path),
             "medication_text": medication_text,
             "session_id": str(uuid.uuid4())
         }
-        
+
         # Analisar com VisionAgent
         result = await captain_agent.vision_agent.analyze_document(image_data, image_data["session_id"])
-        
+
         # Limpar arquivo temporário (mesmo em caso de erro)
         try:
             file_path.unlink()
         except Exception:
             pass
-        
+
         return VisionResponse(**result)
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -297,7 +297,7 @@ async def ingest_bulas(ingest_request: IngestRequest):
             failed=0,
             processing_time=0
         )
-        
+
     except Exception as e:
         logger.error(f"Erro na ingestão: {e}")
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
@@ -320,7 +320,7 @@ async def search_medications(
             results=[],
             search_time=0.0
         )
-        
+
     except Exception as e:
         logger.error(f"Erro na busca: {e}")
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
@@ -334,7 +334,7 @@ async def get_ingest_status():
         from .db.database import get_db_context
         with get_db_context() as db:
             jobs = db.query(IngestJob).order_by(IngestJob.created_at.desc()).limit(10).all()
-            
+
             return [
                 {
                     "id": str(job.id),
@@ -346,7 +346,7 @@ async def get_ingest_status():
                 }
                 for job in jobs
             ]
-            
+
     except Exception as e:
         logger.error(f"Erro ao obter status de ingestão: {e}")
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
@@ -363,7 +363,7 @@ async def analyze_medication_legacy(
     try:
         # Converter dados para novo formato
         patient_info = json.loads(patient_data)
-        
+
         # Criar triagem
         triage_data = TriageCreate(
             age=patient_info.get("age", 0),
@@ -376,7 +376,7 @@ async def analyze_medication_legacy(
             hepatic_function=patient_info.get("hepatic_function"),
             notes=patient_info.get("notes")
         )
-        
+
         # Processar imagem se disponível
         image_data = None
         if image:
@@ -393,15 +393,15 @@ async def analyze_medication_legacy(
                 "medication_text": medication_text,
                 "session_id": str(uuid.uuid4())
             }
-        
+
         # Orquestrar análise
         result = await captain_agent.orchestrate_analysis(
             triage_data.model_dump(),
             image_data
         )
-        
+
         return result
-        
+
     except Exception as e:
         logger.error(f"Erro na análise legada: {e}")
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
@@ -431,4 +431,3 @@ if __name__ == "__main__":
         port=8000,
         reload=settings.debug
     )
-

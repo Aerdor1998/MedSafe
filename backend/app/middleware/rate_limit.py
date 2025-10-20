@@ -20,12 +20,12 @@ def get_rate_limit_key(request: Request) -> str:
         ip = forwarded.split(",")[0]
     else:
         ip = request.client.host if request.client else "unknown"
-    
+
     # Se tiver autenticação, adicionar user_id
     user_id = request.state.user_id if hasattr(request.state, "user_id") else None
     if user_id:
         return f"{ip}:{user_id}"
-    
+
     return ip
 
 
@@ -50,5 +50,3 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSO
             "retry_after": exc.detail
         }
     )
-
-

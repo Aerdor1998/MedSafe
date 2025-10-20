@@ -15,10 +15,10 @@ class LoggingMiddleware(BaseHTTPMiddleware):
     """
     Middleware para logging estruturado de requisições
     """
-    
+
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
-        
+
         # Log da requisição
         logger.info(
             "request_started",
@@ -26,14 +26,14 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             path=request.url.path,
             client=request.client.host if request.client else None,
         )
-        
+
         # Processar requisição
         try:
             response = await call_next(request)
-            
+
             # Calcular duração
             duration = time.time() - start_time
-            
+
             # Log da resposta
             logger.info(
                 "request_completed",
@@ -43,15 +43,15 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 duration=f"{duration:.3f}s",
                 client=request.client.host if request.client else None,
             )
-            
+
             # Adicionar header de tempo de resposta
             response.headers["X-Response-Time"] = f"{duration:.3f}s"
-            
+
             return response
-            
+
         except Exception as e:
             duration = time.time() - start_time
-            
+
             logger.error(
                 "request_failed",
                 method=request.method,
@@ -60,7 +60,5 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 error=str(e),
                 client=request.client.host if request.client else None,
             )
-            
+
             raise
-
-

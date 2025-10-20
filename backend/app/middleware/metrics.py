@@ -35,37 +35,35 @@ class MetricsMiddleware(BaseHTTPMiddleware):
     """
     Middleware para coletar métricas Prometheus
     """
-    
+
     async def dispatch(self, request: Request, call_next):
         # Incrementar requisições em andamento
         REQUEST_IN_PROGRESS.inc()
-        
+
         # Iniciar timer
         start_time = time.time()
-        
+
         try:
             # Processar requisição
             response = await call_next(request)
-            
+
             # Calcular duração
             duration = time.time() - start_time
-            
+
             # Registrar métricas
             REQUEST_COUNT.labels(
                 method=request.method,
                 endpoint=request.url.path,
                 status=response.status_code
             ).inc()
-            
+
             REQUEST_DURATION.labels(
                 method=request.method,
                 endpoint=request.url.path
             ).observe(duration)
-            
+
             return response
-            
+
         finally:
             # Decrementar requisições em andamento
             REQUEST_IN_PROGRESS.dec()
-
-

@@ -18,12 +18,12 @@ logger = logging.getLogger(__name__)
 
 class ClinicalRulesAgent:
     """Agente para aplicação de regras clínicas com análise REAL"""
-    
+
     def __init__(self):
         """Inicializar o ClinicalRulesAgent"""
         self.interaction_service = get_interaction_service()
         logger.info("⚕️  ClinicalRulesAgent inicializado - Base de 191k+ interações carregada")
-    
+
     async def analyze_contraindications(
         self,
         triage_data: Dict[str, Any],
@@ -32,41 +32,41 @@ class ClinicalRulesAgent:
     ) -> Dict[str, Any]:
         """
         Analisar contraindicações baseado em dados de triagem e evidências
-        
+
         Args:
             triage_data: Dados da triagem
             vision_data: Dados da análise de visão (opcional)
             evidence_snippets: Evidências coletadas
-            
+
         Returns:
             Análise clínica estruturada
         """
         logger.info("🔬 Iniciando análise clínica REAL...")
-        
+
         try:
             # Extrair dados do paciente
             age = triage_data.get('age', 0)
             weight = triage_data.get('weight')
             pregnant = triage_data.get('pregnant', False)
-            
+
             # Medicamentos em uso
             meds_in_use = triage_data.get('meds_in_use', [])
             if isinstance(meds_in_use, list) and len(meds_in_use) > 0:
-                current_meds = [med.get('name', med) if isinstance(med, dict) else str(med) 
+                current_meds = [med.get('name', med) if isinstance(med, dict) else str(med)
                                for med in meds_in_use]
             else:
                 current_meds = []
-            
+
             # Condições médicas
             conditions = triage_data.get('conditions', [])
             if isinstance(conditions, str):
                 conditions = [c.strip() for c in conditions.split(',') if c.strip()]
-            
+
             # Alergias
             allergies = triage_data.get('allergies', [])
             if isinstance(allergies, str):
                 allergies = [a.strip() for a in allergies.split(',') if a.strip()]
-            
+
             # Medicamento sendo analisado (vem do vision_data ou evidence)
             medication_name = None
             if vision_data and 'drug_name' in vision_data:
@@ -78,21 +78,21 @@ class ClinicalRulesAgent:
             else:
                 # Fallback: tentar pegar de medication_text se existir
                 medication_name = triage_data.get('medication_text', 'medicamento')
-            
+
             logger.info(f"   📊 Analisando: {medication_name}")
             logger.info(f"   👤 Idade: {age}, Peso: {weight}")
             logger.info(f"   💊 Medicamentos em uso: {current_meds}")
             logger.info(f"   🏥 Condições: {conditions}")
             logger.info(f"   ⚠️  Alergias: {allergies}")
-            
+
             # === 1. BUSCAR INTERAÇÕES MEDICAMENTOSAS ===
             interactions_found = []
             if current_meds:
                 raw_interactions = self.interaction_service.find_interactions(
-                    medication_name, 
+                    medication_name,
                     current_meds
                 )
-                
+
                 # Formatar interações para o formato esperado
                 for interaction in raw_interactions:
                     interactions_found.append({
@@ -102,14 +102,14 @@ class ClinicalRulesAgent:
                         'mechanism': interaction['category'],
                         'recommendation': self._get_interaction_recommendation(interaction['severity'])
                     })
-            
+
             # === 2. BUSCAR CONTRAINDICAÇÕES ===
             contraindications_found = []
-            
+
             # Adicionar gravidez se aplicável
             if pregnant:
                 conditions.append('gravidez')
-            
+
             # Buscar contraindicações baseadas em condições
             if conditions or allergies:
                 raw_contraindications = self.interaction_service.analyze_contraindications(
@@ -118,26 +118,26 @@ class ClinicalRulesAgent:
                     allergies
                 )
                 contraindications_found.extend(raw_contraindications)
-            
+
             # === 3. AJUSTES DE DOSAGEM ===
             dosage_adjustments = self._check_dosage_adjustments(
                 medication_name, age, weight, conditions
             )
-            
+
             # === 4. REAÇÕES ADVERSAS COMUNS ===
             adverse_reactions = self._get_common_adverse_reactions(medication_name)
-            
+
             # === 5. AVALIAR FATORES DE RISCO DO PACIENTE ===
             patient_risk_factors = self._evaluate_patient_risk_factors(
                 adverse_reactions, age, pregnant, conditions, current_meds
             )
-            
+
             # === 6. CALCULAR RISCO GERAL ===
             risk_level = self.interaction_service.calculate_overall_risk(
                 interactions_found,
                 contraindications_found
             )
-            
+
             # Ajustar risco baseado em fatores de risco do paciente
             if patient_risk_factors['critical_risk_count'] >= 2:
                 risk_level = 'critical'
@@ -147,7 +147,7 @@ class ClinicalRulesAgent:
                 risk_level = 'high'
             elif patient_risk_factors['high_risk_count'] >= 1 and risk_level == 'low':
                 risk_level = 'medium'
-            
+
             # === 7. GERAR NOTAS DE ANÁLISE ===
             analysis_notes = self._generate_analysis_notes(
                 medication_name,
@@ -157,13 +157,13 @@ class ClinicalRulesAgent:
                 age,
                 pregnant
             )
-            
+
             # === 8. CALCULAR CONFIDENCE SCORE ===
             confidence = 0.85 if (interactions_found or contraindications_found) else 0.65
-            
+
             logger.info(f"   ✅ Análise concluída - Risco: {risk_level}")
             logger.info(f"   📊 Interações: {len(interactions_found)}, Contraindicações: {len(contraindications_found)}")
-            
+
             return {
                 "risk_level": risk_level,
                 "contraindications": contraindications_found,
@@ -176,7 +176,7 @@ class ClinicalRulesAgent:
                 "analysis_notes": analysis_notes,
                 "status": "completed"
             }
-            
+
         except Exception as e:
             logger.error(f"❌ Erro na análise clínica: {e}", exc_info=True)
             # Retornar análise básica em caso de erro
@@ -192,7 +192,7 @@ class ClinicalRulesAgent:
                 "analysis_notes": f"Erro na análise: {str(e)}. Consulte um profissional de saúde.",
                 "status": "error_fallback"
             }
-    
+
     def _get_interaction_recommendation(self, severity: str) -> str:
         """Gerar recomendação baseada na severidade"""
         recommendations = {
@@ -202,7 +202,7 @@ class ClinicalRulesAgent:
             'low': 'Risco mínimo - Manter acompanhamento médico de rotina.'
         }
         return recommendations.get(severity, 'Consultar profissional de saúde.')
-    
+
     def _evaluate_patient_risk_factors(
         self,
         adverse_reactions: List[Dict[str, Any]],
@@ -217,21 +217,21 @@ class ClinicalRulesAgent:
         """
         high_risk_count = 0
         critical_risk_count = 0
-        
+
         # Juntar condições e características do paciente
         patient_profile = []
-        
+
         if age >= 65:
             patient_profile.extend(['idosos', 'idade >65 anos', 'idade >60 anos'])
-        
+
         if pregnant:
             patient_profile.append('gravidez')
-        
+
         # Adicionar condições
         for condition in conditions:
             condition_lower = condition.lower()
             patient_profile.append(condition_lower)
-            
+
             # Mapear condições para fatores de risco
             if 'hipertensão' in condition_lower or 'pressão alta' in condition_lower:
                 patient_profile.extend(['hipertensão', 'insuficiência cardíaca'])
@@ -241,18 +241,18 @@ class ClinicalRulesAgent:
                 patient_profile.extend(['insuficiência renal', 'insuficiência renal prévia'])
             if 'cardíaca' in condition_lower or 'coração' in condition_lower:
                 patient_profile.append('cardiopatia')
-        
+
         # Medicamentos em uso também são fatores de risco
         for med in current_meds:
             med_lower = med.lower()
             if any(x in med_lower for x in ['varfarina', 'warfarin', 'anticoagulante']):
                 patient_profile.append('uso concomitante de anticoagulantes')
-        
+
         # Verificar se reações adversas têm fatores de risco relevantes
         for reaction in adverse_reactions:
             risk_factors = reaction.get('risk_factors', [])
             severity = reaction.get('severity', '').lower()
-            
+
             # Verificar se algum fator de risco do paciente está na lista
             matched_risk_factors = []
             for patient_factor in patient_profile:
@@ -260,30 +260,30 @@ class ClinicalRulesAgent:
                     if patient_factor.lower() in reaction_factor.lower() or reaction_factor.lower() in patient_factor.lower():
                         matched_risk_factors.append(reaction_factor)
                         break
-            
+
             # Contar baseado em severidade
             if matched_risk_factors:
                 if 'crítica' in severity or 'grave' in severity:
                     critical_risk_count += 1
                 elif 'moderada' in severity or 'alta' in severity:
                     high_risk_count += 1
-        
+
         return {
             'high_risk_count': high_risk_count,
             'critical_risk_count': critical_risk_count
         }
-    
+
     def _check_dosage_adjustments(
-        self, 
-        medication: str, 
-        age: int, 
-        weight: Optional[float], 
+        self,
+        medication: str,
+        age: int,
+        weight: Optional[float],
         conditions: List[str]
     ) -> List[Dict[str, Any]]:
         """Verificar necessidade de ajustes de dosagem"""
         adjustments = []
         med_lower = medication.lower()
-        
+
         # Ajuste por idade (idosos)
         if age >= 65:
             adjustments.append({
@@ -291,7 +291,7 @@ class ClinicalRulesAgent:
                 'recommendation': 'Considerar dose reduzida. Idosos têm metabolismo mais lento.',
                 'adjustment_type': 'dose_reduction'
             })
-        
+
         # Ajuste por idade (crianças)
         if age < 18:
             adjustments.append({
@@ -299,7 +299,7 @@ class ClinicalRulesAgent:
                 'recommendation': 'Calcular dose baseada em peso corporal (mg/kg). Consultar pediatra.',
                 'adjustment_type': 'pediatric_dosing'
             })
-        
+
         # Ajuste por condições renais
         if any(cond in ' '.join(conditions).lower() for cond in ['renal', 'rim', 'kidney']):
             adjustments.append({
@@ -307,7 +307,7 @@ class ClinicalRulesAgent:
                 'recommendation': 'Ajustar dose baseado em clearance de creatinina. Monitorar função renal.',
                 'adjustment_type': 'renal_impairment'
             })
-        
+
         # Ajuste por condições hepáticas
         if any(cond in ' '.join(conditions).lower() for cond in ['hepática', 'liver', 'fígado']):
             adjustments.append({
@@ -315,9 +315,9 @@ class ClinicalRulesAgent:
                 'recommendation': 'Reduzir dose. Monitorar enzimas hepáticas regularmente.',
                 'adjustment_type': 'hepatic_impairment'
             })
-        
+
         return adjustments
-    
+
     def _get_common_adverse_reactions(self, medication: str) -> List[Dict[str, Any]]:
         """
         Retornar reações adversas específicas do medicamento
@@ -325,7 +325,7 @@ class ClinicalRulesAgent:
         """
         med_lower = medication.lower()
         reactions = []
-        
+
         # === ANTI-INFLAMATÓRIOS (AINEs) ===
         if any(med in med_lower for med in ['ibuprofen', 'ibuprofeno', 'aspirin', 'aspirina', 'diclofenac', 'naproxen']):
             reactions.extend([
@@ -351,7 +351,7 @@ class ClinicalRulesAgent:
                     'risk_factors': ['hipertensão', 'insuficiência cardíaca']
                 }
             ])
-        
+
         # === ANTICOAGULANTES ===
         elif any(med in med_lower for med in ['warfarin', 'varfarina', 'marevan']):
             reactions.extend([
@@ -370,7 +370,7 @@ class ClinicalRulesAgent:
                     'risk_factors': ['deficiência de proteína C/S', 'doses altas iniciais']
                 }
             ])
-        
+
         # === ANTIDIABÉTICOS (METFORMINA) ===
         elif any(med in med_lower for med in ['metformin', 'metformina', 'glifage']):
             reactions.extend([
@@ -396,7 +396,7 @@ class ClinicalRulesAgent:
                     'risk_factors': ['uso prolongado >4 anos', 'não suplementação']
                 }
             ])
-        
+
         # === ESTATINAS ===
         elif any(med in med_lower for med in ['atorvastatin', 'atorvastatina', 'simvastatin', 'simvastatina', 'rosuva']):
             reactions.extend([
@@ -422,7 +422,7 @@ class ClinicalRulesAgent:
                     'risk_factors': ['doença hepática prévia', 'uso concomitante de álcool']
                 }
             ])
-        
+
         # === ANTIDEPRESSIVOS (ISRS) ===
         elif any(med in med_lower for med in ['fluoxetine', 'fluoxetina', 'sertraline', 'sertralina', 'prozac', 'zoloft']):
             reactions.extend([
@@ -448,7 +448,7 @@ class ClinicalRulesAgent:
                     'risk_factors': ['início de tratamento']
                 }
             ])
-        
+
         # === BENZODIAZEPÍNICOS ===
         elif any(med in med_lower for med in ['diazepam', 'clonazepam', 'alprazolam', 'rivotril', 'valium']):
             reactions.extend([
@@ -474,7 +474,7 @@ class ClinicalRulesAgent:
                     'risk_factors': ['idosos', 'doses altas']
                 }
             ])
-        
+
         # === PARACETAMOL/ACETAMINOFENO ===
         elif any(med in med_lower for med in ['paracetamol', 'acetaminophen', 'tylenol']):
             reactions.extend([
@@ -493,7 +493,7 @@ class ClinicalRulesAgent:
                     'risk_factors': ['histórico de alergias']
                 }
             ])
-        
+
         # === ANTIBIÓTICOS (QUINOLONAS) ===
         elif any(med in med_lower for med in ['levofloxacin', 'ciprofloxacin', 'norfloxacin']):
             reactions.extend([
@@ -519,7 +519,7 @@ class ClinicalRulesAgent:
                     'risk_factors': ['cardiopatia', 'uso de outros QT prolongadores', 'distúrbios eletrolíticos']
                 }
             ])
-        
+
         # === FALLBACK GENÉRICO (para medicamentos não mapeados) ===
         else:
             reactions.append({
@@ -529,24 +529,24 @@ class ClinicalRulesAgent:
                 'severity': 'Variável',
                 'risk_factors': ['sensibilidade individual', 'interações medicamentosas']
             })
-        
+
         return reactions
-    
+
     def _generate_analysis_notes(
-        self, 
-        medication: str, 
-        risk_level: str, 
-        interaction_count: int, 
+        self,
+        medication: str,
+        risk_level: str,
+        interaction_count: int,
         contraindication_count: int,
         age: int,
         pregnant: bool
     ) -> str:
         """Gerar notas descritivas da análise"""
         notes = []
-        
+
         # Cabeçalho
         notes.append(f"## Análise Clínica - {medication}\n")
-        
+
         # Resumo de risco
         risk_descriptions = {
             'critical': '🔴 **RISCO CRÍTICO** - Uso contraindicado ou requer atenção médica IMEDIATA',
@@ -556,7 +556,7 @@ class ClinicalRulesAgent:
         }
         notes.append(risk_descriptions.get(risk_level, ''))
         notes.append("")
-        
+
         # Estatísticas
         if interaction_count > 0 or contraindication_count > 0:
             notes.append("### Alertas Identificados:")
@@ -565,7 +565,7 @@ class ClinicalRulesAgent:
             if interaction_count > 0:
                 notes.append(f"- **{interaction_count}** interação(ões) medicamentosa(s) encontrada(s)")
             notes.append("")
-        
+
         # Populações especiais
         if age >= 65 or age < 18 or pregnant:
             notes.append("### População Especial:")
@@ -576,11 +576,11 @@ class ClinicalRulesAgent:
             if pregnant:
                 notes.append("- **GESTANTE**: Avaliar risco/benefício com obstetra")
             notes.append("")
-        
+
         # Disclaimer
         notes.append("---")
         notes.append("**IMPORTANTE**: Esta análise é informativa e não substitui consulta médica. "
                     "Sempre consulte um profissional de saúde antes de iniciar, alterar ou interromper "
                     "qualquer tratamento.")
-        
+
         return "\n".join(notes)

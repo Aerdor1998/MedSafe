@@ -11,11 +11,11 @@ logger = logging.getLogger(__name__)
 
 class DocAgent:
     """Agente para busca em documentação de medicamentos"""
-    
+
     def __init__(self):
         """Inicializar o DocAgent"""
         logger.info("📚 DocAgent inicializado (STUB)")
-    
+
     async def find_evidence(
         self,
         drug_name: str,
@@ -23,16 +23,16 @@ class DocAgent:
     ) -> List[Dict[str, Any]]:
         """
         Buscar evidências sobre medicamento específico
-        
+
         Args:
             drug_name: Nome do medicamento
             sections: Seções a buscar (contraindicações, advertências, etc)
-            
+
         Returns:
             Lista de evidências encontradas
         """
         logger.warning(f"⚠️  DocAgent.find_evidence - STUB - medicamento: {drug_name}")
-        
+
         # Retornar estrutura vazia mas válida
         return [
             {
@@ -45,7 +45,7 @@ class DocAgent:
             }
             for section in (sections or ["geral"])
         ]
-    
+
     async def search_evidence(
         self,
         medications: List[str],
@@ -53,11 +53,11 @@ class DocAgent:
     ) -> Dict[str, Any]:
         """
         Buscar evidências sobre medicamentos (método legado)
-        
+
         Args:
             medications: Lista de medicamentos
             triage_data: Dados da triagem
-            
+
         Returns:
             Evidências encontradas
         """
@@ -67,17 +67,17 @@ class DocAgent:
             "status": "stub_implementation",
             "message": "DocAgent ainda não implementado"
         }
-    
+
     async def get_drug_interactions(
         self,
         medications: List[str]
     ) -> Dict[str, Any]:
         """
         Buscar interações medicamentosas
-        
+
         Args:
             medications: Lista de medicamentos
-            
+
         Returns:
             Interações encontradas
         """
@@ -86,4 +86,3 @@ class DocAgent:
             "interactions": [],
             "status": "stub_implementation"
         }
-

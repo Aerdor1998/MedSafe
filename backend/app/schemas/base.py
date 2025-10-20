@@ -10,7 +10,7 @@ from uuid import UUID
 
 class BaseSchema(BaseModel):
     """Schema base com campos comuns"""
-    
+
     class Config:
         from_attributes = True
         json_encoders = {
@@ -21,13 +21,12 @@ class BaseSchema(BaseModel):
 
 class TimestampSchema(BaseSchema):
     """Schema com campos de timestamp"""
-    
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
 
 
 class IDSchema(BaseSchema):
     """Schema com campo de ID"""
-    
-    id: UUID = Field(..., description="ID único do registro")
 
+    id: UUID = Field(..., description="ID único do registro")

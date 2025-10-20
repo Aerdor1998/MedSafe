@@ -15,14 +15,14 @@ logger = logging.getLogger(__name__)
 async def call_ollama_with_circuit_breaker(func: Callable, *args, **kwargs) -> Any:
     """
     Chamar Ollama API com circuit breaker
-    
+
     Args:
         func: Função a ser chamada
         *args, **kwargs: Argumentos da função
-        
+
     Returns:
         Resultado da função
-        
+
     Raises:
         CircuitBreakerError: Se o circuit breaker estiver aberto
     """
@@ -37,14 +37,14 @@ async def call_ollama_with_circuit_breaker(func: Callable, *args, **kwargs) -> A
 async def call_external_api_with_circuit_breaker(func: Callable, *args, **kwargs) -> Any:
     """
     Chamar API externa com circuit breaker
-    
+
     Args:
         func: Função a ser chamada
         *args, **kwargs: Argumentos da função
-        
+
     Returns:
         Resultado da função
-        
+
     Raises:
         CircuitBreakerError: Se o circuit breaker estiver aberto
     """
@@ -58,11 +58,11 @@ async def call_external_api_with_circuit_breaker(func: Callable, *args, **kwargs
 def with_circuit_breaker(failure_threshold: int = 5, recovery_timeout: int = 60):
     """
     Decorator para adicionar circuit breaker a uma função
-    
+
     Args:
         failure_threshold: Número de falhas antes de abrir o circuit
         recovery_timeout: Tempo em segundos para tentar recuperar
-        
+
     Returns:
         Decorator function
     """
@@ -85,12 +85,12 @@ def with_circuit_breaker(failure_threshold: int = 5, recovery_timeout: int = 60)
 
 class CircuitBreakerManager:
     """Gerenciador de circuit breakers"""
-    
+
     @staticmethod
     def get_status() -> dict:
         """
         Obter status de todos os circuit breakers
-        
+
         Returns:
             Dict com status dos circuits
         """
@@ -99,11 +99,9 @@ class CircuitBreakerManager:
             "ollama": "closed",
             "external_api": "closed",
         }
-    
+
     @staticmethod
     def reset_all():
         """Resetar todos os circuit breakers"""
         # Implementar lógica para resetar
         logger.info("All circuit breakers reset")
-
-

@@ -9,8 +9,7 @@ from .clinical import ClinicalRulesAgent
 
 __all__ = [
     "CaptainAgent",
-    "VisionAgent", 
+    "VisionAgent",
     "DocAgent",
     "ClinicalRulesAgent"
 ]
-

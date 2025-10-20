@@ -60,7 +60,7 @@ def init_db():
         # Detectar tipo de banco de dados
         is_postgres = 'postgresql' in str(engine.url)
         is_sqlite = 'sqlite' in str(engine.url)
-        
+
         # Verificar conexão
         with engine.connect() as conn:
             if is_postgres:
@@ -70,19 +70,19 @@ def init_db():
                     logger.warning("Extensão pgvector não encontrada. Criando...")
                     conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
                     conn.commit()
-                
+
                 logger.info("✅ Conexão com PostgreSQL estabelecida")
             elif is_sqlite:
                 logger.info("✅ Usando SQLite para desenvolvimento local")
-            
+
         # Criar todas as tabelas
         Base.metadata.create_all(bind=engine)
         logger.info("✅ Tabelas criadas com sucesso")
-        
+
         # Criar índices específicos (apenas para PostgreSQL)
         if is_postgres:
             create_indexes()
-        
+
     except Exception as e:
         logger.error(f"❌ Erro ao inicializar banco: {e}")
         raise
@@ -94,48 +94,48 @@ def create_indexes():
         with engine.connect() as conn:
             # Índice HNSW para embeddings (pgvector)
             conn.execute(text("""
-                CREATE INDEX IF NOT EXISTS idx_embeddings_vector 
-                ON embeddings 
+                CREATE INDEX IF NOT EXISTS idx_embeddings_vector
+                ON embeddings
                 USING hnsw (vector vector_cosine_ops)
                 WITH (m = 16, ef_construction = 64)
             """))
-            
+
             # Índices para busca textual
             conn.execute(text("""
-                CREATE INDEX IF NOT EXISTS idx_documents_drug_name 
+                CREATE INDEX IF NOT EXISTS idx_documents_drug_name
                 ON documents (drug_name)
             """))
-            
+
             conn.execute(text("""
-                CREATE INDEX IF NOT EXISTS idx_documents_section 
+                CREATE INDEX IF NOT EXISTS idx_documents_section
                 ON documents (section)
             """))
-            
+
             # Índices para triagem
             conn.execute(text("""
-                CREATE INDEX IF NOT EXISTS idx_triage_user_id 
+                CREATE INDEX IF NOT EXISTS idx_triage_user_id
                 ON triage (user_id)
             """))
-            
+
             conn.execute(text("""
-                CREATE INDEX IF NOT EXISTS idx_triage_created_at 
+                CREATE INDEX IF NOT EXISTS idx_triage_created_at
                 ON triage (created_at)
             """))
-            
+
             # Índices para relatórios
             conn.execute(text("""
-                CREATE INDEX IF NOT EXISTS idx_reports_triage_id 
+                CREATE INDEX IF NOT EXISTS idx_reports_triage_id
                 ON reports (triage_id)
             """))
-            
+
             conn.execute(text("""
-                CREATE INDEX IF NOT EXISTS idx_reports_risk_level 
+                CREATE INDEX IF NOT EXISTS idx_reports_risk_level
                 ON reports (risk_level)
             """))
-            
+
             conn.commit()
             logger.info("✅ Índices criados com sucesso")
-            
+
     except Exception as e:
         logger.error(f"❌ Erro ao criar índices: {e}")
         # Não falhar se os índices não puderem ser criados
@@ -159,10 +159,10 @@ def get_db_stats() -> dict:
         from sqlalchemy import select, func
         from sqlalchemy.schema import MetaData
         from .models import Triage, Report, Document, Embedding
-        
+
         with engine.connect() as conn:
             stats = {}
-            
+
             # Mapear modelos (seguro - não usa SQL dinâmico)
             models = {
                 'triage': Triage,
@@ -170,27 +170,26 @@ def get_db_stats() -> dict:
                 'documents': Document,
                 'embeddings': Embedding
             }
-            
+
             # Contar registros usando ORM (seguro)
             metadata = MetaData()
             metadata.reflect(bind=engine)
-            
+
             for name, model in models.items():
                 if name in metadata.tables:
                     table_obj = metadata.tables[name]
                     count_query = select(func.count()).select_from(table_obj)
                     result = conn.execute(count_query)
                     stats[f"{name}_count"] = result.scalar()
-            
+
             # Verificar tamanho do banco
             result = conn.execute(text("""
                 SELECT pg_size_pretty(pg_database_size(current_database()))
             """))
             stats['database_size'] = result.fetchone()[0]
-            
+
             return stats
-            
+
     except Exception as e:
         logger.error(f"❌ Erro ao obter estatísticas: {type(e).__name__}")
         return {}
-

@@ -10,9 +10,8 @@ __all__ = [
     "init_db",
     "Base",
     "Triage",
-    "Report", 
+    "Report",
     "Document",
     "Embedding",
     "IngestJob"
 ]
-
