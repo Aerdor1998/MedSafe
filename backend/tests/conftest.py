@@ -3,11 +3,6 @@ Configuração global para testes pytest
 """
 
 import pytest
-import os
-import sys
-
-# Adicionar backend ao path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 @pytest.fixture
 def sample_patient_data():
@@ -41,9 +36,11 @@ def sample_medication_data():
     }
 
 @pytest.fixture
-def db_connection():
-    """Conexão com banco de dados de teste"""
-    from models.database import get_db_connection
-    conn = get_db_connection()
-    yield conn
-    conn.close()
+def db_session():
+    """Sessão de banco de dados para testes"""
+    from app.db.database import SessionLocal
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()

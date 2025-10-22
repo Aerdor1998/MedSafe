@@ -5,13 +5,8 @@ Análise REAL de contraindicações e interações medicamentosas
 
 import logging
 from typing import Dict, Any, List, Optional
-import sys
-from pathlib import Path
 
-# Adicionar path do projeto
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from services.drug_interactions import get_interaction_service
+from ..services.drug_interactions import get_interaction_service
 
 logger = logging.getLogger(__name__)
 
