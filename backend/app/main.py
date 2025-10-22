@@ -21,6 +21,7 @@ from .config import settings
 from .db.database import init_db, check_db_health, get_db_stats
 from .db.models import Triage, Report, Document, Embedding, IngestJob
 from .agents import CaptainAgent
+from .middleware.csrf import CSRFMiddleware
 from .schemas import (
     TriageCreate, TriageResponse, TriageReport,
     VisionRequest, VisionResponse,
@@ -86,6 +87,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# CSRF Protection (apenas em produção)
+if not settings.debug:
+    app.add_middleware(
+        CSRFMiddleware,
+        secret_key=settings.secret_key,
+        cookie_name="csrf_token",
+        header_name="X-CSRF-Token",
+        cookie_secure=True,
+        cookie_httponly=True,
+        cookie_samesite="Strict",
+    )
 
 # Inicializar agentes
 captain_agent = CaptainAgent()
