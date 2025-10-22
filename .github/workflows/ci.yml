@@ -11,6 +11,8 @@ env:
   POSTGRES_DB: test_medsafe
   POSTGRES_USER: test_user
   POSTGRES_PASSWORD: test_password
+  SECRET_KEY: test-secret-key-for-ci-only-not-for-production
+  JWT_SECRET: test-jwt-secret-for-ci-only-not-for-production
 
 jobs:
   lint:
@@ -151,8 +153,16 @@ jobs:
       - name: Run tests with coverage
         env:
           DATABASE_URL: postgresql://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
           REDIS_URL: redis://localhost:6379/0
           OLLAMA_HOST: http://localhost:11434
+          SECRET_KEY: ${{ env.SECRET_KEY }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+          DEBUG: false
         run: |
           cd backend
           pytest tests/ -v --cov=app --cov-report=xml --cov-report=term --cov-report=html
