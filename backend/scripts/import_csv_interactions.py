@@ -89,7 +89,7 @@ def find_csv_file():
             return csv_path
 
     raise FileNotFoundError(
-        f"Arquivo CSV não encontrado. Procurado em:\n" +
+        "Arquivo CSV não encontrado. Procurado em:\n" +
         "\n".join(f"  - {p}" for p in possible_paths)
     )
 
@@ -256,7 +256,7 @@ if __name__ == "__main__":
         duration = (end_time - start_time).total_seconds()
 
         logger.info("=" * 70)
-        logger.info(f"✅ Importação concluída com sucesso!")
+        logger.info("✅ Importação concluída com sucesso!")
         logger.info(f"⏱️  Tempo total: {duration:.2f} segundos")
 
     except Exception as e:

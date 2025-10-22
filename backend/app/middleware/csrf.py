@@ -190,7 +190,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
             # Validar tokens
             if not self.verify_csrf_token(cookie_token):
-                logger.warning(f"CSRF validation failed: Invalid cookie token")
+                logger.warning("CSRF validation failed: Invalid cookie token")
                 return JSONResponse(
                     status_code=403,
                     content={
@@ -200,7 +200,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                 )
 
             if not self.verify_csrf_token(header_token):
-                logger.warning(f"CSRF validation failed: Invalid header token")
+                logger.warning("CSRF validation failed: Invalid header token")
                 return JSONResponse(
                     status_code=403,
                     content={
@@ -211,7 +211,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
             # Verificar se tokens são iguais (Double Submit Cookie)
             if cookie_token != header_token:
-                logger.warning(f"CSRF validation failed: Token mismatch")
+                logger.warning("CSRF validation failed: Token mismatch")
                 return JSONResponse(
                     status_code=403,
                     content={
