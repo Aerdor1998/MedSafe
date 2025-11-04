@@ -149,9 +149,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-test.txt
-      
+
       - name: Run tests with coverage
         env:
+          PYTHONPATH: ${{ github.workspace }}/backend
           DATABASE_URL: postgresql://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
           POSTGRES_HOST: localhost
           POSTGRES_PORT: 5432
