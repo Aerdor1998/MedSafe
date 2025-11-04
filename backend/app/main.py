@@ -68,8 +68,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     description=(
-        "Sistema de Contraindicação de Medicamentos "
-        "baseado em diretrizes OMS/ANVISA"
+        "Sistema de Contraindicação de Medicamentos " "baseado em diretrizes OMS/ANVISA"
     ),
     version=settings.app_version,
     lifespan=lifespan,
