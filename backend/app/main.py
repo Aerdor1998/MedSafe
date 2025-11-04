@@ -3,36 +3,38 @@ MedSafe API - Sistema de Contraindicação de Medicamentos
 API Principal com FastAPI, AG2 + Ollama, PostgreSQL + pgvector
 """
 
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-import uvicorn
 import json
-import uuid
-from datetime import datetime
-from typing import Optional
-from pathlib import Path
-
-# Importar configurações e módulos
-from .config import settings
-from .db.database import init_db, check_db_health, get_db_stats
-from .db.models import Triage, Report, IngestJob
-from .agents import CaptainAgent
-from .middleware.csrf import CSRFMiddleware
-from .schemas import (
-    TriageCreate,
-    TriageResponse,
-    TriageReport,
-    VisionResponse,
-    MedicationSearchResult,
-    IngestRequest,
-    IngestResponse,
-)
 
 # Configurar logging
 import logging
+import uuid
+from contextlib import asynccontextmanager
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+import uvicorn
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.staticfiles import StaticFiles
+
+from .agents import CaptainAgent
+
+# Importar configurações e módulos
+from .config import settings
+from .db.database import check_db_health, get_db_stats, init_db
+from .db.models import IngestJob, Report, Triage
+from .middleware.csrf import CSRFMiddleware
+from .schemas import (
+    IngestRequest,
+    IngestResponse,
+    MedicationSearchResult,
+    TriageCreate,
+    TriageReport,
+    TriageResponse,
+    VisionResponse,
+)
 
 logging.basicConfig(level=getattr(logging, settings.log_level))
 logger = logging.getLogger(__name__)

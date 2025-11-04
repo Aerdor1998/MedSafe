@@ -13,13 +13,14 @@ Variáveis necessárias:
 """
 
 import csv
-import psycopg2
-from psycopg2.extras import execute_batch
-import os
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
+
+import psycopg2
 from dotenv import load_dotenv
+from psycopg2.extras import execute_batch
 
 # Carregar variáveis de ambiente
 load_dotenv()

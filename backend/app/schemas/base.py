@@ -2,10 +2,11 @@
 Schema base para todos os schemas do MedSafe
 """
 
-from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
+
+from pydantic import BaseModel, Field
 
 
 class BaseSchema(BaseModel):

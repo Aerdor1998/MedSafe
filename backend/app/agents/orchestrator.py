@@ -3,13 +3,14 @@ CaptainAgent - Agente orquestrador principal do MedSafe
 """
 
 import logging
-from typing import Dict, Any, List, Optional
 import uuid
-from ..db.models import Triage, Report
+from typing import Any, Dict, List, Optional
+
 from ..db.database import get_db_context
-from .vision import VisionAgent
-from .docagent import DocAgent
+from ..db.models import Report, Triage
 from .clinical import ClinicalRulesAgent
+from .docagent import DocAgent
+from .vision import VisionAgent
 
 logger = logging.getLogger(__name__)
 

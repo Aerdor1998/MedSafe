@@ -2,9 +2,11 @@
 Schemas para ingestão de dados (ANVISA, SIDER, DrugCentral)
 """
 
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from pydantic import Field
-from .base import BaseSchema, TimestampSchema, IDSchema
+
+from .base import BaseSchema, IDSchema, TimestampSchema
 
 
 class IngestRequest(BaseSchema):

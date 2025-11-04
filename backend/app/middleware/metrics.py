@@ -3,9 +3,10 @@ Middleware de métricas Prometheus
 """
 
 import time
+
+from prometheus_client import Counter, Gauge, Histogram
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from prometheus_client import Counter, Histogram, Gauge
 
 # Métricas Prometheus
 REQUEST_COUNT = Counter(

@@ -2,12 +2,13 @@
 VisionAgent - Agente para análise de imagem/PDF com qwen2.5-vl
 """
 
-import logging
 import base64
 import json
-from typing import Dict, Any
-from datetime import datetime
+import logging
 import uuid
+from datetime import datetime
+from typing import Any, Dict
+
 import httpx
 
 from ..config import settings

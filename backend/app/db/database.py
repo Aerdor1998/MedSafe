@@ -2,12 +2,13 @@
 Configuração do banco de dados PostgreSQL com pgvector
 """
 
+import logging
+from contextlib import contextmanager
+from typing import Generator
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
-from contextlib import contextmanager
-import logging
-from typing import Generator
+from sqlalchemy.orm import Session, sessionmaker
 
 from ..config import settings
 
@@ -185,9 +186,10 @@ def check_db_health() -> bool:
 def get_db_stats() -> dict:
     """Obter estatísticas do banco de dados"""
     try:
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
         from sqlalchemy.schema import MetaData
-        from .models import Triage, Report, Document, Embedding
+
+        from .models import Document, Embedding, Report, Triage
 
         with engine.connect() as conn:
             stats = {}

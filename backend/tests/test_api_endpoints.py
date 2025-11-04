@@ -3,8 +3,8 @@ Testes para endpoints da API
 """
 
 import pytest
-from fastapi.testclient import TestClient
 from app.main import app
+from fastapi.testclient import TestClient
 
 client = TestClient(app)
 
@@ -101,6 +101,7 @@ def test_upload_image_endpoint():
     """Testar endpoint de upload de imagem"""
     # Criar imagem fictícia em memória
     from io import BytesIO
+
     from PIL import Image
 
     img = Image.new("RGB", (100, 100), color="white")
@@ -154,6 +155,7 @@ def test_missing_medication_text():
 async def test_concurrent_requests():
     """Testar requisições concorrentes"""
     import asyncio
+
     import httpx
 
     async with httpx.AsyncClient(base_url="http://localhost:8050") as client:

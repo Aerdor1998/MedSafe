@@ -6,7 +6,7 @@ Utiliza base de dados CSV com 191k+ interações
 import csv
 import logging
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 

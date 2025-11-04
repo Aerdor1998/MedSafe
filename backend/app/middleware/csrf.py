@@ -5,14 +5,15 @@ Implementa proteção contra ataques Cross-Site Request Forgery (CSRF)
 seguindo as melhores práticas de segurança.
 """
 
+import hashlib
+import hmac
+import logging
+import secrets
+from typing import Callable
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from typing import Callable
-import secrets
-import hmac
-import hashlib
-import logging
 
 logger = logging.getLogger(__name__)
 

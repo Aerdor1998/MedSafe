@@ -2,9 +2,10 @@
 Configurações do MedSafe usando pydantic-settings
 """
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import List, Optional, Union
+
 from pydantic import field_validator
-from typing import Optional, List, Union
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):

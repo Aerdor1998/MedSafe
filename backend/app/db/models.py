@@ -2,28 +2,29 @@
 Modelos SQLAlchemy para o MedSafe
 """
 
+import uuid
+
 from sqlalchemy import (
-    Column,
-    String,
-    Integer,
-    Float,
-    Boolean,
-    DateTime,
-    Text,
     JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
     ForeignKey,
     Index,
+    Integer,
+    String,
+    Text,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-import uuid
 
 from .database import Base
 
 # Importação condicional de tipos PostgreSQL
 try:
-    from sqlalchemy.dialects.postgresql import UUID
     from pgvector.sqlalchemy import Vector as VECTOR
+    from sqlalchemy.dialects.postgresql import UUID
 
     POSTGRES_AVAILABLE = True
 except ImportError:

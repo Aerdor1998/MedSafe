@@ -2,10 +2,11 @@
 Circuit Breaker para resiliência de serviços externos
 """
 
-from circuitbreaker import circuit
 import logging
-from typing import Any, Callable
 from functools import wraps
+from typing import Any, Callable
+
+from circuitbreaker import circuit
 
 logger = logging.getLogger(__name__)
 

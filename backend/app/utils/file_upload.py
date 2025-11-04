@@ -2,13 +2,14 @@
 Upload seguro de arquivos
 """
 
+import hashlib
 import tempfile
 from pathlib import Path
 from typing import Optional
-import hashlib
-from fastapi import UploadFile, HTTPException
-from PIL import Image
+
 import PyPDF2
+from fastapi import HTTPException, UploadFile
+from PIL import Image
 
 
 class SecureFileUpload:

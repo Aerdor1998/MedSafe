@@ -2,9 +2,11 @@
 Schemas para análise de imagem/PDF com VisionAgent
 """
 
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from pydantic import Field
-from .base import BaseSchema, TimestampSchema, IDSchema
+
+from .base import BaseSchema, IDSchema, TimestampSchema
 
 
 class VisionRequest(BaseSchema):
