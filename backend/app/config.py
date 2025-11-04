@@ -100,13 +100,15 @@ class Settings(BaseSettings):
         if self.secret_key.lower() in dangerous_values:
             raise ValueError(
                 "SECRET_KEY must be changed from default value. "
-                "Generate with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+                "Generate with: python -c 'import secrets; "
+                "print(secrets.token_urlsafe(32))'"
             )
 
         if self.jwt_secret.lower() in dangerous_values:
             raise ValueError(
                 "JWT_SECRET must be changed from default value. "
-                "Generate with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+                "Generate with: python -c 'import secrets; "
+                "print(secrets.token_urlsafe(32))'"
             )
 
         # Validar comprimento mínimo
@@ -128,7 +130,10 @@ class Settings(BaseSettings):
         """Retorna a URL do banco de dados"""
         if self.database_url:
             return self.database_url
-        return f"postgresql://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        return (
+            f"postgresql://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
 
     @property
     def ollama_base_url(self) -> str:

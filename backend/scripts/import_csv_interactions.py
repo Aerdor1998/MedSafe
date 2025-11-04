@@ -41,7 +41,8 @@ def get_db_connection():
 
     if missing_vars:
         raise ValueError(
-            f"Variáveis de ambiente obrigatórias não configuradas: {', '.join(missing_vars)}\n"
+            f"Variáveis de ambiente obrigatórias não configuradas: "
+            f"{', '.join(missing_vars)}\n"
             f"Configure-as no arquivo .env ou exporte-as no terminal."
         )
 
@@ -56,7 +57,9 @@ def get_db_connection():
     }
 
     logger.info(
-        f"🔌 Conectando ao banco: {db_config['user']}@{db_config['host']}:{db_config['port']}/{db_config['database']}"
+        "🔌 Conectando ao banco: "
+        f"{db_config['user']}@{db_config['host']}:"
+        f"{db_config['port']}/{db_config['database']}"
     )
 
     try:
@@ -153,7 +156,8 @@ def import_interactions():
             cursor,
             """
             INSERT INTO drug_interactions
-            (drug_a, drug_b, interaction_type, severity, mechanism, clinical_effect, recommendation, source)
+            (drug_a, drug_b, interaction_type, severity, mechanism,
+             clinical_effect, recommendation, source)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """,
             interactions,

@@ -67,7 +67,10 @@ async def lifespan(app: FastAPI):
 # Configuração da aplicação
 app = FastAPI(
     title=settings.app_name,
-    description="Sistema de Contraindicação de Medicamentos baseado em diretrizes OMS/ANVISA",
+    description=(
+        "Sistema de Contraindicação de Medicamentos "
+        "baseado em diretrizes OMS/ANVISA"
+    ),
     version=settings.app_version,
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
@@ -403,7 +406,8 @@ async def analyze_medication_legacy(
                 "medication_text": medication_text,  # Passar medicamento da requisição
             }
         elif medication_text:
-            # Se não há imagem mas há medication_text, criar image_data só para passar o medication
+            # Se não há imagem mas há medication_text, criar image_data
+            # só para passar o medication
             image_data = {
                 "drug_name": medication_text,
                 "medication_text": medication_text,
