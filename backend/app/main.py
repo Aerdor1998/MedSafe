@@ -3,34 +3,39 @@ MedSafe API - Sistema de Contraindicação de Medicamentos
 API Principal com FastAPI, AG2 + Ollama, PostgreSQL + pgvector
 """
 
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Depends, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-import uvicorn
-import os
 import json
-import uuid
-from datetime import datetime
-from typing import List, Optional, Dict, Any
-
-# Importar configurações e módulos
-from .config import settings
-from .db.database import init_db, check_db_health, get_db_stats
-from .db.models import Triage, Report, Document, Embedding, IngestJob
-from .agents import CaptainAgent
-from .schemas import (
-    TriageCreate, TriageResponse, TriageReport,
-    VisionRequest, VisionResponse,
-    ReportCreate, ReportResponse,
-    MedicationSearch, MedicationSearchResult,
-    IngestRequest, IngestResponse
-)
 
 # Configurar logging
 import logging
+import uuid
+from contextlib import asynccontextmanager
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+import uvicorn
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.staticfiles import StaticFiles
+
+from .agents import CaptainAgent
+
+# Importar configurações e módulos
+from .config import settings
+from .db.database import check_db_health, get_db_stats, init_db
+from .db.models import IngestJob, Report, Triage
+from .middleware.csrf import CSRFMiddleware
+from .schemas import (
+    IngestRequest,
+    IngestResponse,
+    MedicationSearchResult,
+    TriageCreate,
+    TriageReport,
+    TriageResponse,
+    VisionResponse,
+)
+
 logging.basicConfig(level=getattr(logging, settings.log_level))
 logger = logging.getLogger(__name__)
 
@@ -64,18 +69,20 @@ async def lifespan(app: FastAPI):
 # Configuração da aplicação
 app = FastAPI(
     title=settings.app_name,
-    description="Sistema de Contraindicação de Medicamentos baseado em diretrizes OMS/ANVISA",
+    description=(
+        "Sistema de Contraindicação de Medicamentos " "baseado em diretrizes OMS/ANVISA"
+    ),
     version=settings.app_version,
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
-    redoc_url="/redoc" if settings.debug else None
+    redoc_url="/redoc" if settings.debug else None,
 )
 
 # Middleware de segurança
 if not settings.debug:
     app.add_middleware(
         TrustedHostMiddleware,
-        allowed_hosts=["*"]  # Configurar hosts permitidos em produção
+        allowed_hosts=["*"],  # Configurar hosts permitidos em produção
     )
 
 # CORS
@@ -86,6 +93,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# CSRF Protection (apenas em produção)
+if not settings.debug:
+    app.add_middleware(
+        CSRFMiddleware,
+        secret_key=settings.secret_key,
+        cookie_name="csrf_token",
+        header_name="X-CSRF-Token",
+        cookie_secure=True,
+        cookie_httponly=True,
+        cookie_samesite="Strict",
+    )
 
 # Inicializar agentes
 captain_agent = CaptainAgent()
@@ -100,6 +119,7 @@ async def check_services_health():
     # Verificar Ollama
     try:
         import requests
+
         response = requests.get(f"{settings.ollama_host}/api/tags", timeout=5)
         if response.status_code != 200:
             raise Exception("Ollama não está respondendo")
@@ -121,14 +141,14 @@ async def health_check():
             "services": {
                 "database": "ok" if db_healthy else "error",
                 "ollama": "ok",  # Placeholder
-                "api": "ok"
-            }
+                "api": "ok",
+            },
         }
     except Exception as e:
         return {
             "status": "unhealthy",
             "error": str(e),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
 
@@ -145,7 +165,7 @@ async def metrics():
             "medsafe_embeddings_total": db_stats.get("embeddings_count", 0),
             "medsafe_documents_total": db_stats.get("documents_count", 0),
             "medsafe_triage_total": db_stats.get("triage_count", 0),
-            "medsafe_reports_total": db_stats.get("reports_count", 0)
+            "medsafe_reports_total": db_stats.get("reports_count", 0),
         }
     except Exception as e:
         logger.error(f"Erro ao obter métricas: {e}")
@@ -154,10 +174,7 @@ async def metrics():
 
 # Endpoints principais da API
 @app.post("/api/v1/triage", response_model=TriageResponse)
-async def create_triage(
-    triage_data: TriageCreate,
-    background_tasks: BackgroundTasks
-):
+async def create_triage(triage_data: TriageCreate, background_tasks: BackgroundTasks):
     """Criar triagem e disparar análise assíncrona"""
     try:
         # Gerar ID da sessão
@@ -165,9 +182,12 @@ async def create_triage(
 
         # Criar triagem no banco
         from .db.database import get_db_context
+
         with get_db_context() as db:
             triage = Triage(
-                user_id=triage_data.user_id if hasattr(triage_data, 'user_id') else None,
+                user_id=(
+                    triage_data.user_id if hasattr(triage_data, "user_id") else None
+                ),
                 age=triage_data.age,
                 weight=triage_data.weight,
                 pregnant=triage_data.pregnant,
@@ -177,7 +197,7 @@ async def create_triage(
                 renal_function=triage_data.renal_function,
                 hepatic_function=triage_data.hepatic_function,
                 notes=triage_data.notes,
-                status="pending"
+                status="pending",
             )
 
             db.add(triage)
@@ -186,9 +206,7 @@ async def create_triage(
 
         # Disparar análise em background
         background_tasks.add_task(
-            captain_agent.orchestrate_analysis,
-            triage_data.model_dump(),
-            None
+            captain_agent.orchestrate_analysis, triage_data.model_dump(), None
         )
 
         return TriageResponse(
@@ -205,7 +223,7 @@ async def create_triage(
             renal_function=triage.renal_function,
             hepatic_function=triage.hepatic_function,
             notes=triage.notes,
-            created_at=triage.created_at
+            created_at=triage.created_at,
         )
 
     except Exception as e:
@@ -218,6 +236,7 @@ async def get_triage_report(triage_id: str):
     """Obter relatório de uma triagem"""
     try:
         from .db.database import get_db_context
+
         with get_db_context() as db:
             report = db.query(Report).filter(Report.triage_id == triage_id).first()
 
@@ -234,7 +253,7 @@ async def get_triage_report(triage_id: str):
                 evidence_links=report.evidence_links,
                 analysis_timestamp=report.created_at.isoformat(),
                 model_used=report.model_used,
-                confidence_score=report.confidence_score
+                confidence_score=report.confidence_score,
             )
 
     except HTTPException:
@@ -246,8 +265,7 @@ async def get_triage_report(triage_id: str):
 
 @app.post("/api/v1/vision/analyze", response_model=VisionResponse)
 async def analyze_vision(
-    file: UploadFile = File(...),
-    medication_text: Optional[str] = Form(None)
+    file: UploadFile = File(...), medication_text: Optional[str] = Form(None)
 ):
     """Analisar imagem/PDF com VisionAgent"""
     try:
@@ -260,11 +278,13 @@ async def analyze_vision(
         image_data = {
             "file_path": str(file_path),
             "medication_text": medication_text,
-            "session_id": str(uuid.uuid4())
+            "session_id": str(uuid.uuid4()),
         }
 
         # Analisar com VisionAgent
-        result = await captain_agent.vision_agent.analyze_document(image_data, image_data["session_id"])
+        result = await captain_agent.vision_agent.analyze_document(
+            image_data, image_data["session_id"]
+        )
 
         # Limpar arquivo temporário (mesmo em caso de erro)
         try:
@@ -295,7 +315,7 @@ async def ingest_bulas(ingest_request: IngestRequest):
             total_processed=0,
             successful=0,
             failed=0,
-            processing_time=0
+            processing_time=0,
         )
 
     except Exception as e:
@@ -305,20 +325,14 @@ async def ingest_bulas(ingest_request: IngestRequest):
 
 @app.get("/api/v1/meds/search")
 async def search_medications(
-    q: str,
-    limit: int = 10,
-    include_generic: bool = True,
-    include_brands: bool = True
+    q: str, limit: int = 10, include_generic: bool = True, include_brands: bool = True
 ):
     """Busca híbrida de medicamentos (lexical + vetor)"""
     try:
         # Implementar busca híbrida
         # Por enquanto, retornar placeholder
         return MedicationSearchResult(
-            query=q,
-            total_results=0,
-            results=[],
-            search_time=0.0
+            query=q, total_results=0, results=[], search_time=0.0
         )
 
     except Exception as e:
@@ -332,8 +346,14 @@ async def get_ingest_status():
     """Obter status dos jobs de ingestão"""
     try:
         from .db.database import get_db_context
+
         with get_db_context() as db:
-            jobs = db.query(IngestJob).order_by(IngestJob.created_at.desc()).limit(10).all()
+            jobs = (
+                db.query(IngestJob)
+                .order_by(IngestJob.created_at.desc())
+                .limit(10)
+                .all()
+            )
 
             return [
                 {
@@ -342,7 +362,7 @@ async def get_ingest_status():
                     "data_type": job.data_type,
                     "status": job.status,
                     "progress": job.progress,
-                    "created_at": job.created_at.isoformat()
+                    "created_at": job.created_at.isoformat(),
                 }
                 for job in jobs
             ]
@@ -357,7 +377,7 @@ async def get_ingest_status():
 async def analyze_medication_legacy(
     patient_data: str = Form(...),
     image: Optional[UploadFile] = File(None),
-    medication_text: Optional[str] = Form(None)
+    medication_text: Optional[str] = Form(None),
 ):
     """Endpoint legado para compatibilidade"""
     try:
@@ -374,7 +394,7 @@ async def analyze_medication_legacy(
             allergies=patient_info.get("allergies", []),
             renal_function=patient_info.get("renal_function"),
             hepatic_function=patient_info.get("hepatic_function"),
-            notes=patient_info.get("notes")
+            notes=patient_info.get("notes"),
         )
 
         # Processar imagem se disponível
@@ -384,20 +404,20 @@ async def analyze_medication_legacy(
                 "file_type": "image",
                 "file_size": image.size,
                 "session_id": str(uuid.uuid4()),
-                "medication_text": medication_text  # Passar medicamento da requisição
+                "medication_text": medication_text,  # Passar medicamento da requisição
             }
         elif medication_text:
-            # Se não há imagem mas há medication_text, criar image_data só para passar o medication
+            # Se não há imagem mas há medication_text, criar image_data
+            # só para passar o medication
             image_data = {
                 "drug_name": medication_text,
                 "medication_text": medication_text,
-                "session_id": str(uuid.uuid4())
+                "session_id": str(uuid.uuid4()),
             }
 
         # Orquestrar análise
         result = await captain_agent.orchestrate_analysis(
-            triage_data.model_dump(),
-            image_data
+            triage_data.model_dump(), image_data
         )
 
         return result
@@ -408,8 +428,6 @@ async def analyze_medication_legacy(
 
 
 # Montar arquivos estáticos
-from pathlib import Path
-
 # Obter diretório raiz do projeto
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -424,9 +442,4 @@ app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="fronte
 
 
 if __name__ == "__main__":
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=settings.debug
-    )
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=settings.debug)

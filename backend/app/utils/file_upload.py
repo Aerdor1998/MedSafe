@@ -2,22 +2,21 @@
 Upload seguro de arquivos
 """
 
+import hashlib
 import tempfile
 from pathlib import Path
 from typing import Optional
-import hashlib
-from fastapi import UploadFile, HTTPException
-from PIL import Image
+
 import PyPDF2
+from fastapi import HTTPException, UploadFile
+from PIL import Image
 
 
 class SecureFileUpload:
     """Classe para upload seguro de arquivos"""
 
-    ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.pdf'}
-    ALLOWED_MIME_TYPES = {
-        'image/jpeg', 'image/png', 'image/jpg', 'application/pdf'
-    }
+    ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf"}
+    ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/jpg", "application/pdf"}
     MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
     @staticmethod
@@ -35,12 +34,13 @@ class SecureFileUpload:
         safe_name = Path(filename).name
 
         # Validar que não contém caracteres perigosos
-        if not safe_name or '..' in safe_name or '/' in safe_name:
+        if not safe_name or ".." in safe_name or "/" in safe_name:
             raise HTTPException(400, "Invalid filename")
 
         # Permitir apenas caracteres alfanuméricos, ponto e underscore
         import re
-        safe_name = re.sub(r'[^a-zA-Z0-9._-]', '_', safe_name)
+
+        safe_name = re.sub(r"[^a-zA-Z0-9._-]", "_", safe_name)
 
         return safe_name
 
@@ -66,20 +66,17 @@ class SecureFileUpload:
         mime_type = None
 
         # JPEG
-        if file_content.startswith(b'\xff\xd8\xff'):
-            mime_type = 'image/jpeg'
+        if file_content.startswith(b"\xff\xd8\xff"):
+            mime_type = "image/jpeg"
         # PNG
-        elif file_content.startswith(b'\x89PNG\r\n\x1a\n'):
-            mime_type = 'image/png'
+        elif file_content.startswith(b"\x89PNG\r\n\x1a\n"):
+            mime_type = "image/png"
         # PDF
-        elif file_content.startswith(b'%PDF'):
-            mime_type = 'application/pdf'
+        elif file_content.startswith(b"%PDF"):
+            mime_type = "application/pdf"
 
         if not mime_type or mime_type not in SecureFileUpload.ALLOWED_MIME_TYPES:
-            raise HTTPException(
-                400,
-                "Unsupported file type. Allowed: JPEG, PNG, PDF"
-            )
+            raise HTTPException(400, "Unsupported file type. Allowed: JPEG, PNG, PDF")
 
         return mime_type
 
@@ -96,6 +93,7 @@ class SecureFileUpload:
         """
         try:
             from io import BytesIO
+
             img = Image.open(BytesIO(file_content))
             img.verify()
 
@@ -119,6 +117,7 @@ class SecureFileUpload:
         """
         try:
             from io import BytesIO
+
             pdf = PyPDF2.PdfReader(BytesIO(file_content))
 
             # Verificar número de páginas
@@ -130,8 +129,7 @@ class SecureFileUpload:
 
     @staticmethod
     async def save_upload_file(
-        file: UploadFile,
-        destination_dir: Optional[Path] = None
+        file: UploadFile, destination_dir: Optional[Path] = None
     ) -> Path:
         """
         Salva arquivo de upload de forma segura
@@ -153,9 +151,9 @@ class SecureFileUpload:
         mime_type = SecureFileUpload.validate_file_type(content)
 
         # Validar conteúdo baseado no tipo
-        if mime_type.startswith('image/'):
+        if mime_type.startswith("image/"):
             SecureFileUpload.validate_image(content)
-        elif mime_type == 'application/pdf':
+        elif mime_type == "application/pdf":
             SecureFileUpload.validate_pdf(content)
 
         # Gerar hash do conteúdo para nome único

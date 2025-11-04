@@ -2,10 +2,11 @@
 Schema base para todos os schemas do MedSafe
 """
 
-from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
+
+from pydantic import BaseModel, Field
 
 
 class BaseSchema(BaseModel):
@@ -13,10 +14,7 @@ class BaseSchema(BaseModel):
 
     class Config:
         from_attributes = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat(),
-            UUID: lambda v: str(v)
-        }
+        json_encoders = {datetime: lambda v: v.isoformat(), UUID: lambda v: str(v)}
 
 
 class TimestampSchema(BaseSchema):

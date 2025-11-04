@@ -2,20 +2,17 @@
 Configurações do MedSafe usando pydantic-settings
 """
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import List, Optional, Union
+
 from pydantic import field_validator
-from typing import Optional, List, Union
-import os
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Configurações da aplicação MedSafe"""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore"
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
     )
 
     # Configurações da aplicação
@@ -45,7 +42,9 @@ class Settings(BaseSettings):
     rxnorm_base_url: str = "https://rxnav.nlm.nih.gov/REST"
 
     # Configurações de CORS
-    allowed_origins: Union[str, List[str]] = "http://localhost:8000"  # Será parseado para lista
+    allowed_origins: Union[str, List[str]] = (
+        "http://localhost:8000"  # Será parseado para lista
+    )
 
     # Configurações de segurança
     jwt_secret: str  # Obrigatório - sem valor padrão
@@ -54,7 +53,9 @@ class Settings(BaseSettings):
 
     # Configurações de upload
     max_upload_size: int = 10 * 1024 * 1024  # 10MB
-    allowed_extensions: Union[str, List[str]] = "jpg,jpeg,png,pdf"  # Será parseado para lista
+    allowed_extensions: Union[str, List[str]] = (
+        "jpg,jpeg,png,pdf"  # Será parseado para lista
+    )
 
     # Configurações de OCR
     tesseract_cmd: str = "/usr/bin/tesseract"
@@ -68,40 +69,47 @@ class Settings(BaseSettings):
     enable_metrics: bool = True
     metrics_port: int = 9090
 
-    @field_validator('allowed_origins', mode='before')
+    @field_validator("allowed_origins", mode="before")
     @classmethod
     def parse_allowed_origins(cls, v):
         """Parse comma-separated CORS origins"""
         if isinstance(v, str):
-            return [x.strip() for x in v.split(',') if x.strip()]
+            return [x.strip() for x in v.split(",") if x.strip()]
         return v
 
-    @field_validator('allowed_extensions', mode='before')
+    @field_validator("allowed_extensions", mode="before")
     @classmethod
     def parse_allowed_extensions(cls, v):
         """Parse comma-separated file extensions"""
         if isinstance(v, str):
-            return [x.strip() for x in v.split(',') if x.strip()]
+            return [x.strip() for x in v.split(",") if x.strip()]
         return v
 
     def model_post_init(self, __context) -> None:
         """Validação pós-inicialização"""
         # Validar secrets não são valores padrão inseguros
         dangerous_values = [
-            "change_me", "change_me_in_production", "secret",
-            "password", "123456", "admin", "test"
+            "change_me",
+            "change_me_in_production",
+            "secret",
+            "password",
+            "123456",
+            "admin",
+            "test",
         ]
 
         if self.secret_key.lower() in dangerous_values:
             raise ValueError(
                 "SECRET_KEY must be changed from default value. "
-                "Generate with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+                "Generate with: python -c 'import secrets; "
+                "print(secrets.token_urlsafe(32))'"
             )
 
         if self.jwt_secret.lower() in dangerous_values:
             raise ValueError(
                 "JWT_SECRET must be changed from default value. "
-                "Generate with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+                "Generate with: python -c 'import secrets; "
+                "print(secrets.token_urlsafe(32))'"
             )
 
         # Validar comprimento mínimo
@@ -123,7 +131,10 @@ class Settings(BaseSettings):
         """Retorna a URL do banco de dados"""
         if self.database_url:
             return self.database_url
-        return f"postgresql://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        return (
+            f"postgresql://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
 
     @property
     def ollama_base_url(self) -> str:

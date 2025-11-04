@@ -3,9 +3,7 @@ Rate limiting usando slowapi
 """
 
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -38,7 +36,9 @@ limiter = Limiter(
 )
 
 
-def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+def rate_limit_exceeded_handler(
+    request: Request, exc: RateLimitExceeded
+) -> JSONResponse:
     """
     Handler customizado para rate limit exceeded
     """
@@ -47,6 +47,6 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSO
         content={
             "error": "Rate limit exceeded",
             "detail": "Too many requests. Please try again later.",
-            "retry_after": exc.detail
-        }
+            "retry_after": exc.detail,
+        },
     )

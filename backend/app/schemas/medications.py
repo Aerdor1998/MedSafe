@@ -2,9 +2,11 @@
 Schemas para medicamentos e busca
 """
 
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from pydantic import Field
-from .base import BaseSchema, TimestampSchema, IDSchema
+
+from .base import BaseSchema
 
 
 class MedicationSearch(BaseSchema):
@@ -18,7 +20,9 @@ class MedicationSearch(BaseSchema):
     # Filtros opcionais
     form: Optional[str] = Field(None, description="Forma farmacêutica")
     strength: Optional[str] = Field(None, description="Concentração específica")
-    source: Optional[str] = Field(None, description="Fonte dos dados (ANVISA, RxNorm, etc.)")
+    source: Optional[str] = Field(
+        None, description="Fonte dos dados (ANVISA, RxNorm, etc.)"
+    )
 
 
 class MedicationInfo(BaseSchema):
@@ -45,31 +49,29 @@ class MedicationInfo(BaseSchema):
 
     # Interações
     drug_interactions: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Interações medicamentosas"
+        default=[], description="Interações medicamentosas"
     )
 
     # Reações adversas
     side_effects: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Efeitos colaterais e reações adversas"
+        default=[], description="Efeitos colaterais e reações adversas"
     )
 
     # Posologia
     dosage_info: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Informações de posologia"
+        None, description="Informações de posologia"
     )
 
     # Fontes
     sources: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Fontes dos dados (ANVISA, SIDER, DrugCentral)"
+        default=[], description="Fontes dos dados (ANVISA, SIDER, DrugCentral)"
     )
 
     # Metadados
     last_updated: Optional[str] = Field(None, description="Última atualização")
-    data_quality_score: Optional[float] = Field(None, description="Score de qualidade dos dados")
+    data_quality_score: Optional[float] = Field(
+        None, description="Score de qualidade dos dados"
+    )
 
 
 class MedicationSearchResult(BaseSchema):

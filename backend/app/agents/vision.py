@@ -2,20 +2,16 @@
 VisionAgent - Agente para análise de imagem/PDF com qwen2.5-vl
 """
 
-import asyncio
-import logging
 import base64
 import json
-from typing import Dict, Any, List, Optional
-from datetime import datetime
+import logging
 import uuid
+from datetime import datetime
+from typing import Any, Dict
+
 import httpx
-from PIL import Image
-import io
 
 from ..config import settings
-from ..db.models import Document
-from ..db.database import get_db_context
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +27,7 @@ class VisionAgent:
         logger.info(f"👁️ VisionAgent inicializado com modelo: {self.model}")
 
     async def analyze_document(
-        self,
-        image_data: Dict[str, Any],
-        session_id: str
+        self, image_data: Dict[str, Any], session_id: str
     ) -> Dict[str, Any]:
         """
         Analisar documento (imagem/PDF) para extrair informações de medicamento
@@ -55,7 +49,9 @@ class VisionAgent:
             elif image_data.get("file_type") == "pdf":
                 result = await self._analyze_pdf(image_data, session_id)
             else:
-                raise ValueError(f"Tipo de arquivo não suportado: {image_data.get('file_type')}")
+                raise ValueError(
+                    f"Tipo de arquivo não suportado: {image_data.get('file_type')}"
+                )
 
             # Calcular tempo de processamento
             processing_time = (datetime.now() - start_time).total_seconds()
@@ -73,13 +69,11 @@ class VisionAgent:
                 "session_id": session_id,
                 "status": "error",
                 "error_message": str(e),
-                "processing_time": 0
+                "processing_time": 0,
             }
 
     async def _analyze_image(
-        self,
-        image_data: Dict[str, Any],
-        session_id: str
+        self, image_data: Dict[str, Any], session_id: str
     ) -> Dict[str, Any]:
         """Analisar imagem com qwen2.5-vl"""
         try:
@@ -102,9 +96,7 @@ class VisionAgent:
             raise
 
     async def _analyze_pdf(
-        self,
-        pdf_data: Dict[str, Any],
-        session_id: str
+        self, pdf_data: Dict[str, Any], session_id: str
     ) -> Dict[str, Any]:
         """Analisar PDF com qwen2.5-vl"""
         try:
@@ -120,7 +112,7 @@ class VisionAgent:
 
     def _build_vision_prompt(self) -> str:
         """Construir prompt para análise de visão"""
-        return """Analise esta imagem de medicamento e extraia as seguintes informações de forma estruturada:
+        return """Analise esta imagem de medicamento e extraia as seguintes informações de forma estruturada:  # noqa: E501
 
 1. Nome do medicamento (drug_name)
 2. Concentração/força (strength)
@@ -152,10 +144,7 @@ Responda em formato JSON válido com a seguinte estrutura:
   ]
 }"""
 
-    async def _prepare_image_content(
-        self,
-        image_data: Dict[str, Any]
-    ) -> str:
+    async def _prepare_image_content(self, image_data: Dict[str, Any]) -> str:
         """Preparar conteúdo da imagem para envio ao Ollama"""
         try:
             # Se temos dados base64
@@ -179,9 +168,7 @@ Responda em formato JSON válido com a seguinte estrutura:
             raise
 
     async def _call_ollama_vision(
-        self,
-        prompt: str,
-        image_content: str
+        self, prompt: str, image_content: str
     ) -> Dict[str, Any]:
         """Chamar Ollama para análise de visão"""
         try:
@@ -190,21 +177,16 @@ Responda em formato JSON válido com a seguinte estrutura:
                 "prompt": prompt,
                 "images": [image_content],
                 "stream": False,
-                "options": {
-                    "temperature": 0.1,
-                    "top_p": 0.9,
-                    "num_predict": 2048
-                }
+                "options": {"temperature": 0.1, "top_p": 0.9, "num_predict": 2048},
             }
 
             async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    self.ollama_url,
-                    json=payload
-                )
+                response = await client.post(self.ollama_url, json=payload)
 
                 if response.status_code != 200:
-                    raise Exception(f"Erro na API Ollama: {response.status_code} - {response.text}")
+                    raise Exception(
+                        f"Erro na API Ollama: {response.status_code} - {response.text}"
+                    )
 
                 return response.json()
 
@@ -213,9 +195,7 @@ Responda em formato JSON válido com a seguinte estrutura:
             raise
 
     def _parse_vision_response(
-        self,
-        response: Dict[str, Any],
-        session_id: str
+        self, response: Dict[str, Any], session_id: str
     ) -> Dict[str, Any]:
         """Processar resposta do Ollama"""
         try:
@@ -241,7 +221,7 @@ Responda em formato JSON válido com a seguinte estrutura:
                 "extracted_text": response_text,
                 "confidence_score": self._calculate_confidence(parsed_data),
                 "model_used": self.model,
-                "error_message": None
+                "error_message": None,
             }
 
             return result
@@ -254,7 +234,7 @@ Responda em formato JSON válido com a seguinte estrutura:
                 "status": "error",
                 "error_message": f"Erro ao processar resposta: {str(e)}",
                 "extracted_text": "",
-                "model_used": self.model
+                "model_used": self.model,
             }
 
     def _extract_info_manually(self, text: str) -> Dict[str, Any]:
@@ -265,7 +245,7 @@ Responda em formato JSON válido com a seguinte estrutura:
             "drug_name": "Não identificado",
             "strength": "Não identificado",
             "form": "Não identificado",
-            "sections": []
+            "sections": [],
         }
 
     def _calculate_confidence(self, parsed_data: Dict[str, Any]) -> float:
@@ -294,9 +274,7 @@ Responda em formato JSON válido com a seguinte estrutura:
             return 0.5
 
     async def _save_vision_result(
-        self,
-        result: Dict[str, Any],
-        session_id: str
+        self, result: Dict[str, Any], session_id: str
     ) -> None:
         """Salvar resultado da análise no banco de dados"""
         try:
