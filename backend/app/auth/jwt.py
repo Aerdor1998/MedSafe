@@ -19,10 +19,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 
-def create_access_token(
-    data: dict,
-    expires_delta: Optional[timedelta] = None
-) -> str:
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """
     Criar token JWT de acesso
 
@@ -41,22 +38,20 @@ def create_access_token(
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 
     # Adicionar claims padrão
-    to_encode.update({
-        "exp": expire,
-        "iat": datetime.utcnow(),
-        "nbf": datetime.utcnow(),
-        "type": "access"
-    })
+    to_encode.update(
+        {
+            "exp": expire,
+            "iat": datetime.utcnow(),
+            "nbf": datetime.utcnow(),
+            "type": "access",
+        }
+    )
 
     # Verificar SECRET_KEY
     if not settings.secret_key or settings.secret_key == "change_me_in_production":
         raise ValueError("SECRET_KEY deve ser configurada adequadamente em produção")
 
-    encoded_jwt = jwt.encode(
-        to_encode,
-        settings.secret_key,
-        algorithm=ALGORITHM
-    )
+    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
 
     return encoded_jwt
 
@@ -74,17 +69,9 @@ def create_refresh_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 
-    to_encode.update({
-        "exp": expire,
-        "iat": datetime.utcnow(),
-        "type": "refresh"
-    })
+    to_encode.update({"exp": expire, "iat": datetime.utcnow(), "type": "refresh"})
 
-    encoded_jwt = jwt.encode(
-        to_encode,
-        settings.secret_key,
-        algorithm=ALGORITHM
-    )
+    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
 
     return encoded_jwt
 
@@ -109,11 +96,7 @@ def verify_token(token: str) -> dict:
     )
 
     try:
-        payload = jwt.decode(
-            token,
-            settings.secret_key,
-            algorithms=[ALGORITHM]
-        )
+        payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
 
         # Verificar tipo de token
         token_type = payload.get("type")
@@ -143,7 +126,7 @@ def verify_token(token: str) -> dict:
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> str:
     """
     Obter usuário atual a partir do token JWT
@@ -171,9 +154,7 @@ async def get_current_user(
     return user_id
 
 
-async def get_current_active_user(
-    current_user: str = Depends(get_current_user)
-) -> str:
+async def get_current_active_user(current_user: str = Depends(get_current_user)) -> str:
     """
     Verificar se o usuário está ativo
 

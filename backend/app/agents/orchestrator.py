@@ -26,9 +26,7 @@ class CaptainAgent:
         logger.info("🚢 CaptainAgent inicializado")
 
     async def orchestrate_analysis(
-        self,
-        triage_data: Dict[str, Any],
-        image_data: Optional[Dict[str, Any]] = None
+        self, triage_data: Dict[str, Any], image_data: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Orquestrar análise completa de triagem + visão + evidências
@@ -51,16 +49,19 @@ class CaptainAgent:
             vision_result = None
             if image_data:
                 # Se há file_path, analisar imagem com VisionAgent
-                if image_data.get('file_path'):
+                if image_data.get("file_path"):
                     vision_result = await self._analyze_vision(image_data, session_id)
                 # Se não há file_path mas há drug_name/medication_text, usar diretamente
-                elif image_data.get('drug_name') or image_data.get('medication_text'):
+                elif image_data.get("drug_name") or image_data.get("medication_text"):
                     vision_result = {
-                        'drug_name': image_data.get('drug_name') or image_data.get('medication_text'),
-                        'session_id': session_id,
-                        'status': 'text_input'
+                        "drug_name": image_data.get("drug_name")
+                        or image_data.get("medication_text"),
+                        "session_id": session_id,
+                        "status": "text_input",
                     }
-                    logger.info(f"📝 Usando medication_text: {vision_result['drug_name']}")
+                    logger.info(
+                        f"📝 Usando medication_text: {vision_result['drug_name']}"
+                    )
 
             # 3. Buscar evidências relevantes
             evidence_snippets = await self._gather_evidence(triage_data, vision_result)
@@ -83,18 +84,14 @@ class CaptainAgent:
                 "report_id": str(report.id),
                 "analysis": clinical_analysis,
                 "evidence": evidence_snippets,
-                "status": "completed"
+                "status": "completed",
             }
 
         except Exception as e:
             logger.error(f"❌ Erro na análise orquestrada: {e}")
             raise
 
-    async def _create_triage(
-        self,
-        triage_data: Dict[str, Any],
-        session_id: str
-    ) -> str:
+    async def _create_triage(self, triage_data: Dict[str, Any], session_id: str) -> str:
         """Criar triagem no banco de dados"""
         try:
             with get_db_context() as db:
@@ -113,7 +110,7 @@ class CaptainAgent:
                     renal_function=triage_data.get("renal_function"),
                     hepatic_function=triage_data.get("hepatic_function"),
                     notes=triage_data.get("notes"),
-                    status="processing"
+                    status="processing",
                 )
 
                 db.add(triage)
@@ -128,9 +125,7 @@ class CaptainAgent:
             raise
 
     async def _analyze_vision(
-        self,
-        image_data: Dict[str, Any],
-        session_id: str
+        self, image_data: Dict[str, Any], session_id: str
     ) -> Optional[Dict[str, Any]]:
         """Analisar imagem/PDF com VisionAgent"""
         try:
@@ -149,9 +144,7 @@ class CaptainAgent:
             return None
 
     async def _gather_evidence(
-        self,
-        triage_data: Dict[str, Any],
-        vision_result: Optional[Dict[str, Any]]
+        self, triage_data: Dict[str, Any], vision_result: Optional[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """Coletar evidências relevantes com DocAgent"""
         try:
@@ -162,7 +155,9 @@ class CaptainAgent:
 
             # Da triagem
             if triage_data.get("meds_in_use"):
-                medications.extend([med.get("name") for med in triage_data["meds_in_use"]])
+                medications.extend(
+                    [med.get("name") for med in triage_data["meds_in_use"]]
+                )
 
             # Da visão
             if vision_result and vision_result.get("drug_name"):
@@ -174,7 +169,12 @@ class CaptainAgent:
                 if med:
                     evidence = await self.doc_agent.find_evidence(
                         drug_name=med,
-                        sections=["contraindicações", "advertências", "posologia", "interações"]
+                        sections=[
+                            "contraindicações",
+                            "advertências",
+                            "posologia",
+                            "interações",
+                        ],
                     )
                     evidence_snippets.extend(evidence)
 
@@ -189,7 +189,7 @@ class CaptainAgent:
         self,
         triage_data: Dict[str, Any],
         vision_result: Optional[Dict[str, Any]],
-        evidence_snippets: List[Dict[str, Any]]
+        evidence_snippets: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """Aplicar regras clínicas com ClinicalRulesAgent"""
         try:
@@ -198,7 +198,7 @@ class CaptainAgent:
             clinical_analysis = await self.clinical_agent.analyze_contraindications(
                 triage_data=triage_data,
                 vision_data=vision_result,
-                evidence_snippets=evidence_snippets
+                evidence_snippets=evidence_snippets,
             )
 
             logger.info("✅ Análise clínica concluída")
@@ -213,7 +213,7 @@ class CaptainAgent:
         triage_id: str,
         vision_result: Optional[Dict[str, Any]],
         clinical_analysis: Dict[str, Any],
-        session_id: str
+        session_id: str,
     ) -> Report:
         """Gerar relatório final no banco de dados"""
         try:
@@ -235,7 +235,7 @@ class CaptainAgent:
                     confidence_score=clinical_analysis.get("confidence_score"),
                     analysis_notes=clinical_analysis.get("analysis_notes"),
                     status="completed",
-                    is_final=True
+                    is_final=True,
                 )
 
                 db.add(report)
@@ -262,7 +262,7 @@ class CaptainAgent:
             return {
                 "session_id": session_id,
                 "status": "completed",  # Placeholder
-                "progress": 100
+                "progress": 100,
             }
         except Exception as e:
             logger.error(f"❌ Erro ao verificar status: {e}")

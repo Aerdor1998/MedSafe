@@ -16,4 +16,6 @@ import pytest
 # TODO: Reescrever testes para usar DrugInteractionService
 # from app.services.drug_interactions import DrugInteractionService
 
-pytestmark = pytest.mark.skip(reason="Serviço drug_service não existe - testes precisam ser reescritos")
+pytestmark = pytest.mark.skip(
+    reason="Serviço drug_service não existe - testes precisam ser reescritos"
+)

@@ -22,5 +22,5 @@ __all__ = [
     "MedicationInfo",
     "MedicationSearchResult",
     "IngestRequest",
-    "IngestResponse"
+    "IngestResponse",
 ]

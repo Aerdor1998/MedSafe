@@ -34,7 +34,9 @@ async def call_ollama_with_circuit_breaker(func: Callable, *args, **kwargs) -> A
 
 
 @circuit(failure_threshold=3, recovery_timeout=30, expected_exception=Exception)
-async def call_external_api_with_circuit_breaker(func: Callable, *args, **kwargs) -> Any:
+async def call_external_api_with_circuit_breaker(
+    func: Callable, *args, **kwargs
+) -> Any:
     """
     Chamar API externa com circuit breaker
 
@@ -66,12 +68,13 @@ def with_circuit_breaker(failure_threshold: int = 5, recovery_timeout: int = 60)
     Returns:
         Decorator function
     """
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         @circuit(
             failure_threshold=failure_threshold,
             recovery_timeout=recovery_timeout,
-            expected_exception=Exception
+            expected_exception=Exception,
         )
         async def wrapper(*args, **kwargs):
             try:
@@ -79,7 +82,9 @@ def with_circuit_breaker(failure_threshold: int = 5, recovery_timeout: int = 60)
             except Exception as e:
                 logger.error(f"{func.__name__} failed: {e}")
                 raise
+
         return wrapper
+
     return decorator
 
 

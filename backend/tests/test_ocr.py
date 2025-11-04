@@ -15,4 +15,6 @@ import pytest
 # TODO: Reescrever testes para usar VisionAgent
 # from app.agents.vision import VisionAgent
 
-pytestmark = pytest.mark.skip(reason="Serviço ocr_service não existe - testes precisam ser reescritos")
+pytestmark = pytest.mark.skip(
+    reason="Serviço ocr_service não existe - testes precisam ser reescritos"
+)

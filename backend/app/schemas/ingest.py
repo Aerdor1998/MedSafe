@@ -11,7 +11,9 @@ class IngestRequest(BaseSchema):
     """Requisição para ingestão de dados"""
 
     source: str = Field(..., description="Fonte dos dados (ANVISA, SIDER, DrugCentral)")
-    data_type: str = Field(..., description="Tipo de dados (bulas, interações, reações_adversas)")
+    data_type: str = Field(
+        ..., description="Tipo de dados (bulas, interações, reações_adversas)"
+    )
 
     # Parâmetros específicos por fonte
     query: Optional[str] = Field(None, description="Termo de busca (para ANVISA)")
@@ -44,17 +46,17 @@ class IngestResponse(IDSchema, TimestampSchema):
 
     # Detalhes
     processed_items: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Detalhes dos itens processados"
+        default=[], description="Detalhes dos itens processados"
     )
 
     errors: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Erros encontrados durante o processamento"
+        default=[], description="Erros encontrados durante o processamento"
     )
 
     # Metadados
-    processing_time: float = Field(..., description="Tempo de processamento em segundos")
+    processing_time: float = Field(
+        ..., description="Tempo de processamento em segundos"
+    )
     model_used: Optional[str] = Field(None, description="Modelo de IA utilizado")
 
     # Links para resultados
@@ -71,7 +73,9 @@ class IngestStatus(BaseSchema):
     status: str
     progress: float = Field(..., ge=0, le=100, description="Progresso em porcentagem")
     current_step: str = Field(..., description="Etapa atual")
-    estimated_completion: Optional[str] = Field(None, description="Tempo estimado para conclusão")
+    estimated_completion: Optional[str] = Field(
+        None, description="Tempo estimado para conclusão"
+    )
     created_at: str
     updated_at: str
 
@@ -88,7 +92,9 @@ class IngestSource(BaseSchema):
     auth_type: Optional[str] = Field(None, description="Tipo de autenticação")
 
     # Configurações de rate limiting
-    rate_limit: Optional[int] = Field(None, description="Limite de requisições por minuto")
+    rate_limit: Optional[int] = Field(
+        None, description="Limite de requisições por minuto"
+    )
 
     # Metadados
     description: Optional[str] = Field(None, description="Descrição da fonte")

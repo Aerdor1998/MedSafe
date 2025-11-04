@@ -22,7 +22,7 @@ def sample_patient_data():
         "breastfeeding": False,
         "kidney_function": "normal",
         "liver_function": "normal",
-        "additional_info": None
+        "additional_info": None,
     }
 
 
@@ -34,7 +34,7 @@ def sample_medication_data():
         "name": "Ibuprofeno",
         "active_ingredient": "ibuprofeno",
         "dosage": "400mg",
-        "therapeutic_class": "Anti-inflamatório não esteroidal (AINE)"
+        "therapeutic_class": "Anti-inflamatório não esteroidal (AINE)",
     }
 
 
@@ -42,6 +42,7 @@ def sample_medication_data():
 def db_session():
     """Sessão de banco de dados para testes"""
     from app.db.database import SessionLocal
+
     session = SessionLocal()
     try:
         yield session

@@ -18,29 +18,24 @@ class ReportCreate(BaseSchema):
 
     # Resultados detalhados
     contraindications: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Contraindicações encontradas"
+        default=[], description="Contraindicações encontradas"
     )
 
     interactions: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Interações medicamentosas"
+        default=[], description="Interações medicamentosas"
     )
 
     dosage_adjustments: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Ajustes de posologia recomendados"
+        default=[], description="Ajustes de posologia recomendados"
     )
 
     adverse_reactions: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Reações adversas identificadas"
+        default=[], description="Reações adversas identificadas"
     )
 
     # Evidências e citações
     evidence_links: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Links para evidências e fontes"
+        default=[], description="Links para evidências e fontes"
     )
 
     # Metadados da análise

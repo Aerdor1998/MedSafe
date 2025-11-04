@@ -94,11 +94,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             str: Token CSRF em formato hexadecimal
         """
         random_bytes = secrets.token_bytes(32)
-        signature = hmac.new(
-            self.secret_key,
-            random_bytes,
-            hashlib.sha256
-        ).digest()
+        signature = hmac.new(self.secret_key, random_bytes, hashlib.sha256).digest()
 
         # Combinar random bytes com assinatura
         token = random_bytes + signature
@@ -127,9 +123,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
             # Recalcular assinatura
             expected_signature = hmac.new(
-                self.secret_key,
-                random_bytes,
-                hashlib.sha256
+                self.secret_key, random_bytes, hashlib.sha256
             ).digest()
 
             # Comparação constant-time para prevenir timing attacks
@@ -184,8 +178,8 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                     content={
                         "error": "CSRF token missing",
                         "message": "CSRF token is required for this request",
-                        "details": "Include CSRF token in both cookie and request header"
-                    }
+                        "details": "Include CSRF token in both cookie and request header",
+                    },
                 )
 
             # Validar tokens
@@ -195,8 +189,8 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                     status_code=403,
                     content={
                         "error": "Invalid CSRF token",
-                        "message": "CSRF token in cookie is invalid or expired"
-                    }
+                        "message": "CSRF token in cookie is invalid or expired",
+                    },
                 )
 
             if not self.verify_csrf_token(header_token):
@@ -205,8 +199,8 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                     status_code=403,
                     content={
                         "error": "Invalid CSRF token",
-                        "message": "CSRF token in header is invalid or expired"
-                    }
+                        "message": "CSRF token in header is invalid or expired",
+                    },
                 )
 
             # Verificar se tokens são iguais (Double Submit Cookie)
@@ -216,8 +210,8 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                     status_code=403,
                     content={
                         "error": "CSRF token mismatch",
-                        "message": "CSRF tokens in cookie and header do not match"
-                    }
+                        "message": "CSRF tokens in cookie and header do not match",
+                    },
                 )
 
         # Processar requisição

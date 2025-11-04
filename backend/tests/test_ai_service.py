@@ -15,4 +15,6 @@ import pytest
 # TODO: Reescrever testes para usar a arquitetura de agents
 # from app.agents import CaptainAgent
 
-pytestmark = pytest.mark.skip(reason="Serviço ai_service não existe - testes precisam ser reescritos")
+pytestmark = pytest.mark.skip(
+    reason="Serviço ai_service não existe - testes precisam ser reescritos"
+)

@@ -13,4 +13,6 @@ import pytest
 
 # TODO: Reescrever testes ou implementar OpenFDAService se necessário
 
-pytestmark = pytest.mark.skip(reason="Serviço openfda_service não existe - testes precisam ser reescritos")
+pytestmark = pytest.mark.skip(
+    reason="Serviço openfda_service não existe - testes precisam ser reescritos"
+)

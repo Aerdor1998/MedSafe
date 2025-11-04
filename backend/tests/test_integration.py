@@ -27,7 +27,7 @@ class TestMedSafeIntegration:
             "breastfeeding": None,
             "kidney_function": None,
             "liver_function": None,
-            "additional_info": ""
+            "additional_info": "",
         }
 
     def test_health_check(self):
@@ -48,27 +48,37 @@ class TestMedSafeIntegration:
         # mas não deve retornar erro de servidor
         assert response.status_code in [200, 404, 422]
 
-    @pytest.mark.skip(reason="Schemas antigos não existem mais - teste precisa ser reescrito")
+    @pytest.mark.skip(
+        reason="Schemas antigos não existem mais - teste precisa ser reescrito"
+    )
     def test_analyze_medication_with_text(self):
         """Teste desabilitado - schemas antigos"""
         pass
 
-    @pytest.mark.skip(reason="Schemas antigos não existem mais - teste precisa ser reescrito")
+    @pytest.mark.skip(
+        reason="Schemas antigos não existem mais - teste precisa ser reescrito"
+    )
     def test_analyze_medication_with_image(self):
         """Teste desabilitado - schemas antigos"""
         pass
 
-    @pytest.mark.skip(reason="Schemas antigos não existem mais - teste precisa ser reescrito")
+    @pytest.mark.skip(
+        reason="Schemas antigos não existem mais - teste precisa ser reescrito"
+    )
     def test_analyze_medication_with_pdf(self):
         """Teste desabilitado - schemas antigos"""
         pass
 
-    @pytest.mark.skip(reason="Schemas antigos não existem mais - teste precisa ser reescrito")
+    @pytest.mark.skip(
+        reason="Schemas antigos não existem mais - teste precisa ser reescrito"
+    )
     def test_analyze_medication_critical_risk(self):
         """Teste desabilitado - schemas antigos"""
         pass
 
-    @pytest.mark.skip(reason="Schemas antigos não existem mais - teste precisa ser reescrito")
+    @pytest.mark.skip(
+        reason="Schemas antigos não existem mais - teste precisa ser reescrito"
+    )
     def test_analyze_medication_no_contraindications(self):
         """Teste desabilitado - schemas antigos"""
         pass

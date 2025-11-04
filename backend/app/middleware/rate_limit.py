@@ -36,7 +36,9 @@ limiter = Limiter(
 )
 
 
-def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+def rate_limit_exceeded_handler(
+    request: Request, exc: RateLimitExceeded
+) -> JSONResponse:
     """
     Handler customizado para rate limit exceeded
     """
@@ -45,6 +47,6 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSO
         content={
             "error": "Rate limit exceeded",
             "detail": "Too many requests. Please try again later.",
-            "retry_after": exc.detail
-        }
+            "retry_after": exc.detail,
+        },
     )

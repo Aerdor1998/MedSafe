@@ -15,5 +15,5 @@ __all__ = [
     "Report",
     "Document",
     "Embedding",
-    "IngestJob"
+    "IngestJob",
 ]

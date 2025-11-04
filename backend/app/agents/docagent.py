@@ -17,9 +17,7 @@ class DocAgent:
         logger.info("📚 DocAgent inicializado (STUB)")
 
     async def find_evidence(
-        self,
-        drug_name: str,
-        sections: List[str] = None
+        self, drug_name: str, sections: List[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Buscar evidências sobre medicamento específico
@@ -41,15 +39,13 @@ class DocAgent:
                 "content": f"Evidência stub para {drug_name}",
                 "source": "STUB",
                 "confidence": 0.0,
-                "status": "stub_implementation"
+                "status": "stub_implementation",
             }
             for section in (sections or ["geral"])
         ]
 
     async def search_evidence(
-        self,
-        medications: List[str],
-        triage_data: Dict[str, Any]
+        self, medications: List[str], triage_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Buscar evidências sobre medicamentos (método legado)
@@ -65,13 +61,10 @@ class DocAgent:
         return {
             "evidence": [],
             "status": "stub_implementation",
-            "message": "DocAgent ainda não implementado"
+            "message": "DocAgent ainda não implementado",
         }
 
-    async def get_drug_interactions(
-        self,
-        medications: List[str]
-    ) -> Dict[str, Any]:
+    async def get_drug_interactions(self, medications: List[str]) -> Dict[str, Any]:
         """
         Buscar interações medicamentosas
 
@@ -82,7 +75,4 @@ class DocAgent:
             Interações encontradas
         """
         logger.warning("⚠️  DocAgent.get_drug_interactions - STUB - retornando vazio")
-        return {
-            "interactions": [],
-            "status": "stub_implementation"
-        }
+        return {"interactions": [], "status": "stub_implementation"}

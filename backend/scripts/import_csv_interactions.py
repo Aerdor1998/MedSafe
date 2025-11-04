@@ -36,7 +36,7 @@ def get_db_connection():
         ValueError: Se variáveis obrigatórias não estiverem configuradas
     """
     # Validar variáveis obrigatórias
-    required_vars = ['POSTGRES_USER', 'POSTGRES_PASSWORD']
+    required_vars = ["POSTGRES_USER", "POSTGRES_PASSWORD"]
     missing_vars = [var for var in required_vars if not os.getenv(var)]
 
     if missing_vars:
@@ -47,21 +47,25 @@ def get_db_connection():
 
     # Configurações do banco
     db_config = {
-        'host': os.getenv('POSTGRES_HOST', 'localhost'),
-        'port': os.getenv('POSTGRES_PORT', '5432'),
-        'database': os.getenv('POSTGRES_DB', 'medsafe'),
-        'user': os.getenv('POSTGRES_USER'),
-        'password': os.getenv('POSTGRES_PASSWORD'),
-        'sslmode': os.getenv('POSTGRES_SSLMODE', 'prefer')
+        "host": os.getenv("POSTGRES_HOST", "localhost"),
+        "port": os.getenv("POSTGRES_PORT", "5432"),
+        "database": os.getenv("POSTGRES_DB", "medsafe"),
+        "user": os.getenv("POSTGRES_USER"),
+        "password": os.getenv("POSTGRES_PASSWORD"),
+        "sslmode": os.getenv("POSTGRES_SSLMODE", "prefer"),
     }
 
-    logger.info(f"🔌 Conectando ao banco: {db_config['user']}@{db_config['host']}:{db_config['port']}/{db_config['database']}")
+    logger.info(
+        f"🔌 Conectando ao banco: {db_config['user']}@{db_config['host']}:{db_config['port']}/{db_config['database']}"
+    )
 
     try:
         return psycopg2.connect(**db_config)
     except psycopg2.OperationalError as e:
         logger.error(f"❌ Erro ao conectar ao banco de dados: {e}")
-        logger.error("Verifique se o PostgreSQL está rodando e as credenciais estão corretas.")
+        logger.error(
+            "Verifique se o PostgreSQL está rodando e as credenciais estão corretas."
+        )
         raise
 
 
@@ -89,8 +93,8 @@ def find_csv_file():
             return csv_path
 
     raise FileNotFoundError(
-        "Arquivo CSV não encontrado. Procurado em:\n" +
-        "\n".join(f"  - {p}" for p in possible_paths)
+        "Arquivo CSV não encontrado. Procurado em:\n"
+        + "\n".join(f"  - {p}" for p in possible_paths)
     )
 
 
@@ -103,7 +107,9 @@ def import_interactions():
 
     try:
         # Verificar se já tem dados
-        cursor.execute("SELECT COUNT(*) FROM drug_interactions WHERE source = 'CSV Import'")
+        cursor.execute(
+            "SELECT COUNT(*) FROM drug_interactions WHERE source = 'CSV Import'"
+        )
         count = cursor.fetchone()[0]
 
         if count > 0:
@@ -116,53 +122,64 @@ def import_interactions():
         logger.info(f"📊 Lendo CSV: {csv_path}")
 
         interactions = []
-        with open(csv_path, 'r', encoding='utf-8') as file:
+        with open(csv_path, "r", encoding="utf-8") as file:
             reader = csv.DictReader(file)
             for row in reader:
-                drug_a = row['Drug 1'].strip()
-                drug_b = row['Drug 2'].strip()
-                description = row['Interaction Description'].strip()
+                drug_a = row["Drug 1"].strip()
+                drug_b = row["Drug 2"].strip()
+                description = row["Interaction Description"].strip()
 
                 # Classificar severidade pela descrição
                 severity = classify_severity(description)
                 interaction_type = classify_interaction_type(description)
 
-                interactions.append((
-                    drug_a,
-                    drug_b,
-                    interaction_type,
-                    severity,
-                    description,  # mechanism
-                    description,  # clinical_effect
-                    "Consultar médico antes de usar em conjunto",  # recommendation
-                    "CSV Import"
-                ))
+                interactions.append(
+                    (
+                        drug_a,
+                        drug_b,
+                        interaction_type,
+                        severity,
+                        description,  # mechanism
+                        description,  # clinical_effect
+                        "Consultar médico antes de usar em conjunto",  # recommendation
+                        "CSV Import",
+                    )
+                )
 
         logger.info(f"📊 Total de interações a importar: {len(interactions):,}")
 
         # Inserir em batch para melhor performance
-        execute_batch(cursor, """
+        execute_batch(
+            cursor,
+            """
             INSERT INTO drug_interactions
             (drug_a, drug_b, interaction_type, severity, mechanism, clinical_effect, recommendation, source)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """, interactions, page_size=1000)
+        """,
+            interactions,
+            page_size=1000,
+        )
 
         conn.commit()
 
         # Verificar
-        cursor.execute("SELECT COUNT(*) FROM drug_interactions WHERE source = 'CSV Import'")
+        cursor.execute(
+            "SELECT COUNT(*) FROM drug_interactions WHERE source = 'CSV Import'"
+        )
         final_count = cursor.fetchone()[0]
 
         logger.info(f"✅ Importação concluída: {final_count:,} interações importadas")
 
         # Estatísticas
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT severity, COUNT(*)
             FROM drug_interactions
             WHERE source = 'CSV Import'
             GROUP BY severity
             ORDER BY COUNT(*) DESC
-        """)
+        """
+        )
 
         stats = cursor.fetchall()
         logger.info("\n📈 Estatísticas por severidade:")
@@ -193,32 +210,44 @@ def classify_severity(description: str) -> str:
 
     # Palavras-chave para classificação
     critical_keywords = [
-        'fatal', 'death', 'lethal', 'contraindicated', 'avoid', 'severe',
-        'life-threatening', 'toxic', 'poisoning'
+        "fatal",
+        "death",
+        "lethal",
+        "contraindicated",
+        "avoid",
+        "severe",
+        "life-threatening",
+        "toxic",
+        "poisoning",
     ]
 
     high_keywords = [
-        'increase', 'decrease', 'potentiate', 'enhance', 'reduce',
-        'risk', 'serious', 'significant', 'major'
+        "increase",
+        "decrease",
+        "potentiate",
+        "enhance",
+        "reduce",
+        "risk",
+        "serious",
+        "significant",
+        "major",
     ]
 
-    moderate_keywords = [
-        'may', 'might', 'can', 'possible', 'monitor', 'caution'
-    ]
+    moderate_keywords = ["may", "might", "can", "possible", "monitor", "caution"]
 
     for keyword in critical_keywords:
         if keyword in desc_lower:
-            return 'crítica'
+            return "crítica"
 
     for keyword in high_keywords:
         if keyword in desc_lower:
-            return 'alta'
+            return "alta"
 
     for keyword in moderate_keywords:
         if keyword in desc_lower:
-            return 'moderada'
+            return "moderada"
 
-    return 'baixa'
+    return "baixa"
 
 
 def classify_interaction_type(description: str) -> str:
@@ -233,14 +262,21 @@ def classify_interaction_type(description: str) -> str:
     """
     desc_lower = description.lower()
 
-    if any(word in desc_lower for word in ['absorption', 'metabolism', 'excretion', 'distribution']):
-        return 'farmacocinética'
-    elif any(word in desc_lower for word in ['effect', 'activity', 'action', 'response']):
-        return 'farmacodinâmica'
-    elif any(word in desc_lower for word in ['serum', 'concentration', 'level', 'plasma']):
-        return 'farmacocinética'
+    if any(
+        word in desc_lower
+        for word in ["absorption", "metabolism", "excretion", "distribution"]
+    ):
+        return "farmacocinética"
+    elif any(
+        word in desc_lower for word in ["effect", "activity", "action", "response"]
+    ):
+        return "farmacodinâmica"
+    elif any(
+        word in desc_lower for word in ["serum", "concentration", "level", "plasma"]
+    ):
+        return "farmacocinética"
     else:
-        return 'farmacodinâmica'
+        return "farmacodinâmica"
 
 
 if __name__ == "__main__":
