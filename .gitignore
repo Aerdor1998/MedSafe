@@ -164,6 +164,9 @@ secrets.json
 *.key
 *.crt
 
+# Security scan results (dynamically generated)
+security_check_results.json
+
 # Docker
 .dockerignore
 

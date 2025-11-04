@@ -28,6 +28,9 @@ from .schemas import (
     MedicationSearch, MedicationSearchResult,
     IngestRequest, IngestResponse
 )
+from .middleware.rate_limit import limiter, rate_limit_exceeded_handler
+from .middleware.security import SecurityHeadersMiddleware
+from slowapi.errors import RateLimitExceeded
 
 # Configurar logging
 import logging
@@ -71,21 +74,30 @@ app = FastAPI(
     redoc_url="/redoc" if settings.debug else None
 )
 
-# Middleware de segurança
+# Middleware de segurança - TrustedHostMiddleware
 if not settings.debug:
     app.add_middleware(
         TrustedHostMiddleware,
-        allowed_hosts=["*"]  # Configurar hosts permitidos em produção
+        allowed_hosts=settings.trusted_hosts  # Configurado via TRUSTED_HOSTS env var
     )
 
-# CORS
+# CORS - Configuração segura
+# NOTA: allow_credentials=True requer origins específicos (não pode ser ["*"])
+# Validação já feita em settings.model_post_init()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],  # Métodos específicos ao invés de "*"
+    allow_headers=["*"],  # Headers ainda podem ser "*" com credentials
 )
+
+# Security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # Inicializar agentes
 captain_agent = CaptainAgent()

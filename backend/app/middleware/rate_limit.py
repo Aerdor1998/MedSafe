@@ -9,6 +9,8 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from ..config import settings
+
 
 def get_rate_limit_key(request: Request) -> str:
     """
@@ -29,11 +31,11 @@ def get_rate_limit_key(request: Request) -> str:
     return ip
 
 
-# Criar limiter
+# Criar limiter usando configuração do settings
 limiter = Limiter(
     key_func=get_rate_limit_key,
     default_limits=["100/minute", "1000/hour"],
-    storage_uri="redis://localhost:6379/0",  # Usar Redis para distribuído
+    storage_uri=settings.redis_url,  # URL configurada via env vars (REDIS_HOST, REDIS_PORT, etc)
     strategy="fixed-window",
 )
 
