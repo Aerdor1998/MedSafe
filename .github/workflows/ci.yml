@@ -163,7 +163,7 @@ jobs:
           OLLAMA_HOST: http://localhost:11434
           SECRET_KEY: ${{ env.SECRET_KEY }}
           JWT_SECRET: ${{ env.JWT_SECRET }}
-          DEBUG: false
+          DEBUG: true
         run: |
           cd backend
           pytest tests/ -v --cov=app --cov-report=xml --cov-report=term --cov-report=html
