@@ -51,6 +51,13 @@ class Settings(BaseSettings):
     jwt_secret: str  # Obrigatório - sem valor padrão
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 30
+    trusted_hosts: Union[str, List[str]] = "localhost,127.0.0.1"  # Hosts confiáveis para produção
+
+    # Configurações de Redis
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+    redis_password: Optional[str] = None  # Opcional - para Redis com autenticação
 
     # Configurações de upload
     max_upload_size: int = 10 * 1024 * 1024  # 10MB
@@ -82,6 +89,16 @@ class Settings(BaseSettings):
         """Parse comma-separated file extensions"""
         if isinstance(v, str):
             return [x.strip() for x in v.split(',') if x.strip()]
+        return v
+
+    @field_validator('trusted_hosts', mode='before')
+    @classmethod
+    def parse_trusted_hosts(cls, v):
+        """Parse comma-separated trusted hosts"""
+        if isinstance(v, str):
+            hosts = [x.strip() for x in v.split(',') if x.strip()]
+            # Validar que não seja wildcard em produção
+            return hosts
         return v
 
     def model_post_init(self, __context) -> None:
@@ -118,6 +135,13 @@ class Settings(BaseSettings):
                 "Set specific allowed origins in ALLOWED_ORIGINS environment variable."
             )
 
+        # Validar trusted_hosts em produção
+        if not self.debug and "*" in self.trusted_hosts:
+            raise ValueError(
+                "Trusted hosts wildcard '*' is not allowed in production. "
+                "Set specific trusted hosts in TRUSTED_HOSTS environment variable."
+            )
+
     @property
     def database_url_safe(self) -> str:
         """Retorna a URL do banco de dados"""
@@ -129,6 +153,13 @@ class Settings(BaseSettings):
     def ollama_base_url(self) -> str:
         """Retorna a URL base do Ollama"""
         return f"{self.ollama_host}/v1"
+
+    @property
+    def redis_url(self) -> str:
+        """Retorna a URL do Redis para rate limiting"""
+        if self.redis_password:
+            return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
+        return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
 
 # Instância global das configurações
