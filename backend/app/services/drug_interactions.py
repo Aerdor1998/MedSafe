@@ -6,11 +6,10 @@ Utiliza base de dados CSV com 191k+ interações
 import csv
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional
-from functools import lru_cache
-import re
+from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
+
 
 class DrugInteractionService:
     """Serviço para buscar e analisar interações medicamentosas"""
@@ -335,16 +334,20 @@ class DrugInteractionService:
             return 'critical'
 
         # Contar severidades HIGH
-        high_count = (len([i for i in interactions if i['severity'] == 'high'])
-                     + len([c for c in contraindications if c['severity'] == 'high']))
+        high_count = (
+            len([i for i in interactions if i['severity'] == 'high']) +
+            len([c for c in contraindications if c['severity'] == 'high'])
+        )
 
         # Se há pelo menos 1 interação/contraindicação HIGH → risco HIGH
         if high_count >= 1:
             return 'high'
 
         # Contar severidades MEDIUM
-        medium_count = (len([i for i in interactions if i['severity'] == 'medium'])
-                       + len([c for c in contraindications if c['severity'] == 'medium']))
+        medium_count = (
+            len([i for i in interactions if i['severity'] == 'medium']) +
+            len([c for c in contraindications if c['severity'] == 'medium'])
+        )
 
         # Se há pelo menos 1 interação/contraindicação MEDIUM → risco MEDIUM
         if medium_count >= 1:
@@ -356,6 +359,7 @@ class DrugInteractionService:
 
 # Instância global (singleton)
 _interaction_service = None
+
 
 def get_interaction_service() -> DrugInteractionService:
     """Obter instância do serviço de interações"""

@@ -3,14 +3,9 @@ Testes de integração para o MedSafe
 """
 
 import pytest
-import pytest_asyncio
-import json
-import tempfile
-import os
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock, AsyncMock
 from app.main import app
-from datetime import datetime
+
 
 class TestMedSafeIntegration:
     """Testes de integração para o sistema MedSafe"""

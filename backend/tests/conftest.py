@@ -4,6 +4,7 @@ Configuração global para testes pytest
 
 import pytest
 
+
 @pytest.fixture
 def sample_patient_data():
     """Dados de paciente para testes"""
@@ -24,6 +25,7 @@ def sample_patient_data():
         "additional_info": None
     }
 
+
 @pytest.fixture
 def sample_medication_data():
     """Dados de medicamento para testes"""
@@ -34,6 +36,7 @@ def sample_medication_data():
         "dosage": "400mg",
         "therapeutic_class": "Anti-inflamatório não esteroidal (AINE)"
     }
+
 
 @pytest.fixture
 def db_session():

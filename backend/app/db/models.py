@@ -5,7 +5,6 @@ Modelos SQLAlchemy para o MedSafe
 from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, Text, JSON, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from datetime import datetime
 import uuid
 
 from .database import Base
@@ -18,6 +17,7 @@ try:
 except ImportError:
     POSTGRES_AVAILABLE = False
     # Para SQLite, usar String para UUIDs
+
     def UUID(as_uuid=False):
         return String(36)
     VECTOR = None

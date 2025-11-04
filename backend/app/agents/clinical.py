@@ -47,8 +47,10 @@ class ClinicalRulesAgent:
             # Medicamentos em uso
             meds_in_use = triage_data.get('meds_in_use', [])
             if isinstance(meds_in_use, list) and len(meds_in_use) > 0:
-                current_meds = [med.get('name', med) if isinstance(med, dict) else str(med)
-                               for med in meds_in_use]
+                current_meds = [
+                    med.get('name', med) if isinstance(med, dict) else str(med)
+                    for med in meds_in_use
+                ]
             else:
                 current_meds = []
 
@@ -573,8 +575,10 @@ class ClinicalRulesAgent:
 
         # Disclaimer
         notes.append("---")
-        notes.append("**IMPORTANTE**: Esta análise é informativa e não substitui consulta médica. "
-                    "Sempre consulte um profissional de saúde antes de iniciar, alterar ou interromper "
-                    "qualquer tratamento.")
+        notes.append(
+            "**IMPORTANTE**: Esta análise é informativa e não substitui consulta médica. "
+            "Sempre consulte um profissional de saúde antes de iniciar, alterar ou interromper "
+            "qualquer tratamento."
+        )
 
         return "\n".join(notes)

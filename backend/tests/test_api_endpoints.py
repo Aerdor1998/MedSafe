@@ -8,6 +8,7 @@ from app.main import app
 
 client = TestClient(app)
 
+
 def test_health_endpoint():
     """Testar endpoint de saúde"""
     response = client.get("/api/health")
@@ -20,6 +21,7 @@ def test_health_endpoint():
     assert "services" in data
     assert "database" in data["services"]
     assert "ollama" in data["services"]
+
 
 def test_analyze_endpoint_basic():
     """Testar endpoint de análise básico"""
@@ -53,6 +55,7 @@ def test_analyze_endpoint_basic():
         assert "medication" in data
         assert "patient" in data
 
+
 def test_analyze_with_interactions():
     """Testar análise com medicamentos que interagem"""
     import json
@@ -82,6 +85,7 @@ def test_analyze_with_interactions():
         # Deve ter campo drug_interactions
         assert "drug_interactions" in data
 
+
 def test_medication_search():
     """Testar busca de medicamentos"""
     response = client.get("/api/medications/search?q=dipirona")
@@ -94,6 +98,7 @@ def test_medication_search():
         assert isinstance(data['results'], list)
     else:
         assert isinstance(data, list)
+
 
 def test_upload_image_endpoint():
     """Testar endpoint de upload de imagem"""
@@ -116,6 +121,7 @@ def test_upload_image_endpoint():
 
     assert "text" in data or "medication_name" in data
 
+
 def test_invalid_patient_data():
     """Testar com dados de paciente inválidos"""
     response = client.post(
@@ -128,6 +134,7 @@ def test_invalid_patient_data():
 
     # Pode retornar 400 ou 422 dependendo da validação
     assert response.status_code in [400, 422, 500]
+
 
 def test_missing_medication_text():
     """Testar sem texto de medicamento"""

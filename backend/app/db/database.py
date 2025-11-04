@@ -5,7 +5,6 @@ Configuração do banco de dados PostgreSQL com pgvector
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import StaticPool
 from contextlib import contextmanager
 import logging
 from typing import Generator

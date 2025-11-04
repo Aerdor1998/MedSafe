@@ -2,13 +2,9 @@
 CaptainAgent - Agente orquestrador principal do MedSafe
 """
 
-import asyncio
 import logging
 from typing import Dict, Any, List, Optional
-from datetime import datetime
 import uuid
-
-from ..config import settings
 from ..db.models import Triage, Report
 from ..db.database import get_db_context
 from .vision import VisionAgent

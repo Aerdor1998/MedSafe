@@ -2,20 +2,15 @@
 VisionAgent - Agente para análise de imagem/PDF com qwen2.5-vl
 """
 
-import asyncio
 import logging
 import base64
 import json
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 from datetime import datetime
 import uuid
 import httpx
-from PIL import Image
-import io
 
 from ..config import settings
-from ..db.models import Document
-from ..db.database import get_db_context
 
 logger = logging.getLogger(__name__)
 

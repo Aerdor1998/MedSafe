@@ -4,29 +4,27 @@ API Principal com FastAPI, AG2 + Ollama, PostgreSQL + pgvector
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Depends, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 import uvicorn
-import os
 import json
 import uuid
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import Optional
+from pathlib import Path
 
 # Importar configurações e módulos
 from .config import settings
 from .db.database import init_db, check_db_health, get_db_stats
-from .db.models import Triage, Report, Document, Embedding, IngestJob
+from .db.models import Triage, Report, IngestJob
 from .agents import CaptainAgent
 from .middleware.csrf import CSRFMiddleware
 from .schemas import (
     TriageCreate, TriageResponse, TriageReport,
-    VisionRequest, VisionResponse,
-    ReportCreate, ReportResponse,
-    MedicationSearch, MedicationSearchResult,
+    VisionResponse,
+    MedicationSearchResult,
     IngestRequest, IngestResponse
 )
 
@@ -421,8 +419,6 @@ async def analyze_medication_legacy(
 
 
 # Montar arquivos estáticos
-from pathlib import Path
-
 # Obter diretório raiz do projeto
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 STATIC_DIR = BASE_DIR / "static"
