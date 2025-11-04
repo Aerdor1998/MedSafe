@@ -124,7 +124,7 @@ class Report(Base):
     triage = relationship("Triage", back_populates="reports")
 
     def __repr__(self):
-        return f"<Report(id={self.id}, triage_id={self.triage_id}, risk_level={self.risk_level})>"
+        return f"<Report(id={self.id}, triage_id={self.triage_id}, risk_level={self.risk_level})>"  # noqa: E501
 
 
 class Document(Base):
@@ -158,7 +158,7 @@ class Document(Base):
     embeddings = relationship("Embedding", back_populates="document")
 
     def __repr__(self):
-        return f"<Document(id={self.id}, drug_name={self.drug_name}, section={self.section})>"
+        return f"<Document(id={self.id}, drug_name={self.drug_name}, section={self.section})>"  # noqa: E501
 
 
 class Embedding(Base):
@@ -195,7 +195,7 @@ class Embedding(Base):
     document = relationship("Document", back_populates="embeddings")
 
     def __repr__(self):
-        return f"<Embedding(id={self.id}, document_id={self.document_id}, chunk_idx={self.chunk_idx})>"
+        return f"<Embedding(id={self.id}, document_id={self.document_id}, chunk_idx={self.chunk_idx})>"  # noqa: E501
 
 
 class IngestJob(Base):

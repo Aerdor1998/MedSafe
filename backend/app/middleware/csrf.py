@@ -171,14 +171,14 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             # Validar presença de ambos os tokens
             if not cookie_token or not header_token:
                 logger.warning(
-                    f"CSRF validation failed: Missing tokens for {request.method} {request.url.path}"
+                    f"CSRF validation failed: Missing tokens for {request.method} {request.url.path}"  # noqa: E501
                 )
                 return JSONResponse(
                     status_code=403,
                     content={
                         "error": "CSRF token missing",
                         "message": "CSRF token is required for this request",
-                        "details": "Include CSRF token in both cookie and request header",
+                        "details": "Include CSRF token in both cookie and request header",  # noqa: E501
                     },
                 )
 

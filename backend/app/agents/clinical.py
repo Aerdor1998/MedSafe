@@ -173,7 +173,7 @@ class ClinicalRulesAgent:
 
             logger.info(f"   ✅ Análise concluída - Risco: {risk_level}")
             logger.info(
-                f"   📊 Interações: {len(interactions_found)}, Contraindicações: {len(contraindications_found)}"
+                f"   📊 Interações: {len(interactions_found)}, Contraindicações: {len(contraindications_found)}"  # noqa: E501
             )
 
             return {
@@ -205,16 +205,16 @@ class ClinicalRulesAgent:
                 "evidence_links": [],
                 "model_used": "clinical_rules_v1_fallback",
                 "confidence_score": 0.3,
-                "analysis_notes": f"Erro na análise: {str(e)}. Consulte um profissional de saúde.",
+                "analysis_notes": f"Erro na análise: {str(e)}. Consulte um profissional de saúde.",  # noqa: E501
                 "status": "error_fallback",
             }
 
     def _get_interaction_recommendation(self, severity: str) -> str:
         """Gerar recomendação baseada na severidade"""
         recommendations = {
-            "critical": "EVITAR COMBINAÇÃO - Risco de reação grave. Consulte médico IMEDIATAMENTE.",
-            "high": "Usar com EXTREMA CAUTELA - Monitoramento médico rigoroso necessário.",
-            "medium": "Usar com cautela - Monitorar sinais e sintomas. Informar médico.",
+            "critical": "EVITAR COMBINAÇÃO - Risco de reação grave. Consulte médico IMEDIATAMENTE.",  # noqa: E501
+            "high": "Usar com EXTREMA CAUTELA - Monitoramento médico rigoroso necessário.",  # noqa: E501
+            "medium": "Usar com cautela - Monitorar sinais e sintomas. Informar médico.",  # noqa: E501
             "low": "Risco mínimo - Manter acompanhamento médico de rotina.",
         }
         return recommendations.get(severity, "Consultar profissional de saúde.")
@@ -305,7 +305,7 @@ class ClinicalRulesAgent:
             adjustments.append(
                 {
                     "reason": "Paciente idoso (≥65 anos)",
-                    "recommendation": "Considerar dose reduzida. Idosos têm metabolismo mais lento.",
+                    "recommendation": "Considerar dose reduzida. Idosos têm metabolismo mais lento.",  # noqa: E501
                     "adjustment_type": "dose_reduction",
                 }
             )
@@ -315,7 +315,7 @@ class ClinicalRulesAgent:
             adjustments.append(
                 {
                     "reason": f"Paciente pediátrico ({age} anos)",
-                    "recommendation": "Calcular dose baseada em peso corporal (mg/kg). Consultar pediatra.",
+                    "recommendation": "Calcular dose baseada em peso corporal (mg/kg). Consultar pediatra.",  # noqa: E501
                     "adjustment_type": "pediatric_dosing",
                 }
             )
@@ -327,7 +327,7 @@ class ClinicalRulesAgent:
             adjustments.append(
                 {
                     "reason": "Insuficiência renal",
-                    "recommendation": "Ajustar dose baseado em clearance de creatinina. Monitorar função renal.",
+                    "recommendation": "Ajustar dose baseado em clearance de creatinina. Monitorar função renal.",  # noqa: E501
                     "adjustment_type": "renal_impairment",
                 }
             )
@@ -340,7 +340,7 @@ class ClinicalRulesAgent:
             adjustments.append(
                 {
                     "reason": "Insuficiência hepática",
-                    "recommendation": "Reduzir dose. Monitorar enzimas hepáticas regularmente.",
+                    "recommendation": "Reduzir dose. Monitorar enzimas hepáticas regularmente.",  # noqa: E501
                     "adjustment_type": "hepatic_impairment",
                 }
             )
@@ -371,7 +371,7 @@ class ClinicalRulesAgent:
                 [
                     {
                         "reaction": "Irritação gastrointestinal",
-                        "description": "Dor epigástrica, náuseas, azia, possível úlcera péptica",
+                        "description": "Dor epigástrica, náuseas, azia, possível úlcera péptica",  # noqa: E501
                         "frequency": "Muito comum (>10%)",
                         "severity": "Moderada a grave",
                         "risk_factors": [
@@ -382,7 +382,7 @@ class ClinicalRulesAgent:
                     },
                     {
                         "reaction": "Disfunção renal",
-                        "description": "Redução da filtração glomerular, retenção de líquidos",
+                        "description": "Redução da filtração glomerular, retenção de líquidos",  # noqa: E501
                         "frequency": "Comum (1-10%)",
                         "severity": "Moderada",
                         "risk_factors": [
@@ -407,7 +407,7 @@ class ClinicalRulesAgent:
                 [
                     {
                         "reaction": "Sangramento",
-                        "description": "Hemorragias (nasal, gengival, hematomas, sangue na urina/fezes)",
+                        "description": "Hemorragias (nasal, gengival, hematomas, sangue na urina/fezes)",  # noqa: E501
                         "frequency": "Comum (1-10%)",
                         "severity": "Grave",
                         "risk_factors": [
@@ -436,7 +436,7 @@ class ClinicalRulesAgent:
                 [
                     {
                         "reaction": "Distúrbios gastrointestinais",
-                        "description": "Diarreia, náuseas, vômitos, flatulência, gosto metálico",
+                        "description": "Diarreia, náuseas, vômitos, flatulência, gosto metálico",  # noqa: E501
                         "frequency": "Muito comum (>10%)",
                         "severity": "Leve a moderada",
                         "risk_factors": ["início de tratamento", "doses altas"],
@@ -489,7 +489,7 @@ class ClinicalRulesAgent:
                     },
                     {
                         "reaction": "Rabdomiólise",
-                        "description": "Destruição muscular grave com liberação de mioglobina",
+                        "description": "Destruição muscular grave com liberação de mioglobina",  # noqa: E501
                         "frequency": "Raro (<0.1%)",
                         "severity": "Crítica",
                         "risk_factors": [
@@ -527,7 +527,7 @@ class ClinicalRulesAgent:
                 [
                     {
                         "reaction": "Síndrome serotoninérgica",
-                        "description": "Agitação, confusão, taquicardia, hipertermia, tremores",
+                        "description": "Agitação, confusão, taquicardia, hipertermia, tremores",  # noqa: E501
                         "frequency": "Raro (<0.1%)",
                         "severity": "Grave",
                         "risk_factors": [
@@ -538,7 +538,7 @@ class ClinicalRulesAgent:
                     },
                     {
                         "reaction": "Disfunção sexual",
-                        "description": "Diminuição da libido, disfunção erétil, anorgasmia",
+                        "description": "Diminuição da libido, disfunção erétil, anorgasmia",  # noqa: E501
                         "frequency": "Muito comum (>10%)",
                         "severity": "Moderada",
                         "risk_factors": ["doses elevadas", "uso prolongado"],
@@ -562,14 +562,14 @@ class ClinicalRulesAgent:
                 [
                     {
                         "reaction": "Sedação e sonolência",
-                        "description": "Sonolência diurna, diminuição de reflexos, fadiga",
+                        "description": "Sonolência diurna, diminuição de reflexos, fadiga",  # noqa: E501
                         "frequency": "Muito comum (>10%)",
                         "severity": "Moderada",
                         "risk_factors": ["idosos", "doses altas", "uso de álcool"],
                     },
                     {
                         "reaction": "Dependência e abstinência",
-                        "description": "Dependência física e psicológica, síndrome de abstinência",
+                        "description": "Dependência física e psicológica, síndrome de abstinência",  # noqa: E501
                         "frequency": "Comum (1-10%)",
                         "severity": "Grave",
                         "risk_factors": [
@@ -580,7 +580,7 @@ class ClinicalRulesAgent:
                     },
                     {
                         "reaction": "Prejuízo cognitivo",
-                        "description": "Dificuldade de concentração, amnésia anterógrada",
+                        "description": "Dificuldade de concentração, amnésia anterógrada",  # noqa: E501
                         "frequency": "Comum (1-10%)",
                         "severity": "Moderada",
                         "risk_factors": ["idosos", "doses altas"],
@@ -624,7 +624,7 @@ class ClinicalRulesAgent:
                 [
                     {
                         "reaction": "Tendinite e ruptura de tendão",
-                        "description": "Inflamação e possível ruptura do tendão de Aquiles",
+                        "description": "Inflamação e possível ruptura do tendão de Aquiles",  # noqa: E501
                         "frequency": "Incomum (0.1-1%)",
                         "severity": "Grave",
                         "risk_factors": [
@@ -659,7 +659,7 @@ class ClinicalRulesAgent:
             reactions.append(
                 {
                     "reaction": "Reações adversas gerais",
-                    "description": "Consulte a bula para lista completa de reações adversas específicas",
+                    "description": "Consulte a bula para lista completa de reações adversas específicas",  # noqa: E501
                     "frequency": "Variável",
                     "severity": "Variável",
                     "risk_factors": [
@@ -688,10 +688,10 @@ class ClinicalRulesAgent:
 
         # Resumo de risco
         risk_descriptions = {
-            "critical": "🔴 **RISCO CRÍTICO** - Uso contraindicado ou requer atenção médica IMEDIATA",
-            "high": "🟠 **RISCO ALTO** - Uso requer supervisão médica rigorosa e monitoramento",
+            "critical": "🔴 **RISCO CRÍTICO** - Uso contraindicado ou requer atenção médica IMEDIATA",  # noqa: E501
+            "high": "🟠 **RISCO ALTO** - Uso requer supervisão médica rigorosa e monitoramento",  # noqa: E501
             "medium": "🟡 **RISCO MODERADO** - Usar com cautela e acompanhamento médico",
-            "low": "🟢 **RISCO BAIXO** - Perfil de segurança aceitável com acompanhamento de rotina",
+            "low": "🟢 **RISCO BAIXO** - Perfil de segurança aceitável com acompanhamento de rotina",  # noqa: E501
         }
         notes.append(risk_descriptions.get(risk_level, ""))
         notes.append("")
@@ -705,7 +705,7 @@ class ClinicalRulesAgent:
                 )
             if interaction_count > 0:
                 notes.append(
-                    f"- **{interaction_count}** interação(ões) medicamentosa(s) encontrada(s)"
+                    f"- **{interaction_count}** interação(ões) medicamentosa(s) encontrada(s)"  # noqa: E501
                 )
             notes.append("")
 
@@ -718,7 +718,7 @@ class ClinicalRulesAgent:
                 )
             if age < 18:
                 notes.append(
-                    "- **Paciente pediátrico**: Dose deve ser calculada por profissional"
+                    "- **Paciente pediátrico**: Dose deve ser calculada por profissional"  # noqa: E501
                 )
             if pregnant:
                 notes.append("- **GESTANTE**: Avaliar risco/benefício com obstetra")
@@ -727,8 +727,8 @@ class ClinicalRulesAgent:
         # Disclaimer
         notes.append("---")
         notes.append(
-            "**IMPORTANTE**: Esta análise é informativa e não substitui consulta médica. "
-            "Sempre consulte um profissional de saúde antes de iniciar, alterar ou interromper "
+            "**IMPORTANTE**: Esta análise é informativa e não substitui consulta médica. "  # noqa: E501
+            "Sempre consulte um profissional de saúde antes de iniciar, alterar ou interromper "  # noqa: E501
             "qualquer tratamento."
         )
 

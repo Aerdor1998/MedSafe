@@ -111,7 +111,7 @@ class VisionAgent:
 
     def _build_vision_prompt(self) -> str:
         """Construir prompt para análise de visão"""
-        return """Analise esta imagem de medicamento e extraia as seguintes informações de forma estruturada:
+        return """Analise esta imagem de medicamento e extraia as seguintes informações de forma estruturada:  # noqa: E501
 
 1. Nome do medicamento (drug_name)
 2. Concentração/força (strength)

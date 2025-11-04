@@ -113,7 +113,7 @@ class DrugInteractionService:
                     self._interactions_cache[key2] = interaction_data
 
             logger.info(
-                f"✅ Base carregada: {len(self._interactions_cache)} interações indexadas"
+                f"✅ Base carregada: {len(self._interactions_cache)} interações indexadas"  # noqa: E501
             )
 
         except Exception as e:
@@ -253,7 +253,7 @@ class DrugInteractionService:
                 interaction = self.interactions_db[key].copy()
                 interactions.append(interaction)
                 logger.info(
-                    f"   ✅ Interação encontrada: {drug_name} + {other_drug} ({interaction['severity']})"
+                    f"   ✅ Interação encontrada: {drug_name} + {other_drug} ({interaction['severity']})"  # noqa: E501
                 )
 
         logger.info(f"📊 Total de interações encontradas: {len(interactions)}")
@@ -329,10 +329,10 @@ class DrugInteractionService:
                             contraindications.append(
                                 {
                                     "type": f"Contraindicação por {condition}",
-                                    "description": f"{contra_drug.capitalize()} pode ser contraindicado em pacientes com {condition}",
+                                    "description": f"{contra_drug.capitalize()} pode ser contraindicado em pacientes com {condition}",  # noqa: E501
                                     "severity": "high",
                                     "source": "Diretrizes Clínicas",
-                                    "recommendation": "Avaliar alternativas terapêuticas com médico",
+                                    "recommendation": "Avaliar alternativas terapêuticas com médico",  # noqa: E501
                                 }
                             )
 
