@@ -102,86 +102,14 @@ app.add_middleware(
 # NOTE: Agentes AG2 removidos - sistema migrado para LangGraph
 # VisionAgent AG2 ainda usado em /api/v1/vision/analyze (instanciado localmente)
 
-# WORKAROUND: Routers inline devido a problemas obscuros de import no Docker
-# Ver ROUTER_IMPORT_ISSUE.md para detalhes
-# SKILL: @ultrathink - Pragmatismo > Pureza
+# Importar routers modulares
+# SKILL: @api-design-principles - Clean router organization
+# SKILL: @backend-dev-guidelines - Modular architecture
+from .routers.health import router as health_router
 
-# Health & Monitoring Endpoints (inline)
-from fastapi import APIRouter
-health_router = APIRouter(tags=["Health & Monitoring"])
-
-@health_router.get("/healthz")
-async def health_check():
-    """Health check endpoint - Retorna status da aplicação"""
-    try:
-        from .db.database import check_db_health
-
-        db_healthy = check_db_health()
-
-        return {
-            "status": "healthy" if db_healthy else "degraded",
-            "timestamp": datetime.now().isoformat(),
-            "version": settings.app_version,
-            "services": {
-                "database": "ok" if db_healthy else "error",
-                "api": "ok"
-            }
-        }
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        return {
-            "status": "unhealthy",
-            "error": str(e),
-            "timestamp": datetime.now().isoformat()
-        }
-
-@health_router.get("/metrics")
-async def metrics():
-    """Prometheus-style metrics endpoint"""
-    try:
-        from .db.database import get_db_stats
-
-        db_stats = get_db_stats()
-
-        return {
-            "medsafe_requests_total": 0,  # TODO: Implementar contador
-            "medsafe_embeddings_total": db_stats.get("embeddings_count", 0),
-            "medsafe_documents_total": db_stats.get("documents_count", 0),
-            "medsafe_triage_total": db_stats.get("triage_count", 0),
-            "medsafe_reports_total": db_stats.get("reports_count", 0)
-        }
-    except Exception as e:
-        logger.error(f"Metrics collection failed: {e}")
-        return {}
-
-@health_router.get("/readyz")
-async def readiness_check():
-    """Readiness probe (Kubernetes) - Retorna 200 se pronto"""
-    try:
-        from .db.database import check_db_health
-
-        db_healthy = check_db_health()
-
-        if not db_healthy:
-            return {
-                "status": "not_ready",
-                "reason": "Database not available"
-            }
-
-        return {
-            "status": "ready",
-            "timestamp": datetime.now().isoformat()
-        }
-    except Exception as e:
-        logger.error(f"Readiness check failed: {e}")
-        return {
-            "status": "not_ready",
-            "reason": str(e)
-        }
-
-# Registrar health router
+# Registrar routers
 app.include_router(health_router)
-logger.info("✅ Health endpoints registrados (inline)")
+logger.info("✅ Health & Monitoring endpoints registrados")
 
 
 async def check_services_health():
