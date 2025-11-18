@@ -1,15 +1,14 @@
 """
 Agentes AG2 para o MedSafe
+
+MIGRATION NOTE:
+- Sistema principal migrado para LangGraph (ver /backend/app/langgraph_agents/)
+- Agents legados movidos para /backend/app/agents_legacy/
+- VisionAgent mantido temporariamente até implementação no LangGraph
 """
 
-from .orchestrator import CaptainAgent
 from .vision import VisionAgent
-from .docagent import DocAgent
-from .clinical import ClinicalRulesAgent
 
 __all__ = [
-    "CaptainAgent",
     "VisionAgent",
-    "DocAgent",
-    "ClinicalRulesAgent"
 ]

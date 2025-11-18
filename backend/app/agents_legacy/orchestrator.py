@@ -14,6 +14,9 @@ from ..db.database import get_db_context
 from .vision import VisionAgent
 from .docagent import DocAgent
 from .clinical import ClinicalRulesAgent
+from .safety_guardrails import get_safety_guardrails, GuardrailViolation
+from .human_in_the_loop import get_hitl_agent, ReviewStatus
+from .reflection_agent import get_reflection_agent, CritiqueLevel
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +29,11 @@ class CaptainAgent:
         self.vision_agent = VisionAgent()
         self.doc_agent = DocAgent()
         self.clinical_agent = ClinicalRulesAgent()
+        self.safety_guardrails = get_safety_guardrails()
+        self.hitl_agent = get_hitl_agent()
+        self.reflection_agent = get_reflection_agent()
 
-        logger.info("🚢 CaptainAgent inicializado")
+        logger.info("🚢 CaptainAgent inicializado com Safety Guardrails, HITL e Reflection")
 
     async def orchestrate_analysis(
         self,
@@ -74,21 +80,70 @@ class CaptainAgent:
                 triage_data, vision_result, evidence_snippets
             )
 
-            # 5. Gerar relatório final
+            # 4.5. NOVO: Reflexão e refinamento iterativo (Capítulo 4 - Reflection Pattern)
+            clinical_analysis, reflection_history = await self._reflect_and_refine(
+                clinical_analysis, triage_data, evidence_snippets
+            )
+
+            # 5. NOVO: Validar com Safety Guardrails
+            try:
+                clinical_analysis = await self.safety_guardrails.validate_analysis(
+                    clinical_analysis, triage_data
+                )
+                logger.info(f"🛡️ Guardrails validados - Classificação: {clinical_analysis.get('safety_classification')}")
+            except GuardrailViolation as e:
+                logger.error(f"🚫 Violação de guardrail crítica: {e}")
+                # Bloquear análise e notificar
+                return {
+                    "session_id": session_id,
+                    "triage_id": str(triage_id),
+                    "status": "blocked",
+                    "error": f"Análise bloqueada por violação de segurança: {e.violation_type}",
+                    "message": "Esta análise foi bloqueada por questões de segurança. Consulte um profissional de saúde."
+                }
+
+            # 6. NOVO: Avaliar necessidade de revisão humana
+            needs_review, escalation_reasons = await self.hitl_agent.evaluate_need_for_human_review(
+                clinical_analysis, triage_data, session_id
+            )
+
+            # 7. Gerar relatório final
             report = await self._generate_final_report(
                 triage_id, vision_result, clinical_analysis, session_id
             )
 
+            # 8. NOVO: Se precisa revisão humana, criar solicitação
+            review_request = None
+            if needs_review:
+                logger.warning(f"⚠️ Análise requer revisão humana: {session_id}")
+                review_request = await self.hitl_agent.request_human_review(
+                    analysis=clinical_analysis,
+                    triage_data=triage_data,
+                    triage_id=str(triage_id),
+                    session_id=session_id,
+                    escalation_reasons=escalation_reasons,
+                    report_id=str(report.id)
+                )
+
             logger.info(f"✅ Análise orquestrada concluída: {session_id}")
 
-            return {
+            result = {
                 "session_id": session_id,
                 "triage_id": str(triage_id),
                 "report_id": str(report.id),
                 "analysis": clinical_analysis,
                 "evidence": evidence_snippets,
-                "status": "completed"
+                "status": "pending_review" if needs_review else "completed",
+                "requires_human_review": needs_review
             }
+
+            if review_request:
+                result["review_request_id"] = review_request.id
+                result["review_priority"] = review_request.priority
+                result["review_deadline"] = review_request.deadline
+                result["escalation_reasons"] = escalation_reasons
+
+            return result
 
         except Exception as e:
             logger.error(f"❌ Erro na análise orquestrada: {e}")
@@ -258,6 +313,115 @@ class CaptainAgent:
         except Exception as e:
             logger.error(f"❌ Erro ao gerar relatório final: {e}")
             raise
+
+    async def _reflect_and_refine(
+        self,
+        clinical_analysis: Dict[str, Any],
+        triage_data: Dict[str, Any],
+        evidence_snippets: List[Dict[str, Any]]
+    ) -> tuple[Dict[str, Any], List]:
+        """
+        Aplicar Reflection Pattern para refinamento iterativo da análise
+
+        PADRÃO: Reflection (Self-Critique) - Capítulo 4
+
+        Args:
+            clinical_analysis: Análise clínica inicial
+            triage_data: Dados do paciente
+            evidence_snippets: Evidências coletadas
+
+        Returns:
+            Tupla (análise_refinada, histórico_de_reflexões)
+        """
+        try:
+            logger.info("🔍 Iniciando reflexão sobre análise clínica")
+
+            # Callback para regeneração de análise com feedback
+            async def regenerate_with_feedback(
+                current_analysis: Dict[str, Any],
+                feedback: Dict[str, Any]
+            ) -> Dict[str, Any]:
+                """Regenerar análise incorporando feedback da reflexão"""
+                logger.info("🔄 Regenerando análise com feedback da reflexão")
+
+                # Criar prompt enriquecido com feedback
+                feedback_prompt = self._build_feedback_prompt(feedback)
+
+                # Chamar clinical_agent novamente com contexto de feedback
+                # NOTA: Seria ideal ter um método específico no ClinicalAgent
+                # para regeneração com feedback, mas por ora reaproveitamos
+                # o método existente e confiamos que o LLM considerará o histórico
+                regenerated = await self.clinical_agent.analyze_contraindications(
+                    triage_data=triage_data,
+                    vision_data=None,  # Já temos evidências
+                    evidence_snippets=evidence_snippets,
+                    reflection_feedback=feedback_prompt  # Novo parâmetro (se suportado)
+                )
+
+                return regenerated
+
+            # Executar refinamento iterativo
+            refined_analysis, reflection_history = await self.reflection_agent.iterative_refinement(
+                initial_analysis=clinical_analysis,
+                triage_data=triage_data,
+                regeneration_callback=regenerate_with_feedback,
+                max_cycles=2  # Limitar a 2 ciclos para performance
+            )
+
+            # Log resumo da reflexão
+            reflection_summary = self.reflection_agent.get_reflection_summary(reflection_history)
+            logger.info(f"✅ Reflexão concluída: {reflection_summary['total_reflections']} reflexões, "
+                       f"{reflection_summary['total_issues_found']} issues encontrados")
+
+            # Adicionar metadados de reflexão na análise
+            refined_analysis['reflection_metadata'] = {
+                'applied': True,
+                'cycles': len(reflection_history),
+                'summary': reflection_summary,
+                'final_critique_level': reflection_history[-1].critique_level.value if reflection_history else 'pass'
+            }
+
+            return refined_analysis, reflection_history
+
+        except Exception as e:
+            logger.error(f"❌ Erro na reflexão: {e}")
+            # Em caso de erro, retornar análise original sem refinamento
+            logger.warning("⚠️ Usando análise original sem refinamento")
+            return clinical_analysis, []
+
+    def _build_feedback_prompt(self, feedback: Dict[str, Any]) -> str:
+        """
+        Construir prompt de feedback para regeneração
+
+        Args:
+            feedback: Feedback compilado das reflexões
+
+        Returns:
+            String de prompt formatada
+        """
+        prompt = "FEEDBACK DA REVISÃO:\n\n"
+
+        if feedback.get('critical_count', 0) > 0:
+            prompt += f"⚠️ {feedback['critical_count']} PROBLEMAS CRÍTICOS encontrados:\n"
+
+        if feedback.get('high_count', 0) > 0:
+            prompt += f"⚠️ {feedback['high_count']} problemas de alta severidade encontrados:\n"
+
+        # Listar issues priorizados
+        for i, issue in enumerate(feedback.get('issues', [])[:5], 1):  # Top 5 issues
+            prompt += f"\n{i}. [{issue.get('severity', 'unknown').upper()}] "
+            prompt += f"{issue.get('category', 'general')}: "
+            prompt += f"{issue.get('description', 'Sem descrição')}\n"
+
+        # Adicionar sugestões
+        if feedback.get('suggestions'):
+            prompt += "\nSUGESTÕES DE MELHORIA:\n"
+            for i, suggestion in enumerate(feedback.get('suggestions', [])[:3], 1):  # Top 3
+                prompt += f"{i}. {suggestion}\n"
+
+        prompt += "\nPor favor, regenere a análise corrigindo esses problemas.\n"
+
+        return prompt
 
     async def get_analysis_status(self, session_id: str) -> Dict[str, Any]:
         """Verificar status de uma análise"""

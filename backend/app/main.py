@@ -20,7 +20,7 @@ from typing import List, Optional, Dict, Any
 from .config import settings
 from .db.database import init_db, check_db_health, get_db_stats
 from .db.models import Triage, Report, Document, Embedding, IngestJob
-from .agents import CaptainAgent
+# NOTE: CaptainAgent AG2 removido - migrado para LangGraph
 from .schemas import (
     TriageCreate, TriageResponse, TriageReport,
     VisionRequest, VisionResponse,
@@ -29,10 +29,22 @@ from .schemas import (
     IngestRequest, IngestResponse
 )
 
-# Configurar logging
+# Configurar logging estruturado com cores
 import logging
-logging.basicConfig(level=getattr(logging, settings.log_level))
+import os
+from .utils.logging_config import setup_logging, log_api_request, log_api_response
+
+# Setup logging estruturado
+# SKILL: @ultrathink - Logging file opcional, Docker usa stdout por padrão
+log_file = os.getenv("MEDSAFE_LOG_FILE", None)  # None = apenas console (Docker-friendly)
+setup_logging(log_level=settings.log_level, log_file=log_file)
 logger = logging.getLogger(__name__)
+
+logger.info("="*80)
+logger.info("🏥 MedSafe - Sistema de Contraindicação de Medicamentos")
+logger.info(f"   Versão: {settings.app_version}")
+logger.info(f"   Ambiente: {'Produção' if not settings.debug else 'Desenvolvimento'}")
+logger.info("="*80)
 
 
 @asynccontextmanager
@@ -87,8 +99,89 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inicializar agentes
-captain_agent = CaptainAgent()
+# NOTE: Agentes AG2 removidos - sistema migrado para LangGraph
+# VisionAgent AG2 ainda usado em /api/v1/vision/analyze (instanciado localmente)
+
+# WORKAROUND: Routers inline devido a problemas obscuros de import no Docker
+# Ver ROUTER_IMPORT_ISSUE.md para detalhes
+# SKILL: @ultrathink - Pragmatismo > Pureza
+
+# Health & Monitoring Endpoints (inline)
+from fastapi import APIRouter
+health_router = APIRouter(tags=["Health & Monitoring"])
+
+@health_router.get("/healthz")
+async def health_check():
+    """Health check endpoint - Retorna status da aplicação"""
+    try:
+        from .db.database import check_db_health
+
+        db_healthy = check_db_health()
+
+        return {
+            "status": "healthy" if db_healthy else "degraded",
+            "timestamp": datetime.now().isoformat(),
+            "version": settings.app_version,
+            "services": {
+                "database": "ok" if db_healthy else "error",
+                "api": "ok"
+            }
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+@health_router.get("/metrics")
+async def metrics():
+    """Prometheus-style metrics endpoint"""
+    try:
+        from .db.database import get_db_stats
+
+        db_stats = get_db_stats()
+
+        return {
+            "medsafe_requests_total": 0,  # TODO: Implementar contador
+            "medsafe_embeddings_total": db_stats.get("embeddings_count", 0),
+            "medsafe_documents_total": db_stats.get("documents_count", 0),
+            "medsafe_triage_total": db_stats.get("triage_count", 0),
+            "medsafe_reports_total": db_stats.get("reports_count", 0)
+        }
+    except Exception as e:
+        logger.error(f"Metrics collection failed: {e}")
+        return {}
+
+@health_router.get("/readyz")
+async def readiness_check():
+    """Readiness probe (Kubernetes) - Retorna 200 se pronto"""
+    try:
+        from .db.database import check_db_health
+
+        db_healthy = check_db_health()
+
+        if not db_healthy:
+            return {
+                "status": "not_ready",
+                "reason": "Database not available"
+            }
+
+        return {
+            "status": "ready",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Readiness check failed: {e}")
+        return {
+            "status": "not_ready",
+            "reason": str(e)
+        }
+
+# Registrar health router
+app.include_router(health_router)
+logger.info("✅ Health endpoints registrados (inline)")
 
 
 async def check_services_health():
@@ -107,49 +200,8 @@ async def check_services_health():
         logger.warning(f"⚠️ Ollama não está disponível: {e}")
 
 
-# Endpoints de saúde e monitoramento
-@app.get("/healthz")
-async def health_check():
-    """Verificar saúde da API"""
-    try:
-        db_healthy = check_db_health()
-
-        return {
-            "status": "healthy" if db_healthy else "unhealthy",
-            "timestamp": datetime.now().isoformat(),
-            "version": settings.app_version,
-            "services": {
-                "database": "ok" if db_healthy else "error",
-                "ollama": "ok",  # Placeholder
-                "api": "ok"
-            }
-        }
-    except Exception as e:
-        return {
-            "status": "unhealthy",
-            "error": str(e),
-            "timestamp": datetime.now().isoformat()
-        }
-
-
-@app.get("/metrics")
-async def metrics():
-    """Métricas Prometheus da aplicação"""
-    try:
-        db_stats = get_db_stats()
-
-        return {
-            "medsafe_requests_total": 0,  # Implementar contador
-            "medsafe_analysis_duration_seconds": 0,  # Implementar métrica
-            "medsafe_database_size_bytes": 0,  # Implementar métrica
-            "medsafe_embeddings_total": db_stats.get("embeddings_count", 0),
-            "medsafe_documents_total": db_stats.get("documents_count", 0),
-            "medsafe_triage_total": db_stats.get("triage_count", 0),
-            "medsafe_reports_total": db_stats.get("reports_count", 0)
-        }
-    except Exception as e:
-        logger.error(f"Erro ao obter métricas: {e}")
-        return {}
+# Health endpoints movidos para routers/health.py
+# Mantido aqui apenas para referência - REMOVIDO para evitar duplicatas
 
 
 # Endpoints principais da API
@@ -158,7 +210,11 @@ async def create_triage(
     triage_data: TriageCreate,
     background_tasks: BackgroundTasks
 ):
-    """Criar triagem e disparar análise assíncrona"""
+    """
+    Criar triagem e disparar análise assíncrona
+
+    UPDATED: Migrado para LangGraph Multi-Agent System
+    """
     try:
         # Gerar ID da sessão
         session_id = str(uuid.uuid4())
@@ -184,12 +240,57 @@ async def create_triage(
             db.commit()
             db.refresh(triage)
 
-        # Disparar análise em background
-        background_tasks.add_task(
-            captain_agent.orchestrate_analysis,
-            triage_data.model_dump(),
-            None
-        )
+        # Função auxiliar para executar análise com LangGraph
+        async def run_langgraph_analysis():
+            """Executar análise usando LangGraph"""
+            try:
+                from .langgraph_agents import get_graph
+
+                # Criar estado inicial para LangGraph
+                initial_state = {
+                    'patient_data': {
+                        'age': triage_data.age,
+                        'weight': triage_data.weight,
+                        'conditions': triage_data.cid_codes,
+                        'current_medications': triage_data.meds_in_use,
+                        'allergies': triage_data.allergies,
+                        'renal_function': triage_data.renal_function,
+                        'hepatic_function': triage_data.hepatic_function,
+                        'pregnant': triage_data.pregnant,
+                    },
+                    'medication_text': ', '.join(triage_data.meds_in_use) if triage_data.meds_in_use else "unknown",
+                    'session_id': session_id,
+                    'triage_id': str(triage.id),
+                }
+
+                logger.info(f"🚀 Iniciando análise LangGraph para triagem {triage.id}")
+
+                # Obter graph e executar
+                graph = get_graph()
+                config = {"configurable": {"thread_id": session_id}}
+
+                result = await graph.ainvoke(initial_state, config)
+
+                logger.info(f"✅ Análise LangGraph concluída para triagem {triage.id}")
+
+                # Atualizar status da triagem
+                with get_db_context() as db:
+                    db_triage = db.query(Triage).filter(Triage.id == triage.id).first()
+                    if db_triage:
+                        db_triage.status = "completed"
+                        db.commit()
+
+            except Exception as e:
+                logger.error(f"❌ Erro na análise LangGraph: {e}", exc_info=True)
+                # Atualizar status para error
+                with get_db_context() as db:
+                    db_triage = db.query(Triage).filter(Triage.id == triage.id).first()
+                    if db_triage:
+                        db_triage.status = "error"
+                        db.commit()
+
+        # Disparar análise em background usando LangGraph
+        background_tasks.add_task(run_langgraph_analysis)
 
         return TriageResponse(
             id=str(triage.id),
@@ -249,9 +350,18 @@ async def analyze_vision(
     file: UploadFile = File(...),
     medication_text: Optional[str] = Form(None)
 ):
-    """Analisar imagem/PDF com VisionAgent"""
+    """
+    Analisar imagem/PDF com VisionAgent
+
+    NOTE: VisionAgent AG2 mantido temporariamente até implementação
+    do VisionAgent no LangGraph (funcionalidade específica de OCR/visão)
+    """
     try:
         from .utils.file_upload import SecureFileUpload
+        from .agents.vision import VisionAgent
+
+        # Instanciar VisionAgent diretamente (não usar CaptainAgent)
+        vision_agent = VisionAgent()
 
         # Upload seguro do arquivo
         file_path = await SecureFileUpload.save_upload_file(file)
@@ -264,7 +374,7 @@ async def analyze_vision(
         }
 
         # Analisar com VisionAgent
-        result = await captain_agent.vision_agent.analyze_document(image_data, image_data["session_id"])
+        result = await vision_agent.analyze_document(image_data, image_data["session_id"])
 
         # Limpar arquivo temporário (mesmo em caso de erro)
         try:
@@ -352,58 +462,119 @@ async def get_ingest_status():
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
 
 
-# Endpoints de compatibilidade (manter estrutura existente)
+# Endpoints de compatibilidade
 @app.post("/api/analyze")
 async def analyze_medication_legacy(
     patient_data: str = Form(...),
     image: Optional[UploadFile] = File(None),
     medication_text: Optional[str] = Form(None)
 ):
-    """Endpoint legado para compatibilidade"""
+    """
+    Endpoint legado para compatibilidade
+
+    UPDATED: Agora usa o novo sistema LangGraph ao invés do AutoGen/AG2
+    """
+    start_time = datetime.now()
+
     try:
+        # Log requisição
+        log_api_request(
+            "POST",
+            "/api/analyze",
+            medication=medication_text,
+            has_image=image is not None
+        )
+
+        logger.info("="*80)
+        logger.info("📥 Nova requisição de análise (endpoint legado)")
+        logger.info(f"   Medicamento: {medication_text}")
+        logger.info(f"   Imagem: {'Sim' if image else 'Não'}")
+        logger.info("="*80)
+
         # Converter dados para novo formato
         patient_info = json.loads(patient_data)
 
-        # Criar triagem
-        triage_data = TriageCreate(
-            age=patient_info.get("age", 0),
-            weight=patient_info.get("weight"),
-            pregnant=patient_info.get("pregnant", False),
-            cid_codes=patient_info.get("cid_codes", []),
-            meds_in_use=patient_info.get("meds_in_use", []),
-            allergies=patient_info.get("allergies", []),
-            renal_function=patient_info.get("renal_function"),
-            hepatic_function=patient_info.get("hepatic_function"),
-            notes=patient_info.get("notes")
+        logger.info(f"📋 Dados do paciente:")
+        logger.info(f"   Idade: {patient_info.get('age', 'N/A')}")
+        logger.info(f"   Peso: {patient_info.get('weight', 'N/A')} kg")
+        logger.info(f"   Medicamentos em uso: {len(patient_info.get('meds_in_use', []))}")
+        logger.info(f"   Condições: {len(patient_info.get('cid_codes', []))}")
+
+        # Usar LangGraph Multi-Agent System
+        from backend.app.langgraph_agents import get_graph
+
+        # Criar estado inicial para LangGraph
+        initial_state = {
+            'patient_data': {
+                'age': patient_info.get("age", 0),
+                'weight': patient_info.get("weight"),
+                'conditions': patient_info.get("cid_codes", []),
+                'current_medications': patient_info.get("meds_in_use", []),
+                'allergies': patient_info.get("allergies", []),
+            },
+            'medication_text': medication_text or "unknown",
+            'session_id': str(uuid.uuid4()),
+            'triage_id': None,
+        }
+
+        logger.info("🚀 Iniciando análise com LangGraph Multi-Agent System...")
+
+        # Obter graph e executar
+        graph = get_graph()
+        config = {"configurable": {"thread_id": initial_state['session_id']}}
+
+        result = await graph.ainvoke(initial_state, config)
+
+        # Converter resultado para formato legado
+        duration = (datetime.now() - start_time).total_seconds()
+
+        logger.info("="*80)
+        logger.info(f"✅ Análise concluída em {duration:.2f}s")
+        logger.info(f"   Risco: {result.get('risk_level', 'unknown')}")
+        logger.info(f"   Interações: {len(result.get('interactions', []))}")
+        logger.info(f"   Contraindicações: {len(result.get('contraindications', []))}")
+        logger.info(f"   Confiança: {result.get('confidence_score', 0):.2%}")
+        logger.info("="*80)
+
+        # Log resposta
+        log_api_response(
+            "POST",
+            "/api/analyze",
+            200,
+            duration,
+            risk_level=result.get('risk_level', 'unknown')
         )
 
-        # Processar imagem se disponível
-        image_data = None
-        if image:
-            image_data = {
-                "file_type": "image",
-                "file_size": image.size,
-                "session_id": str(uuid.uuid4()),
-                "medication_text": medication_text  # Passar medicamento da requisição
-            }
-        elif medication_text:
-            # Se não há imagem mas há medication_text, criar image_data só para passar o medication
-            image_data = {
-                "drug_name": medication_text,
-                "medication_text": medication_text,
-                "session_id": str(uuid.uuid4())
-            }
+        # Formatar resposta no formato legado
+        legacy_response = {
+            "session_id": result.get('session_id'),
+            "risk_level": result.get('risk_level', 'unknown').value if hasattr(result.get('risk_level'), 'value') else str(result.get('risk_level', 'low')),
+            "confidence_score": result.get('confidence_score', 0.0),
+            "interactions": result.get('interactions', []),
+            "contraindications": result.get('contraindications', []),
+            "dosage_adjustments": result.get('dosage_adjustments', []),
+            "adverse_reactions": result.get('adverse_reactions', []),
+            "evidence_links": result.get('evidence_links', []),
+            "final_report": result.get('final_report', {}),
+            "status": result.get('status', 'completed'),
+            "requires_human_review": result.get('requires_human_review', False),
+            "escalation_reasons": result.get('escalation_reasons', []),
+        }
 
-        # Orquestrar análise
-        result = await captain_agent.orchestrate_analysis(
-            triage_data.model_dump(),
-            image_data
-        )
-
-        return result
+        return legacy_response
 
     except Exception as e:
-        logger.error(f"Erro na análise legada: {e}")
+        duration = (datetime.now() - start_time).total_seconds()
+        logger.error(f"❌ Erro na análise: {e}", exc_info=True)
+
+        log_api_response(
+            "POST",
+            "/api/analyze",
+            500,
+            duration,
+            error=str(e)
+        )
+
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
 
 
@@ -427,6 +598,6 @@ if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=8000,
+        port=9000,
         reload=settings.debug
     )
