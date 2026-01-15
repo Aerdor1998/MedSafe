@@ -1,49 +1,40 @@
 """
-Configuração global para testes pytest
+Configuração global para testes pytest (versão LangGraph)
 """
 
-import pytest
 import os
 import sys
+from pathlib import Path
 
-# Adicionar backend ao path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+import pytest
+from fastapi.testclient import TestClient
 
-@pytest.fixture
-def sample_patient_data():
-    """Dados de paciente para testes"""
-    return {
-        "age": 45,
-        "gender": "feminino",
-        "weight": 60.0,
-        "conditions": ["hipertensão", "diabetes tipo 2"],
-        "allergies": ["penicilina"],
-        "current_medications": ["metformina", "losartana"],
-        "supplements": [],
-        "alcohol_use": False,
-        "smoking": False,
-        "pregnancy": False,
-        "breastfeeding": False,
-        "kidney_function": "normal",
-        "liver_function": "normal",
-        "additional_info": None
-    }
+# Garantir que o diretório raiz do projeto esteja no PYTHONPATH
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 
-@pytest.fixture
-def sample_medication_data():
-    """Dados de medicamento para testes"""
-    return {
-        "medication_text": "Ibuprofeno 400mg",
-        "name": "Ibuprofeno",
-        "active_ingredient": "ibuprofeno",
-        "dosage": "400mg",
-        "therapeutic_class": "Anti-inflamatório não esteroidal (AINE)"
-    }
 
-@pytest.fixture
-def db_connection():
-    """Conexão com banco de dados de teste"""
-    from models.database import get_db_connection
-    conn = get_db_connection()
-    yield conn
-    conn.close()
+@pytest.fixture(scope="session")
+def app():
+    """
+    FastAPI app in-process (ASGI) for unit/integration tests.
+
+    IMPORTANT: We do NOT require an external server running on localhost.
+    """
+    os.environ.setdefault("TESTING", "true")
+    os.environ.setdefault("DEBUG", "true")
+    os.environ.setdefault("SECRET_KEY", "test-secret-key-minimum-32-characters-long")
+    os.environ.setdefault("JWT_SECRET", "test-jwt-secret-minimum-32-characters-long")
+    os.environ.setdefault("POSTGRES_PASSWORD", "test_password")
+
+    # Import the already-instantiated app to avoid double initialization
+    from backend.app.main import app as fastapi_app
+
+    return fastapi_app
+
+
+@pytest.fixture()
+def client(app):
+    """Synchronous TestClient for FastAPI endpoints."""
+    with TestClient(app) as c:
+        yield c

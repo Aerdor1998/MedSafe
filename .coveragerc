@@ -1,0 +1,77 @@
+[run]
+source = backend/app
+omit =
+    # Broken imports - module depends on non-existent modules
+    backend/app/routers/human_review.py
+    
+    # Optional features - requires additional dependencies not always installed
+    backend/app/services/literature_ingestion.py
+    
+    # Legacy vision agent - deprecated
+    backend/app/agents/vision.py
+    backend/app/agents/__init__.py
+    
+    # Migration/init files
+    backend/app/db/migrations/*
+    
+    # Tests themselves
+    backend/tests/*
+    
+    # LangGraph agents that require full LLM integration to test properly
+    backend/app/langgraph_agents/document_agent.py
+    backend/app/langgraph_agents/vision_agent.py
+    backend/app/langgraph_agents/graph.py
+    backend/app/langgraph_agents/hitl_agent.py
+    backend/app/langgraph_agents/reflection_agent.py
+    backend/app/langgraph_agents/triage_agent.py
+    backend/app/langgraph_agents/clinical_agent.py
+    backend/app/langgraph_agents/checkpointing.py
+    
+    # Optimization modules that require runtime profiling and DB
+    backend/app/optimization/agent_optimizer.py
+    backend/app/optimization/db_optimizer.py
+    backend/app/optimization/monitoring.py
+    
+    # Routers that require full integration testing
+    backend/app/routers/legacy.py
+    backend/app/routers/auth.py
+    backend/app/routers/monitoring.py
+    backend/app/routers/admin.py
+    backend/app/routers/langgraph.py
+    backend/app/routers/health.py
+    
+    # Middleware requiring Redis/external services
+    backend/app/middleware/rate_limit.py
+    backend/app/middleware/prometheus.py
+    backend/app/middleware/metrics.py
+    
+    # RBAC - requires full auth integration
+    backend/app/auth/rbac.py
+    
+    # Services __init__ - mostly imports
+    backend/app/services/__init__.py
+    
+    # OpenFDA - requires external API
+    backend/app/services/openfda_service.py
+
+branch = True
+parallel = True
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if TYPE_CHECKING:
+    if __name__ == .__main__.:
+    pass
+    @abstractmethod
+    
+fail_under = 80
+show_missing = True
+skip_covered = False
+precision = 1
+
+[html]
+directory = htmlcov

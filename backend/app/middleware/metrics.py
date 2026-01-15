@@ -8,27 +8,13 @@ from starlette.requests import Request
 from prometheus_client import Counter, Histogram, Gauge
 
 # Métricas Prometheus
-REQUEST_COUNT = Counter(
-    'medsafe_requests_total',
-    'Total de requisições HTTP',
-    ['method', 'endpoint', 'status']
-)
+REQUEST_COUNT = Counter("medsafe_requests_total", "Total de requisições HTTP", ["method", "endpoint", "status"])
 
-REQUEST_DURATION = Histogram(
-    'medsafe_request_duration_seconds',
-    'Duração das requisições HTTP',
-    ['method', 'endpoint']
-)
+REQUEST_DURATION = Histogram("medsafe_request_duration_seconds", "Duração das requisições HTTP", ["method", "endpoint"])
 
-REQUEST_IN_PROGRESS = Gauge(
-    'medsafe_requests_in_progress',
-    'Requisições em andamento'
-)
+REQUEST_IN_PROGRESS = Gauge("medsafe_requests_in_progress", "Requisições em andamento")
 
-ACTIVE_SESSIONS = Gauge(
-    'medsafe_active_sessions',
-    'Sessões ativas'
-)
+ACTIVE_SESSIONS = Gauge("medsafe_active_sessions", "Sessões ativas")
 
 
 class MetricsMiddleware(BaseHTTPMiddleware):
@@ -51,16 +37,9 @@ class MetricsMiddleware(BaseHTTPMiddleware):
             duration = time.time() - start_time
 
             # Registrar métricas
-            REQUEST_COUNT.labels(
-                method=request.method,
-                endpoint=request.url.path,
-                status=response.status_code
-            ).inc()
+            REQUEST_COUNT.labels(method=request.method, endpoint=request.url.path, status=response.status_code).inc()
 
-            REQUEST_DURATION.labels(
-                method=request.method,
-                endpoint=request.url.path
-            ).observe(duration)
+            REQUEST_DURATION.labels(method=request.method, endpoint=request.url.path).observe(duration)
 
             return response
 

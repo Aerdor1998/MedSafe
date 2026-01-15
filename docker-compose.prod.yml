@@ -8,13 +8,20 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-medsafe}
       POSTGRES_USER: ${POSTGRES_USER:-medsafe}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      # SECURITY: Password MUST be set via .env - no default allowed in production
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+    # SKILL: debugging-strategies
+    # FIX: Port 5432 conflitava com medsafe-postgres container existente
+    # Mudado para 5433 no host, mantém 5432 interno no container
+    #
+    # SKILL: deployment-pipeline-design
+    # Mantém consistência com docker-compose.yml (dev = prod)
     ports:
-      - "5432:5432"
+      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-medsafe}"]
       interval: 10s
@@ -28,11 +35,15 @@ services:
   redis:
     image: redis:7-alpine
     container_name: medsafe_redis
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-changeme}
+    # SECURITY: Password MUST be set via .env - no default allowed in production
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
     volumes:
       - redis_data:/data
+    # FIX: avoid binding host port 6379 (often already used).
+    # Services use redis via the Docker network: redis:6379
+    # If you need host access (debug), override with REDIS_HOST_PORT.
     ports:
-      - "6379:6379"
+      - "${REDIS_HOST_PORT:-6380}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 10s
@@ -50,8 +61,14 @@ services:
       - OLLAMA_HOST=0.0.0.0
     volumes:
       - ollama_data:/root/.ollama
+    # SKILL: debugging-strategies
+    # FIX: Port 11434 conflitava com ollama container existente
+    # Mudado para 11435 no host, mantém 11434 interno no container
+    #
+    # SKILL: deployment-pipeline-design
+    # Mantém consistência com docker-compose.yml (dev = prod)
     ports:
-      - "11434:11434"
+      - "11435:11434"
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 30s
@@ -76,24 +93,41 @@ services:
     container_name: medsafe_api
     environment:
       - DEBUG=false
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-medsafe}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-medsafe}
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+      # SECURITY: Passwords via env vars - no defaults in production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-medsafe}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-medsafe}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - OLLAMA_HOST=http://ollama:11434
       - OLLAMA_LLM=${OLLAMA_LLM:-qwen2.5:7b}
       - OLLAMA_VLM=${OLLAMA_VLM:-qwen2.5vl:7b}
       - SECRET_KEY=${SECRET_KEY}
       - JWT_SECRET=${JWT_SECRET}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      # SECURITY: ALLOWED_ORIGINS must be explicit - wildcard rejected in production
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:?ALLOWED_ORIGINS must be set explicitly (no wildcard)}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ENABLE_METRICS=true
       - METRICS_PORT=9090
+      # PERFORMANCE: Use Redis for distributed rate limiting in production
+      - RATE_LIMIT_STORAGE=redis://:${REDIS_PASSWORD}@redis:6379/1
+      # Feature flags
+      - ENABLE_LEGACY_V1=${ENABLE_LEGACY_V1:-false}
+      - LEGACY_V1_SUNSET_DATE=${LEGACY_V1_SUNSET_DATE:-2025-03-01}
+      # SECURITY: keep false unless explicitly required
+      - ALLOW_ANONYMOUS_ANALYSIS=${ALLOW_ANONYMOUS_ANALYSIS:-false}
+    # PRODUCTION: No bind-mounts for code - use immutable image only
+    # Only mount data directories that need persistence
     volumes:
-      - ./backend:/app/backend
       - ./logs:/app/logs
-      - ./static:/app/static
-      - ./frontend:/app/frontend
+      - ./data:/app/data
+      # Static files are built into the image - only mount for uploads if needed
+      # - ./static:/app/static
+    # SKILL: debugging-strategies
+    # FIX: Port 9000 conflitava com processo Python existente
+    # Mudado para 9001 no host, mantém 9000 interno no container
+    #
+    # SKILL: deployment-pipeline-design
+    # Mantém consistência com docker-compose.yml (dev = prod)
     ports:
-      - "8000:8000"
+      - "9001:9000"
       - "9090:9090"
     depends_on:
       db:
@@ -103,10 +137,54 @@ services:
       ollama:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - medsafe_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+  # Durable analysis worker (DB-backed queue)
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: medsafe_worker
+    command: ["python", "-m", "backend.app.workers.analysis_worker"]
+    environment:
+      - DEBUG=false
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-medsafe}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-medsafe}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_LLM=${OLLAMA_LLM:-qwen2.5:7b}
+      - OLLAMA_VLM=${OLLAMA_VLM:-qwen2.5vl:7b}
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENABLE_METRICS=true
+      - METRICS_PORT=9090
+      - RATE_LIMIT_STORAGE=redis://:${REDIS_PASSWORD}@redis:6379/1
+      - ENABLE_LEGACY_V1=${ENABLE_LEGACY_V1:-false}
+      - LEGACY_V1_SUNSET_DATE=${LEGACY_V1_SUNSET_DATE:-2025-03-01}
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
     networks:
       - medsafe_network
     restart: unless-stopped
@@ -151,8 +229,10 @@ services:
       - '--web.console.libraries=/etc/prometheus/console_libraries'
       - '--web.console.templates=/etc/prometheus/consoles'
       - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
     ports:
       - "9091:9090"
@@ -166,7 +246,8 @@ services:
     container_name: medsafe_grafana
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-changeme}
+      # SECURITY: Password MUST be set via .env - no default allowed in production
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set in .env}
       - GF_INSTALL_PLUGINS=redis-datasource
     volumes:
       - grafana_data:/var/lib/grafana
@@ -186,7 +267,8 @@ services:
     container_name: medsafe_pgadmin
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@medsafe.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-changeme}
+      # SECURITY: Password MUST be set via .env - no default allowed in production
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?PGADMIN_PASSWORD must be set in .env}
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     ports:
@@ -204,7 +286,7 @@ services:
     image: rediscommander/redis-commander:latest
     container_name: medsafe_redis_commander
     environment:
-      - REDIS_HOSTS=local:redis:6379:0:${REDIS_PASSWORD:-changeme}
+      - REDIS_HOSTS=local:redis:6379:0:${REDIS_PASSWORD}
     ports:
       - "8081:8081"
     depends_on:
@@ -232,8 +314,14 @@ volumes:
 networks:
   medsafe_network:
     driver: bridge
+    # SKILL: debugging-strategies
+    # FIX: 172.20.0.0/16 conflitava com mindsdb_default
+    # Mudado para 172.22.0.0/16 (não conflita)
+    #
+    # SKILL: deployment-pipeline-design
+    # Subnet escolhida para evitar conflitos com outras redes Docker
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 172.22.0.0/16
 
 

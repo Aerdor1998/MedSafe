@@ -17,31 +17,16 @@ class ReportCreate(BaseSchema):
     risk_level: str = Field(..., description="Nível de risco identificado")
 
     # Resultados detalhados
-    contraindications: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Contraindicações encontradas"
-    )
+    contraindications: List[Dict[str, Any]] = Field(default=[], description="Contraindicações encontradas")
 
-    interactions: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Interações medicamentosas"
-    )
+    interactions: List[Dict[str, Any]] = Field(default=[], description="Interações medicamentosas")
 
-    dosage_adjustments: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Ajustes de posologia recomendados"
-    )
+    dosage_adjustments: List[Dict[str, Any]] = Field(default=[], description="Ajustes de posologia recomendados")
 
-    adverse_reactions: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Reações adversas identificadas"
-    )
+    adverse_reactions: List[Dict[str, Any]] = Field(default=[], description="Reações adversas identificadas")
 
     # Evidências e citações
-    evidence_links: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Links para evidências e fontes"
-    )
+    evidence_links: List[Dict[str, Any]] = Field(default=[], description="Links para evidências e fontes")
 
     # Metadados da análise
     model_used: str = Field(..., description="Modelo de IA utilizado")

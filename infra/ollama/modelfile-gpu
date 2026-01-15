@@ -1,0 +1,32 @@
+# Ollama Modelfile - GPU Optimization for MedSafe
+# SKILL: @python-performance-optimization - GPU acceleration for LLMs
+
+# Base models with GPU configuration
+FROM qwen2.5:7b
+FROM qwen2.5vl:7b
+
+# GPU Configuration Parameters
+PARAMETER num_gpu 99          # Use all available GPUs
+PARAMETER num_thread 8        # CPU threads (complementary to GPU)
+PARAMETER gpu_layers 99       # Load all layers to GPU
+
+# Performance Parameters
+PARAMETER num_ctx 8192        # Context window (8k tokens)
+PARAMETER num_batch 512       # Batch size for parallel processing
+PARAMETER num_predict 4096    # Max tokens to generate
+
+# Temperature & Quality
+PARAMETER temperature 0.3     # Lower temp for medical accuracy
+PARAMETER top_p 0.9          # Nucleus sampling
+PARAMETER top_k 40           # Top-k sampling
+PARAMETER repeat_penalty 1.1 # Prevent repetition
+
+# GPU Memory Management
+PARAMETER use_mmap true      # Memory-mapped files for efficiency
+PARAMETER use_mlock true     # Lock model in RAM (no swap)
+PARAMETER num_keep 4         # Keep first N tokens in context
+
+# System Message
+SYSTEM """You are a medical AI assistant specialized in drug safety and interaction analysis.
+Your role is to provide accurate, evidence-based medical information.
+Always prioritize patient safety and cite medical evidence when available."""

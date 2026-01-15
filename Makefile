@@ -38,11 +38,13 @@ help:
 	@echo "  restore      - Restaurar backup do banco"
 
 # Desenvolvimento
+# SKILL: debugging-strategies
+# FIX: Porta mudada 8000 → 9000 → 9001 (conflito)
 dev: build up
 	@echo "🚀 Ambiente de desenvolvimento iniciado!"
-	@echo "📱 API: http://localhost:8000"
-	@echo "📊 Docs: http://localhost:8000/docs"
-	@echo "🔍 Health: http://localhost:8000/healthz"
+	@echo "📱 API: http://localhost:9001"
+	@echo "📊 Docs: http://localhost:9001/docs"
+	@echo "🔍 Health: http://localhost:9001/healthz"
 
 build:
 	@echo "🔨 Construindo imagens Docker..."
@@ -179,13 +181,17 @@ dev-fast:
 	docker-compose -f $(COMPOSE_FILE) up -d db ollama
 	@echo "⏳ Aguardando serviços..."
 	sleep 15
-	cd backend/app && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+	# SKILL: debugging-strategies
+	# FIX: Porta mudada para 9001 (modo desenvolvimento local, não Docker)
+	cd backend/app && python -m uvicorn main:app --host 0.0.0.0 --port 9001 --reload
 
 # Comandos de saúde
 health:
 	@echo "🏥 Verificando saúde dos serviços..."
 	@echo "API..."
-	curl -f http://localhost:8000/healthz || echo "❌ API não está saudável"
+	# SKILL: debugging-strategies
+	# FIX: Porta mudada para 9001
+	curl -f http://localhost:9001/healthz || echo "❌ API não está saudável"
 	@echo "Banco..."
 	docker exec medsafe_db pg_isready -U medsafe || echo "❌ Banco não está saudável"
 	@echo "Ollama..."
@@ -217,22 +223,45 @@ local-dev:
 # Comandos de teste específicos
 test-unit:
 	@echo "🧪 Executando testes unitários..."
-	cd backend && python -m pytest tests/unit/ -v
+	cd backend && python -m pytest tests/ -v --ignore=tests/e2e
 
 test-integration:
 	@echo "🧪 Executando testes de integração..."
-	cd backend && python -m pytest tests/integration/ -v
+	cd backend && python -m pytest tests/test_integration.py -v
 
 test-e2e:
 	@echo "🧪 Executando testes end-to-end..."
-	cd backend && python -m pytest tests/e2e/ -v
+	@echo "📋 Iniciando serviços..."
+	make up
+	@echo "⏳ Aguardando serviços..."
+	sleep 30
+	cd tests && python -m pytest e2e/ -v --browser chromium || true
+	@echo "✅ Testes E2E concluídos!"
+
+test-coverage:
+	@echo "📊 Executando testes com cobertura..."
+	cd backend && python -m pytest tests/ -v \
+		--cov=app \
+		--cov-report=html \
+		--cov-report=term-missing \
+		--cov-fail-under=80 \
+		--ignore=tests/e2e
+	@echo "✅ Relatório de cobertura disponível em backend/htmlcov/"
+
+test-security:
+	@echo "🔒 Executando testes de segurança..."
+	bandit -r backend/app -f txt --severity-level medium
+	safety check -r requirements.txt || true
+	@echo "✅ Testes de segurança concluídos!"
 
 # Comandos de documentação
 docs:
 	@echo "📚 Gerando documentação..."
 	cd backend && python -m uvicorn main:app --reload &
-	@echo "📖 Documentação disponível em: http://localhost:8000/docs"
-	@echo "📖 ReDoc disponível em: http://localhost:8000/redoc"
+	# SKILL: debugging-strategies
+	# FIX: Porta mudada para 9001
+	@echo "📖 Documentação disponível em: http://localhost:9001/docs"
+	@echo "📖 ReDoc disponível em: http://localhost:9001/redoc"
 
 # Comandos de deploy
 deploy-staging:

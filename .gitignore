@@ -98,6 +98,8 @@ TESTE_SUCESSO.md
 TEST_SUMMARY.md
 START_MVP.md
 MVP_PRODUCTION_READY.md
+/docs /docs/**/*
+docs/
 
 # Jupyter Notebook
 .ipynb_checkpoints

@@ -3,449 +3,1489 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MedSafe - Sistema de Contra-indicativos</title>
+    <title>MedSafe - Análise Inteligente de Medicamentos</title>
+
+    <!-- Dependencies -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Distinctive Typography: Outfit + DM Sans -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Tailwind Config -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        display: ['Outfit', 'sans-serif'],
+                        body: ['DM Sans', 'sans-serif'],
+                    },
+                    colors: {
+                        surface: {
+                            900: '#0c1015',
+                            800: '#111820',
+                            700: '#171f2a',
+                            600: '#1e2836',
+                            500: '#2a3647',
+                        },
+                        brand: {
+                            cyan: '#22d3ee',
+                            teal: '#14b8a6',
+                            emerald: '#10b981',
+                            amber: '#f59e0b',
+                            rose: '#f43f5e',
+                        }
+                    },
+                }
+            }
+        }
+    </script>
+
     <style>
-        .gradient-bg {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        .glass-morphism {
-            background: rgba(255, 255, 255, 0.25);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.18);
-        }
-        .risk-critical { background: linear-gradient(135deg, #ff6b6b, #ee5a24); }
-        .risk-high { background: linear-gradient(135deg, #ffa502, #ff6348); }
-        .risk-medium { background: linear-gradient(135deg, #f39c12, #e67e22); }
-        .risk-low { background: linear-gradient(135deg, #00b894, #00a085); }
+        * { box-sizing: border-box; }
         
-        .step-indicator {
-            transition: all 0.3s ease;
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: linear-gradient(145deg, #0c1015 0%, #111820 40%, #171f2a 100%);
+            color: #e2e8f0;
+            min-height: 100vh;
         }
-        .step-indicator.active {
-            background: #667eea;
-            color: white;
+
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Outfit', sans-serif;
         }
-        .step-indicator.completed {
-            background: #00b894;
-            color: white;
+
+        /* Glass morphism */
+        .glass {
+            background: rgba(17, 24, 32, 0.7);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(34, 211, 238, 0.08);
         }
-        
-        .medication-card {
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+
+        .glass-card {
+            background: rgba(23, 31, 42, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(34, 211, 238, 0.1);
         }
-        .medication-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+        /* Brand gradient */
+        .gradient-text {
+            background: linear-gradient(135deg, #22d3ee 0%, #14b8a6 50%, #10b981 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
-        
-        .pulse-animation {
-            animation: pulse 2s infinite;
+
+        /* Glow effects */
+        .glow-cyan { box-shadow: 0 0 24px rgba(34, 211, 238, 0.25); }
+        .glow-emerald { box-shadow: 0 0 24px rgba(16, 185, 129, 0.25); }
+        .glow-rose { box-shadow: 0 0 24px rgba(244, 63, 94, 0.25); }
+
+        /* Navigation */
+        .nav-item {
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            border-left: 3px solid transparent;
         }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+        .nav-item.active {
+            background: linear-gradient(90deg, rgba(34, 211, 238, 0.12) 0%, transparent 100%);
+            border-left-color: #22d3ee;
         }
-        
-        .fade-in {
-            animation: fadeIn 0.5s ease-in;
+        .nav-item:hover:not(.active) {
+            background: rgba(34, 211, 238, 0.04);
         }
-        
+
+        /* Input styles */
+        .input-field {
+            background: rgba(23, 31, 42, 0.8);
+            border: 1px solid rgba(34, 211, 238, 0.15);
+            transition: all 0.2s;
+        }
+        .input-field:focus {
+            border-color: #22d3ee;
+            box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.1);
+            outline: none;
+        }
+        .input-field::placeholder { color: #64748b; }
+
+        /* Button gradient */
+        .btn-primary {
+            background: linear-gradient(135deg, #22d3ee 0%, #14b8a6 100%);
+            color: #0c1015;
+            font-weight: 600;
+            transition: all 0.25s;
+        }
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(34, 211, 238, 0.3);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Scrollbar */
+        .custom-scroll::-webkit-scrollbar { width: 5px; }
+        .custom-scroll::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); border-radius: 10px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: rgba(34, 211, 238, 0.3); border-radius: 10px; }
+
+        /* Animations */
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
+            from { opacity: 0; transform: translateY(12px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        
-        #three-container {
-            border-radius: 15px;
+
+        /* Progress ring */
+        .progress-ring { transform: rotate(-90deg); }
+
+        /* Severity indicators */
+        .severity-low { border-left: 3px solid #10b981; background: rgba(16, 185, 129, 0.08); }
+        .severity-medium { border-left: 3px solid #f59e0b; background: rgba(245, 158, 11, 0.08); }
+        .severity-high { border-left: 3px solid #f43f5e; background: rgba(244, 63, 94, 0.08); }
+        .severity-critical { border-left: 3px solid #dc2626; background: rgba(220, 38, 38, 0.1); }
+
+        /* Step visibility */
+        .step-content { display: none; }
+        .step-content.block { display: block; }
+
+        /* Radio buttons */
+        .radio-card input:checked + div {
+            background: linear-gradient(135deg, #22d3ee 0%, #14b8a6 100%);
+            color: #0c1015;
+            border-color: transparent;
+        }
+
+        /* Med item */
+        .med-item { transition: all 0.2s; }
+        .med-item:hover { transform: translateX(4px); }
+
+        /* Result card */
+        .result-card {
+            background: rgba(23, 31, 42, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
             overflow: hidden;
+        }
+        .result-card-header {
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
     </style>
 </head>
-<body class="min-h-screen bg-gray-50">
-    <!-- Header -->
-    <header class="gradient-bg shadow-lg">
-        <div class="container mx-auto px-6 py-4">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-3">
-                    <div class="bg-white p-2 rounded-full">
-                        <i class="fas fa-pills text-2xl text-blue-600"></i>
-                    </div>
-                    <div>
-                        <h1 class="text-2xl font-bold text-white">MedSafe</h1>
-                        <p class="text-blue-100 text-sm">Sistema de Contra-indicativos de Medicamentos</p>
-                    </div>
+
+<body class="flex items-center justify-center p-4 md:p-6">
+
+    <main class="glass w-full max-w-[1440px] min-h-[90vh] rounded-2xl flex overflow-hidden relative">
+
+        <!-- Header -->
+        <header class="absolute top-0 left-0 right-0 h-14 px-5 flex items-center justify-between z-20 glass border-b border-brand-cyan/10">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-cyan to-brand-teal flex items-center justify-center glow-cyan">
+                    <i class="fas fa-heartbeat text-surface-900"></i>
                 </div>
-                <div class="text-right text-white">
-                    <p class="text-sm">Baseado em diretrizes</p>
-                    <p class="font-semibold">OMS & ANVISA</p>
+                <div>
+                    <h1 class="font-display font-bold text-lg gradient-text tracking-tight">MedSafe</h1>
+                    <span class="text-[9px] text-slate-500 font-medium uppercase tracking-widest">Análise IA</span>
                 </div>
             </div>
-        </div>
-    </header>
 
-    <!-- Main Content -->
-    <main class="container mx-auto px-6 py-8">
-        <!-- Progress Indicator -->
-        <div class="mb-8">
-            <div class="flex items-center justify-center space-x-4">
-                <div class="step-indicator active flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 text-gray-600 font-semibold">
-                    1
+            <div class="flex items-center gap-3">
+                <div id="api-status" class="flex items-center gap-2 text-xs px-3 py-1.5 rounded-full glass-card">
+                    <div class="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></div>
+                    <span class="text-slate-400">Verificando</span>
                 </div>
-                <div class="w-20 h-1 bg-gray-200 rounded"></div>
-                <div class="step-indicator flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 text-gray-600 font-semibold">
-                    2
-                </div>
-                <div class="w-20 h-1 bg-gray-200 rounded"></div>
-                <div class="step-indicator flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 text-gray-600 font-semibold">
-                    3
-                </div>
-                <div class="w-20 h-1 bg-gray-200 rounded"></div>
-                <div class="step-indicator flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 text-gray-600 font-semibold">
-                    4
-                </div>
-            </div>
-            <div class="flex justify-center mt-2 space-x-16 text-sm text-gray-600">
-                <span>Anamnese</span>
-                <span>Medicamento</span>
-                <span>Análise</span>
-                <span>Resultado</span>
-            </div>
-        </div>
-
-        <!-- Step 1: Patient Data -->
-        <div id="step-1" class="step-content fade-in">
-            <div class="max-w-4xl mx-auto">
-                <div class="bg-white rounded-2xl shadow-xl p-8">
-                    <div class="text-center mb-8">
-                        <h2 class="text-3xl font-bold text-gray-800 mb-2">Anamnese Digital</h2>
-                        <p class="text-gray-600">Preencha os dados para uma análise personalizada e segura</p>
+                <div class="flex items-center gap-2 px-2 py-1 rounded-full glass-card">
+                    <div class="w-7 h-7 rounded-full bg-gradient-to-br from-brand-cyan to-brand-emerald flex items-center justify-center text-surface-900 text-[10px] font-bold">
+                        MD
                     </div>
+                    <span class="text-xs font-medium text-slate-300 hidden md:block">Dr. Silva</span>
+                </div>
+            </div>
+        </header>
 
-                    <form id="patient-form" class="space-y-6">
-                        <div class="grid md:grid-cols-2 gap-6">
-                            <!-- Dados Básicos -->
-                            <div class="space-y-4">
-                                <h3 class="text-lg font-semibold text-gray-800 border-b pb-2">Dados Básicos</h3>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Idade *</label>
-                                    <input type="number" id="age" required min="0" max="120" 
-                                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Gênero *</label>
-                                    <select id="gender" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                                        <option value="">Selecione...</option>
-                                        <option value="masculino">Masculino</option>
-                                        <option value="feminino">Feminino</option>
-                                        <option value="outro">Outro</option>
-                                    </select>
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Peso aproximado (kg)</label>
-                                    <input type="number" id="weight" min="1" max="300" step="0.1"
-                                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                                </div>
-                            </div>
+        <!-- Sidebar -->
+        <aside class="w-64 pt-16 pb-4 px-3 border-r border-brand-cyan/5 flex flex-col gap-3 custom-scroll overflow-y-auto">
 
-                            <!-- Condições Especiais -->
-                            <div class="space-y-4">
-                                <h3 class="text-lg font-semibold text-gray-800 border-b pb-2">Condições Especiais</h3>
-                                
-                                <div id="pregnancy-section">
-                                    <label class="flex items-center space-x-3">
-                                        <input type="checkbox" id="pregnancy" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
-                                        <span class="text-sm font-medium text-gray-700">Gravidez</span>
-                                    </label>
-                                </div>
-                                
-                                <div id="breastfeeding-section">
-                                    <label class="flex items-center space-x-3">
-                                        <input type="checkbox" id="breastfeeding" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
-                                        <span class="text-sm font-medium text-gray-700">Amamentação</span>
-                                    </label>
-                                </div>
-                                
-                                <div>
-                                    <label class="flex items-center space-x-3">
-                                        <input type="checkbox" id="alcohol-use" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
-                                        <span class="text-sm font-medium text-gray-700">Uso regular de álcool</span>
-                                    </label>
-                                </div>
-                                
-                                <div>
-                                    <label class="flex items-center space-x-3">
-                                        <input type="checkbox" id="smoking" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
-                                        <span class="text-sm font-medium text-gray-700">Tabagismo</span>
-                                    </label>
-                                </div>
-                            </div>
+            <div class="flex flex-col gap-1.5 mt-2" id="nav-steps">
+                <!-- Step 1 -->
+                <div class="nav-item active p-2.5 rounded-xl cursor-pointer" onclick="goToStep(1)" id="nav-step-1">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-lg bg-brand-cyan/15 text-brand-cyan flex items-center justify-center">
+                            <i class="fas fa-user text-sm"></i>
                         </div>
+                        <div class="flex-1">
+                            <h3 class="font-display font-semibold text-sm text-slate-200">Paciente</h3>
+                            <p class="text-[10px] text-slate-500 status-text">Em preenchimento</p>
+                        </div>
+                    </div>
+                </div>
 
-                        <!-- Condições Médicas -->
+                <!-- Step 2 -->
+                <div class="nav-item p-2.5 rounded-xl cursor-pointer" onclick="goToStep(2)" id="nav-step-2">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-lg bg-surface-600 text-slate-500 flex items-center justify-center">
+                            <i class="fas fa-pills text-sm"></i>
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="font-display font-semibold text-sm text-slate-200">Medicamentos</h3>
+                            <p class="text-[10px] text-slate-500 status-text">Pendente</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3 -->
+                <div class="nav-item p-2.5 rounded-xl pointer-events-none opacity-50" id="nav-step-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-lg bg-surface-600 text-slate-500 flex items-center justify-center">
+                            <i class="fas fa-brain text-sm"></i>
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="font-display font-semibold text-sm text-slate-200">Análise IA</h3>
+                            <p class="text-[10px] text-slate-500 status-text">Aguardando</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 4 -->
+                <div class="nav-item p-2.5 rounded-xl pointer-events-none opacity-50" id="nav-step-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-lg bg-surface-600 text-slate-500 flex items-center justify-center">
+                            <i class="fas fa-chart-bar text-sm"></i>
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="font-display font-semibold text-sm text-slate-200">Resultado</h3>
+                            <p class="text-[10px] text-slate-500 status-text">---</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agents Section -->
+            <div class="mt-4">
+                <h4 class="text-[9px] uppercase tracking-widest text-slate-600 font-semibold mb-2 px-2">Agentes Ativos</h4>
+                <div class="space-y-1.5">
+                    <div class="glass-card p-2 rounded-lg flex items-center gap-2">
+                        <div class="w-7 h-7 rounded bg-violet-500/15 text-violet-400 flex items-center justify-center text-xs">
+                            <i class="fas fa-brain"></i>
+                        </div>
                         <div>
-                            <h3 class="text-lg font-semibold text-gray-800 border-b pb-2 mb-4">Condições Médicas</h3>
-                            <div class="grid md:grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Doenças/Condições</label>
-                                    <textarea id="conditions" rows="3" placeholder="Ex: hipertensão, diabetes, doença renal..."
-                                              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Alergias Conhecidas</label>
-                                    <textarea id="allergies" rows="3" placeholder="Ex: penicilina, aspirina, lactose..."
-                                              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
-                                </div>
-                            </div>
+                            <p class="text-[11px] font-medium text-slate-300">Clínico</p>
+                            <p class="text-[9px] text-slate-500">Análise</p>
                         </div>
-
-                        <!-- Medicamentos Atuais -->
+                    </div>
+                    <div class="glass-card p-2 rounded-lg flex items-center gap-2">
+                        <div class="w-7 h-7 rounded bg-brand-teal/15 text-brand-teal flex items-center justify-center text-xs">
+                            <i class="fas fa-filter"></i>
+                        </div>
                         <div>
-                            <h3 class="text-lg font-semibold text-gray-800 border-b pb-2 mb-4">Medicamentos e Suplementos</h3>
-                            <div class="grid md:grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Medicamentos em Uso</label>
-                                    <textarea id="current-medications" rows="3" placeholder="Ex: losartana 50mg, metformina 850mg..."
-                                              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Suplementos/Fitoterápicos</label>
-                                    <textarea id="supplements" rows="3" placeholder="Ex: vitamina D, omega 3, ginkgo biloba..."
-                                              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
-                                </div>
-                            </div>
+                            <p class="text-[11px] font-medium text-slate-300">Triagem</p>
+                            <p class="text-[9px] text-slate-500">Classificação</p>
                         </div>
-
-                        <div class="flex justify-end">
-                            <button type="submit" class="px-8 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors">
-                                Continuar para Medicamento
-                                <i class="fas fa-arrow-right ml-2"></i>
-                            </button>
+                    </div>
+                    <div class="glass-card p-2 rounded-lg flex items-center gap-2">
+                        <div class="w-7 h-7 rounded bg-brand-rose/15 text-brand-rose flex items-center justify-center text-xs">
+                            <i class="fas fa-shield-alt"></i>
                         </div>
-                    </form>
+                        <div>
+                            <p class="text-[11px] font-medium text-slate-300">Segurança</p>
+                            <p class="text-[9px] text-slate-500">Guardrails</p>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Step 2: Medication Input -->
-        <div id="step-2" class="step-content hidden">
-            <div class="max-w-4xl mx-auto">
-                <div class="bg-white rounded-2xl shadow-xl p-8">
-                    <div class="text-center mb-8">
-                        <h2 class="text-3xl font-bold text-gray-800 mb-2">Identificação do Medicamento</h2>
-                        <p class="text-gray-600">Digite o nome ou carregue uma foto da embalagem</p>
+            <!-- Info Card -->
+            <div class="mt-auto glass-card p-3 rounded-xl relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-16 h-16 bg-brand-cyan rounded-full blur-3xl -mr-8 -mt-8 opacity-15"></div>
+                <h4 class="font-display font-semibold text-xs text-slate-300 mb-1">Base ANVISA</h4>
+                <p class="text-[10px] text-slate-500 leading-relaxed mb-2">
+                    Protocolos atualizados com diretrizes OMS
+                </p>
+                <div class="flex items-center gap-1.5 text-[9px] font-medium text-brand-cyan">
+                    <i class="fas fa-sync fa-spin"></i>
+                    <span id="sync-status">Sincronizado</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <section class="flex-1 pt-16 px-5 pb-5 overflow-y-auto custom-scroll relative">
+
+            <div class="max-w-3xl mx-auto h-full flex flex-col">
+
+                <!-- Step 1: Paciente -->
+                <div id="step-1" class="step-content block fade-in">
+                    <div class="mb-5">
+                        <h2 class="font-display text-xl font-bold gradient-text mb-1">Dados do Paciente</h2>
+                        <p class="text-slate-500 text-sm">Informações para calibração da análise</p>
                     </div>
 
-                    <div class="grid md:grid-cols-2 gap-8">
-                        <!-- Text Input -->
+                    <div class="grid md:grid-cols-2 gap-5">
                         <div class="space-y-4">
-                            <h3 class="text-lg font-semibold text-gray-800">Busca por Nome</h3>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1 ml-1">Idade</label>
+                                    <input type="number" id="age" value="45" class="w-full px-3 py-2.5 rounded-lg input-field text-sm font-medium text-slate-200">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1 ml-1">Peso (kg)</label>
+                                    <input type="number" id="weight" value="78" class="w-full px-3 py-2.5 rounded-lg input-field text-sm font-medium text-slate-200">
+                                </div>
+                            </div>
+
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Nome do Medicamento</label>
-                                <input type="text" id="medication-search" placeholder="Ex: Dipirona, Paracetamol..."
-                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                                <div id="medication-suggestions" class="mt-2 space-y-2 hidden"></div>
+                                <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1 ml-1">Sexo Biológico</label>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <label class="radio-card cursor-pointer">
+                                        <input type="radio" name="gender" value="masculino" class="hidden" checked>
+                                        <div class="px-3 py-2.5 rounded-lg glass-card text-center font-medium text-sm text-slate-300">Masculino</div>
+                                    </label>
+                                    <label class="radio-card cursor-pointer">
+                                        <input type="radio" name="gender" value="feminino" class="hidden">
+                                        <div class="px-3 py-2.5 rounded-lg glass-card text-center font-medium text-sm text-slate-300">Feminino</div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1 ml-1">Condições Pré-existentes</label>
+                                <textarea id="conditions" class="w-full px-3 py-2.5 rounded-lg input-field text-sm min-h-[80px] text-slate-200" placeholder="Ex: Diabetes Tipo 2, Hipertensão">Hipertensão arterial sistêmica</textarea>
+                            </div>
+
+                            <div>
+                                <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1 ml-1">Alergias Conhecidas</label>
+                                <textarea id="allergies" class="w-full px-3 py-2.5 rounded-lg input-field text-sm min-h-[50px] text-slate-200" placeholder="Ex: Penicilina, Sulfa"></textarea>
                             </div>
                         </div>
 
-                        <!-- Image Upload -->
-                        <div class="space-y-4">
-                            <h3 class="text-lg font-semibold text-gray-800">Upload de Imagem</h3>
-                            <div id="image-upload-area" class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors cursor-pointer">
-                                <i class="fas fa-camera text-4xl text-gray-400 mb-4"></i>
-                                <p class="text-gray-600 mb-2">Clique para carregar ou arraste uma imagem</p>
-                                <p class="text-sm text-gray-500">JPG, PNG até 10MB</p>
+                        <!-- Visual Card -->
+                        <div class="glass-card p-5 flex flex-col items-center justify-center min-h-[280px] rounded-xl">
+                            <div class="relative">
+                                <svg class="w-32 h-32 progress-ring">
+                                    <circle cx="64" cy="64" r="56" stroke="rgba(34, 211, 238, 0.1)" stroke-width="6" fill="none"/>
+                                    <circle cx="64" cy="64" r="56" stroke="url(#grad1)" stroke-width="6" fill="none" stroke-dasharray="352" stroke-dashoffset="88" stroke-linecap="round"/>
+                                    <defs>
+                                        <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" stop-color="#22d3ee"/>
+                                            <stop offset="100%" stop-color="#10b981"/>
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
+                                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                                    <i class="fas fa-user text-2xl text-brand-cyan mb-1"></i>
+                                    <span class="text-[10px] text-slate-500">Perfil</span>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-4 text-center">Complete os dados para prosseguir</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-5 flex justify-end">
+                        <button onclick="nextStep(2)" class="btn-primary px-6 py-2.5 rounded-lg font-display font-semibold flex items-center gap-2 text-sm">
+                            Próxima Etapa <i class="fas fa-arrow-right text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 2: Medicamentos -->
+                <div id="step-2" class="step-content">
+                    <div class="mb-5">
+                        <h2 class="font-display text-xl font-bold gradient-text mb-1">Triagem Medicamentosa</h2>
+                        <p class="text-slate-500 text-sm">Informe os medicamentos em uso e o novo medicamento</p>
+                    </div>
+
+                    <div class="grid lg:grid-cols-2 gap-5">
+                        <!-- Medicamentos em Uso -->
+                        <div class="glass-card p-4 rounded-xl">
+                            <div class="flex items-center justify-between mb-3">
+                                <h3 class="font-display font-semibold text-slate-200 flex items-center gap-2 text-sm">
+                                    <i class="fas fa-pills text-brand-teal text-xs"></i>
+                                    Medicamentos em Uso
+                                </h3>
+                                <span id="current-meds-count" class="text-[9px] bg-brand-teal/15 text-brand-teal px-2 py-0.5 rounded-full font-semibold">0</span>
+                            </div>
+                            <p class="text-[11px] text-slate-500 mb-3">Medicamentos que o paciente já utiliza</p>
+
+                            <div class="flex gap-2 mb-3">
+                                <input type="text" id="current-med-input" class="flex-1 px-3 py-2 rounded-lg input-field text-sm text-slate-200" placeholder="Ex: Losartana 50mg" onkeypress="if(event.key==='Enter')addCurrentMed()">
+                                <button onclick="addCurrentMed()" class="px-3 py-2 rounded-lg bg-brand-teal/15 text-brand-teal hover:bg-brand-teal/25 transition text-sm">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+
+                            <div id="current-meds-list" class="space-y-1.5 max-h-40 overflow-y-auto custom-scroll">
+                                <p class="text-[11px] text-slate-500 text-center py-3">Nenhum medicamento adicionado</p>
+                            </div>
+                        </div>
+
+                        <!-- Novo Medicamento -->
+                        <div class="glass-card p-4 rounded-xl border border-brand-cyan/20 relative overflow-hidden">
+                            <div class="absolute top-0 right-0 w-24 h-24 bg-brand-cyan rounded-full blur-3xl -mr-12 -mt-12 opacity-10"></div>
+
+                            <div class="flex items-center justify-between mb-3">
+                                <h3 class="font-display font-semibold text-slate-200 flex items-center gap-2 text-sm">
+                                    <i class="fas fa-search text-brand-cyan text-xs"></i>
+                                    Medicamento a Analisar
+                                </h3>
+                                <span class="text-[9px] bg-brand-cyan text-surface-900 px-2 py-0.5 rounded-full font-bold">NOVO</span>
+                            </div>
+                            <p class="text-[11px] text-slate-500 mb-3">Medicamento que deseja ADICIONAR</p>
+
+                            <input type="text" id="medication-search" class="w-full px-3 py-3 rounded-lg input-field text-base font-medium mb-3 text-slate-200" placeholder="Ex: Ibuprofeno, Dipirona...">
+
+                            <!-- Upload Area -->
+                            <div id="image-upload-area" class="glass-card p-4 flex flex-col items-center justify-center text-center cursor-pointer hover:border-brand-cyan/30 transition rounded-lg border border-dashed border-brand-cyan/15">
+                                <div class="w-10 h-10 rounded-lg bg-brand-cyan/10 text-brand-cyan flex items-center justify-center mb-2">
+                                    <i class="fas fa-camera"></i>
+                                </div>
+                                <p class="font-semibold text-slate-300 text-xs mb-0.5">Escanear Receita</p>
+                                <p class="text-[9px] text-slate-500">Arraste ou clique para upload</p>
                                 <input type="file" id="image-upload" accept="image/*" class="hidden">
                             </div>
-                            <div id="image-preview" class="hidden">
-                                <img id="preview-img" class="w-full h-48 object-cover rounded-lg">
-                                <div id="ocr-result" class="mt-4 p-4 bg-gray-50 rounded-lg hidden">
-                                    <h4 class="font-semibold text-gray-800 mb-2">Texto Identificado:</h4>
-                                    <p id="ocr-text" class="text-sm text-gray-600"></p>
+
+                            <div id="image-preview" class="hidden mt-3">
+                                <img id="preview-img" class="w-full h-24 object-cover rounded-lg mb-2">
+                                <div id="ocr-result" class="p-2 glass-card rounded-lg text-xs text-brand-emerald"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Info Box -->
+                    <div class="mt-4 p-3 rounded-lg glass-card border border-brand-amber/15 bg-brand-amber/5">
+                        <div class="flex gap-3">
+                            <i class="fas fa-info-circle text-brand-amber mt-0.5 text-sm"></i>
+                            <div class="text-xs text-slate-400">
+                                <strong class="text-slate-300">A IA irá analisar:</strong>
+                                <ul class="mt-1 space-y-0.5 list-disc ml-4">
+                                    <li>Interações com os medicamentos em uso</li>
+                                    <li>Contraindicações com as condições do paciente</li>
+                                    <li>Ajustes de dose necessários</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between items-center mt-5">
+                        <button onclick="goToStep(1)" class="text-slate-500 font-medium hover:text-slate-300 transition px-3 py-2 flex items-center gap-2 text-sm">
+                            <i class="fas fa-arrow-left text-xs"></i> Voltar
+                        </button>
+                        <button onclick="startAnalysis()" id="analyze-btn" class="btn-primary px-6 py-2.5 rounded-lg font-display font-semibold flex items-center gap-2 text-sm">
+                            <i class="fas fa-brain text-xs"></i> Iniciar Análise
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 3: Loading -->
+                <div id="step-3" class="step-content">
+                    <div class="flex flex-col items-center justify-center min-h-[55vh]">
+                        <div class="relative w-28 h-28 mb-6">
+                            <svg class="w-full h-full progress-ring animate-spin" style="animation-duration: 2.5s;">
+                                <circle cx="56" cy="56" r="48" stroke="rgba(34, 211, 238, 0.1)" stroke-width="6" fill="none"/>
+                                <circle cx="56" cy="56" r="48" stroke="url(#grad2)" stroke-width="6" fill="none" stroke-dasharray="302" stroke-dashoffset="75" stroke-linecap="round"/>
+                                <defs>
+                                    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#22d3ee"/>
+                                        <stop offset="50%" stop-color="#14b8a6"/>
+                                        <stop offset="100%" stop-color="#10b981"/>
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <i class="fas fa-dna text-2xl text-brand-cyan animate-pulse"></i>
+                            </div>
+                        </div>
+                        <h2 class="font-display text-lg font-bold text-slate-200 mb-2">Processando Análise</h2>
+                        <p class="text-slate-500 text-sm" id="loading-text">Conectando com LLM...</p>
+                        <p class="text-[10px] text-slate-600 mt-3" id="loading-time">Tempo estimado: 30 a 60 segundos</p>
+
+                        <div class="mt-5 p-3 glass-card rounded-xl max-w-sm text-center">
+                            <p class="text-[9px] text-slate-500 uppercase font-semibold mb-1">Analisando</p>
+                            <p id="analyzing-med" class="font-display font-bold text-brand-cyan text-sm">---</p>
+                            <p id="analyzing-vs" class="text-[10px] text-slate-500 mt-1"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 4: Resultados -->
+                <div id="step-4" class="step-content">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+                        <!-- Main Results -->
+                        <div class="lg:col-span-2 space-y-4 overflow-y-auto custom-scroll max-h-[70vh]">
+
+                            <div class="flex items-center justify-between mb-2">
+                                <h2 class="font-display text-lg font-bold gradient-text">Relatório de Segurança</h2>
+                                <span id="risk-badge" class="px-3 py-1 rounded-full text-[10px] font-bold glass-card text-slate-400">
+                                    <i class="fas fa-spinner fa-spin mr-1"></i> Carregando
+                                </span>
+                            </div>
+
+                            <!-- Contraindicações -->
+                            <div id="contraindications-section" class="result-card">
+                                <div class="result-card-header bg-brand-rose/5">
+                                    <div class="w-7 h-7 rounded bg-brand-rose/15 text-brand-rose flex items-center justify-center text-xs">
+                                        <i class="fas fa-ban"></i>
+                                    </div>
+                                    <h3 class="font-display font-semibold text-slate-200 text-sm">Contraindicações</h3>
+                                    <span id="contraindication-count" class="ml-auto text-[9px] bg-brand-rose/15 text-brand-rose px-2 py-0.5 rounded-full font-semibold">0</span>
+                                </div>
+                                <div id="contraindications-list" class="p-4">
+                                    <p class="text-slate-500 text-sm">Nenhuma contraindicação identificada</p>
+                                </div>
+                            </div>
+
+                            <!-- Interações -->
+                            <div id="interactions-section" class="result-card">
+                                <div class="result-card-header bg-brand-amber/5">
+                                    <div class="w-7 h-7 rounded bg-brand-amber/15 text-brand-amber flex items-center justify-center text-xs">
+                                        <i class="fas fa-exchange-alt"></i>
+                                    </div>
+                                    <h3 class="font-display font-semibold text-slate-200 text-sm">Interações Medicamentosas</h3>
+                                    <span id="interaction-count" class="ml-auto text-[9px] bg-brand-amber/15 text-brand-amber px-2 py-0.5 rounded-full font-semibold">0</span>
+                                </div>
+                                <div id="interactions-list" class="p-4">
+                                    <p class="text-slate-500 text-sm">Nenhuma interação significativa</p>
+                                </div>
+                            </div>
+
+                            <!-- Reações Adversas -->
+                            <div id="adverse-section" class="result-card">
+                                <div class="result-card-header bg-violet-500/5">
+                                    <div class="w-7 h-7 rounded bg-violet-500/15 text-violet-400 flex items-center justify-center text-xs">
+                                        <i class="fas fa-allergies"></i>
+                                    </div>
+                                    <h3 class="font-display font-semibold text-slate-200 text-sm">Reações Adversas Potenciais</h3>
+                                    <span id="adverse-count" class="ml-auto text-[9px] bg-violet-500/15 text-violet-400 px-2 py-0.5 rounded-full font-semibold">0</span>
+                                </div>
+                                <div id="adverse-reactions-list" class="p-4">
+                                    <p class="text-slate-500 text-sm">Perfil de segurança favorável</p>
+                                </div>
+                            </div>
+
+                            <!-- Recomendações -->
+                            <div id="recommendations-section" class="result-card">
+                                <div class="result-card-header bg-brand-cyan/5">
+                                    <div class="w-7 h-7 rounded bg-brand-cyan/15 text-brand-cyan flex items-center justify-center text-xs">
+                                        <i class="fas fa-user-md"></i>
+                                    </div>
+                                    <h3 class="font-display font-semibold text-slate-200 text-sm">Recomendações Clínicas</h3>
+                                    <span id="recommendation-count" class="ml-auto text-[9px] bg-brand-cyan/15 text-brand-cyan px-2 py-0.5 rounded-full font-semibold">0</span>
+                                </div>
+                                <div id="recommendations-list" class="p-4">
+                                    <p class="text-slate-500 text-sm">Aguardando análise</p>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div class="mt-8 flex justify-between">
-                        <button id="back-to-step1" class="px-6 py-3 bg-gray-500 text-white rounded-lg font-semibold hover:bg-gray-600 transition-colors">
-                            <i class="fas fa-arrow-left mr-2"></i>
-                            Voltar
-                        </button>
-                        <button id="analyze-medication" class="px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
-                            Analisar Medicamento
-                            <i class="fas fa-search ml-2"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Step 3: Analysis Loading -->
-        <div id="step-3" class="step-content hidden">
-            <div class="max-w-2xl mx-auto">
-                <div class="bg-white rounded-2xl shadow-xl p-8 text-center">
-                    <div class="mb-8">
-                        <div class="pulse-animation inline-block">
-                            <i class="fas fa-cog fa-spin text-6xl text-blue-600"></i>
-                        </div>
-                        <h2 class="text-2xl font-bold text-gray-800 mt-4 mb-2">Analisando Medicamento</h2>
-                        <p class="text-gray-600">Aplicando diretrizes OMS e ANVISA...</p>
-                    </div>
-                    
-                    <div class="space-y-4 text-left">
-                        <div class="flex items-center space-x-3">
-                            <i class="fas fa-check-circle text-green-500"></i>
-                            <span class="text-gray-700">Verificando contraindicações</span>
-                        </div>
-                        <div class="flex items-center space-x-3">
-                            <i class="fas fa-spinner fa-spin text-blue-500"></i>
-                            <span class="text-gray-700">Analisando interações medicamentosas</span>
-                        </div>
-                        <div class="flex items-center space-x-3">
-                            <i class="fas fa-clock text-gray-400"></i>
-                            <span class="text-gray-500">Consultando base OMS/ANVISA</span>
-                        </div>
-                        <div class="flex items-center space-x-3">
-                            <i class="fas fa-clock text-gray-400"></i>
-                            <span class="text-gray-500">Gerando recomendações</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Step 4: Results -->
-        <div id="step-4" class="step-content hidden">
-            <div class="max-w-6xl mx-auto space-y-8">
-                <!-- Risk Overview -->
-                <div id="risk-overview" class="bg-white rounded-2xl shadow-xl p-8">
-                    <div class="text-center mb-8">
-                        <h2 class="text-3xl font-bold text-gray-800 mb-2">Resultado da Análise</h2>
-                        <p class="text-gray-600">Baseado em diretrizes OMS e ANVISA</p>
-                    </div>
-                    
-                    <div id="overall-risk-card" class="risk-low p-6 rounded-xl text-white text-center mb-8">
-                        <div class="text-4xl font-bold mb-2" id="risk-level-text">RISCO BAIXO</div>
-                        <p class="text-lg opacity-90" id="risk-description">Medicamento seguro para suas condições</p>
-                    </div>
-                </div>
-
-                <!-- Detailed Results -->
-                <div class="grid lg:grid-cols-2 gap-8">
-                    <!-- Contraindications -->
-                    <div class="bg-white rounded-2xl shadow-xl p-6">
-                        <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
-                            <i class="fas fa-exclamation-triangle text-red-500 mr-3"></i>
-                            Contraindicações
-                        </h3>
-                        <div id="contraindications-list" class="space-y-3">
-                            <!-- Will be populated by JavaScript -->
-                        </div>
-                    </div>
-
-                    <!-- Drug Interactions -->
-                    <div class="bg-white rounded-2xl shadow-xl p-6">
-                        <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
-                            <i class="fas fa-exchange-alt text-orange-500 mr-3"></i>
-                            Interações
-                        </h3>
-                        <div id="interactions-list" class="space-y-3">
-                            <!-- Will be populated by JavaScript -->
-                        </div>
-                    </div>
-
-                    <!-- Adverse Reactions -->
-                    <div class="bg-white rounded-2xl shadow-xl p-6">
-                        <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
-                            <i class="fas fa-heart-pulse text-blue-500 mr-3"></i>
-                            Reações Adversas
-                        </h3>
-                        <div id="adverse-reactions-list" class="space-y-3">
-                            <!-- Will be populated by JavaScript -->
-                        </div>
-                    </div>
-
-                    <!-- Recommendations -->
-                    <div class="bg-white rounded-2xl shadow-xl p-6">
-                        <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
-                            <i class="fas fa-user-md text-green-500 mr-3"></i>
-                            Recomendações
-                        </h3>
-                        <div id="recommendations-list" class="space-y-3">
-                            <!-- Will be populated by JavaScript -->
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 3D Visualization -->
-                <div class="bg-white rounded-2xl shadow-xl p-6">
-                    <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-xl font-bold text-gray-800">Visualização 3D</h3>
-                        <button id="toggle-3d-view" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                            <i class="fas fa-cube mr-2"></i>
-                            Mostrar Grafo de Interações
-                        </button>
-                    </div>
-                    <div id="three-container" class="w-full h-96 bg-gray-100"></div>
-                </div>
-
-                <!-- Summary Text -->
-                <div class="bg-white rounded-2xl shadow-xl p-8">
-                    <h3 class="text-xl font-bold text-gray-800 mb-4">Resumo Explicativo</h3>
-                    <div id="summary-text" class="prose max-w-none text-gray-700">
-                        <!-- Will be populated by JavaScript -->
-                    </div>
-                    
-                    <div class="mt-6 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded">
-                        <div class="flex">
-                            <i class="fas fa-exclamation-triangle text-yellow-400 mr-3 mt-1"></i>
-                            <div>
-                                <p class="font-semibold text-yellow-800">Importante</p>
-                                <p class="text-sm text-yellow-700 mt-1">
-                                    Esta é uma ferramenta de apoio informativo baseada em diretrizes OMS e ANVISA. 
-                                    Sempre consulte seu médico antes de usar qualquer medicamento.
-                                </p>
+                        <!-- Sidebar Results -->
+                        <div class="space-y-4">
+                            <!-- Risk Score Card -->
+                            <div class="glass-card p-4 rounded-xl">
+                                <h4 class="font-display font-semibold text-slate-200 text-sm mb-3 text-center">Risco Combinado</h4>
+                                <div class="relative w-28 h-28 mx-auto">
+                                    <svg class="w-full h-full progress-ring">
+                                        <circle cx="56" cy="56" r="48" stroke="rgba(34, 211, 238, 0.1)" stroke-width="8" fill="none"/>
+                                        <circle id="risk-circle" cx="56" cy="56" r="48" stroke="url(#riskGrad)" stroke-width="8" fill="none" stroke-dasharray="302" stroke-dashoffset="30" stroke-linecap="round"/>
+                                        <defs>
+                                            <linearGradient id="riskGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                <stop offset="0%" stop-color="#10b981"/>
+                                                <stop offset="100%" stop-color="#22d3ee"/>
+                                            </linearGradient>
+                                        </defs>
+                                    </svg>
+                                    <div class="absolute inset-0 flex flex-col items-center justify-center">
+                                        <span id="risk-score" class="font-display text-2xl font-bold text-slate-200">--</span>
+                                        <span id="risk-label" class="text-[9px] text-brand-emerald uppercase font-bold mt-0.5 px-2 py-0.5 bg-brand-emerald/10 rounded-full">Calculando</span>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 mt-4">
+                                    <div class="p-2 rounded-lg glass-card">
+                                        <p class="text-[8px] text-slate-500 uppercase font-semibold text-center mb-1">Confiabilidade</p>
+                                        <p id="confidence-value" class="font-display font-bold text-brand-cyan text-sm text-center">--%</p>
+                                        <div class="mt-1.5 h-1 bg-surface-700 rounded-full overflow-hidden">
+                                            <div id="confidence-bar" class="h-full bg-brand-cyan rounded-full transition-all duration-500" style="width: 0%"></div>
+                                        </div>
+                                    </div>
+                                    <div class="text-center p-2 rounded-lg glass-card">
+                                        <p class="text-[8px] text-slate-500 uppercase font-semibold">Modelo</p>
+                                        <p id="model-used" class="font-display font-bold text-slate-200 text-[10px]">--</p>
+                                    </div>
+                                </div>
                             </div>
+
+                            <!-- Summary Card -->
+                            <div class="glass-card p-4 rounded-xl">
+                                <h4 class="font-display font-semibold text-sm text-slate-200 mb-2">Resumo</h4>
+                                <p id="agent-summary" class="text-[11px] text-slate-400 leading-relaxed">
+                                    Aguardando análise...
+                                </p>
+                                <div class="flex items-center gap-2 mt-3">
+                                    <div class="w-5 h-5 rounded bg-violet-500/15 flex items-center justify-center text-[9px] text-violet-400">
+                                        <i class="fas fa-robot"></i>
+                                    </div>
+                                    <span id="agent-model" class="text-[9px] text-slate-500">LangGraph Multi-Agent</span>
+                                </div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <button onclick="resetAnalysis()" class="w-full py-2.5 rounded-lg glass-card text-slate-300 font-semibold hover:bg-surface-600/50 transition flex items-center justify-center gap-2 text-sm">
+                                <i class="fas fa-redo text-slate-500 text-xs"></i> Nova Análise
+                            </button>
+                            <button onclick="downloadReport()" class="w-full py-2.5 rounded-lg btn-primary flex items-center justify-center gap-2 text-sm">
+                                <i class="fas fa-file-pdf text-xs"></i> Exportar Laudo
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Actions -->
-                <div class="flex justify-center space-x-4">
-                    <button id="new-analysis" class="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors">
-                        <i class="fas fa-plus mr-2"></i>
-                        Nova Análise
-                    </button>
-                    <button id="download-report" class="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors">
-                        <i class="fas fa-download mr-2"></i>
-                        Baixar Relatório
-                    </button>
-                </div>
             </div>
-        </div>
+        </section>
+
     </main>
 
-    <!-- Footer -->
-    <footer class="bg-gray-800 text-white py-8 mt-16">
-        <div class="container mx-auto px-6 text-center">
-            <p class="mb-2">&copy; 2024 MedSafe - Sistema de Contra-indicativos de Medicamentos</p>
-            <p class="text-sm text-gray-400">
-                Desenvolvido com base em diretrizes da OMS e regulamentações ANVISA (RDC 47/2009, 94/2008, 96/2008)
-            </p>
-            <p class="text-xs text-gray-500 mt-2">
-                Processamento local com AG2/Ollama - Seus dados não são enviados para servidores externos
-            </p>
-        </div>
-    </footer>
+    <script>
+        // =============================================================================
+        // MedSafe Frontend - Refined Edition
+        // =============================================================================
 
-    <script src="js/app.js"></script>
-    <script src="js/three-visualization.js"></script>
+        const API_URL = window.location.hostname.includes('hf.space')
+            ? 'https://medsafe-mvp.hf.space'
+            : (window.location.protocol === 'https:' ? window.location.origin : 'http://localhost:9001');
+
+        let patientData = {};
+        let currentMedications = [];
+        let analysisResult = null;
+        let sessionId = null;
+
+        // =============================================================================
+        // MEDICAL TERMINOLOGY TRANSLATION (English → Portuguese)
+        // =============================================================================
+        
+        const INTERACTION_TRANSLATIONS = {
+            // Verbs and actions
+            'may increase': 'pode aumentar',
+            'may decrease': 'pode diminuir',
+            'can increase': 'pode aumentar',
+            'can decrease': 'pode diminuir',
+            'can be increased': 'pode ser aumentada',
+            'can be decreased': 'pode ser diminuída',
+            'may enhance': 'pode potencializar',
+            'may reduce': 'pode reduzir',
+            'may potentiate': 'pode potencializar',
+            'may inhibit': 'pode inibir',
+            'may induce': 'pode induzir',
+            'increases': 'aumenta',
+            'decreases': 'diminui',
+            'enhances': 'potencializa',
+            'reduces': 'reduz',
+            'potentiates': 'potencializa',
+            'inhibits': 'inibe',
+            'induces': 'induz',
+            
+            // Medical terms
+            'hypotensive activities': 'efeitos hipotensores',
+            'hypertensive activities': 'efeitos hipertensores',
+            'anticoagulant activities': 'efeitos anticoagulantes',
+            'antihypertensive activities': 'efeitos anti-hipertensivos',
+            'sedative activities': 'efeitos sedativos',
+            'CNS depressant activities': 'efeitos depressores do SNC',
+            'hepatotoxic activities': 'efeitos hepatotóxicos',
+            'nephrotoxic activities': 'efeitos nefrotóxicos',
+            'cardiotoxic activities': 'efeitos cardiotóxicos',
+            'ototoxic activities': 'efeitos ototóxicos',
+            'neurotoxic activities': 'efeitos neurotóxicos',
+            'bradycardic activities': 'efeitos bradicárdicos',
+            'tachycardic activities': 'efeitos taquicárdicos',
+            'hypoglycemic activities': 'efeitos hipoglicemiantes',
+            'hyperglycemic activities': 'efeitos hiperglicemiantes',
+            'therapeutic efficacy': 'eficácia terapêutica',
+            'adverse effects': 'efeitos adversos',
+            'side effects': 'efeitos colaterais',
+            'serum concentration': 'concentração sérica',
+            'plasma concentration': 'concentração plasmática',
+            'serum level': 'nível sérico',
+            'blood concentration': 'concentração sanguínea',
+            'metabolism': 'metabolismo',
+            'absorption': 'absorção',
+            'excretion': 'excreção',
+            'bioavailability': 'biodisponibilidade',
+            'half-life': 'meia-vida',
+            'clearance': 'depuração',
+            
+            // Severity and risk
+            'risk of': 'risco de',
+            'bleeding': 'sangramento',
+            'hemorrhage': 'hemorragia',
+            'arrhythmia': 'arritmia',
+            'cardiac arrhythmia': 'arritmia cardíaca',
+            'QT prolongation': 'prolongamento do intervalo QT',
+            'serotonin syndrome': 'síndrome serotoninérgica',
+            'neuroleptic malignant syndrome': 'síndrome neuroléptica maligna',
+            'respiratory depression': 'depressão respiratória',
+            'hypotension': 'hipotensão',
+            'hypertension': 'hipertensão',
+            'bradycardia': 'bradicardia',
+            'tachycardia': 'taquicardia',
+            'hyperkalemia': 'hipercalemia',
+            'hypokalemia': 'hipocalemia',
+            'hypernatremia': 'hipernatremia',
+            'hyponatremia': 'hiponatremia',
+            'hypoglycemia': 'hipoglicemia',
+            'hyperglycemia': 'hiperglicemia',
+            'hepatotoxicity': 'hepatotoxicidade',
+            'nephrotoxicity': 'nefrotoxicidade',
+            'myopathy': 'miopatia',
+            'rhabdomyolysis': 'rabdomiólise',
+            
+            // Mechanism descriptions
+            'Drug interaction between': 'Interação medicamentosa entre',
+            'when combined with': 'quando combinado com',
+            'when it is combined with': 'quando combinado com',
+            'when used with': 'quando usado com',
+            'when administered with': 'quando administrado com',
+            'when coadministered with': 'quando coadministrado com',
+            'in combination with': 'em combinação com',
+            'concurrent use': 'uso concomitante',
+            'concomitant use': 'uso concomitante',
+            'coadministration': 'coadministração',
+            
+            // Common phrases
+            'The serum concentration of': 'A concentração sérica de',
+            'The metabolism of': 'O metabolismo de',
+            'The absorption of': 'A absorção de',
+            'The excretion of': 'A excreção de',
+            'The therapeutic efficacy of': 'A eficácia terapêutica de',
+            'The risk or severity of': 'O risco ou gravidade de',
+            'The risk of': 'O risco de',
+            'increased when': 'aumentado quando',
+            'decreased when': 'diminuído quando',
+            
+            // Common English words (translate at the end to avoid breaking phrases)
+            ' the ': ' os ',
+            ' of ': ' de ',
+            ' and ': ' e ',
+            ' or ': ' ou ',
+            ' with ': ' com ',
+            ' by ': ' por ',
+            ' to ': ' para ',
+            ' in ': ' em ',
+            ' is ': ' é ',
+            ' are ': ' são ',
+            ' be ': ' ser ',
+            ' a ': ' um ',
+            ' an ': ' um ',
+            
+            // Severity levels
+            'high': 'alto',
+            'medium': 'moderado',
+            'low': 'baixo',
+            'critical': 'crítico',
+            'major': 'grave',
+            'moderate': 'moderado',
+            'minor': 'leve',
+            
+            // Drug classes
+            'beta-blocker': 'betabloqueador',
+            'beta blocker': 'betabloqueador',
+            'ACE inhibitor': 'inibidor da ECA',
+            'calcium channel blocker': 'bloqueador dos canais de cálcio',
+            'diuretic': 'diurético',
+            'antiplatelet': 'antiplaquetário',
+            'anticoagulant': 'anticoagulante',
+            'antidepressant': 'antidepressivo',
+            'antipsychotic': 'antipsicótico',
+            'anxiolytic': 'ansiolítico',
+            'sedative': 'sedativo',
+            'hypnotic': 'hipnótico',
+            'analgesic': 'analgésico',
+            'opioid': 'opioide',
+            'NSAID': 'AINE',
+            'statin': 'estatina',
+            'PPI': 'IBP',
+            'proton pump inhibitor': 'inibidor da bomba de prótons',
+        };
+
+        function translateInteraction(text) {
+            if (!text) return '';
+            let translated = text;
+            
+            // Sort by length (longest first) to avoid partial replacements
+            const sortedKeys = Object.keys(INTERACTION_TRANSLATIONS).sort((a, b) => b.length - a.length);
+            
+            for (const eng of sortedKeys) {
+                const pt = INTERACTION_TRANSLATIONS[eng];
+                // Case-insensitive replacement
+                const regex = new RegExp(eng.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+                translated = translated.replace(regex, pt);
+            }
+            
+            return translated;
+        }
+        
+        function translateSeverity(sev) {
+            const map = {
+                'high': 'Alto',
+                'medium': 'Moderado', 
+                'low': 'Baixo',
+                'critical': 'Crítico',
+                'major': 'Grave',
+                'moderate': 'Moderado',
+                'minor': 'Leve'
+            };
+            return map[(sev || '').toLowerCase()] || sev;
+        }
+
+        // =============================================================================
+        // INITIALIZATION
+        // =============================================================================
+
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAPIStatus();
+            setupImageUpload();
+            updateSyncStatus();
+        });
+
+        async function checkAPIStatus() {
+            const statusEl = document.getElementById('api-status');
+            try {
+                const response = await fetch(`${API_URL}/healthz`, { method: 'GET' });
+                if (response.ok) {
+                    statusEl.innerHTML = `
+                        <div class="w-1.5 h-1.5 bg-brand-emerald rounded-full animate-pulse"></div>
+                        <span class="text-brand-emerald">Online</span>
+                    `;
+                } else {
+                    throw new Error('API offline');
+                }
+            } catch (error) {
+                statusEl.innerHTML = `
+                    <div class="w-1.5 h-1.5 bg-brand-rose rounded-full"></div>
+                    <span class="text-brand-rose">Offline</span>
+                `;
+            }
+        }
+
+        function updateSyncStatus() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            document.getElementById('sync-status').textContent = `Sincronizado ${timeStr}`;
+        }
+
+        function setupImageUpload() {
+            const uploadArea = document.getElementById('image-upload-area');
+            const uploadInput = document.getElementById('image-upload');
+
+            uploadArea.addEventListener('click', () => uploadInput.click());
+            uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('border-brand-cyan/30'); });
+            uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('border-brand-cyan/30'));
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('border-brand-cyan/30');
+                if (e.dataTransfer.files.length > 0) handleImageUpload(e.dataTransfer.files[0]);
+            });
+            uploadInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) handleImageUpload(e.target.files[0]);
+            });
+        }
+
+        // =============================================================================
+        // TEXT CLEANING - Remove special characters and formatting
+        // =============================================================================
+
+        function cleanText(text) {
+            if (!text) return '';
+            return text
+                // Remove markdown formatting
+                .replace(/\*+/g, '')
+                .replace(/_+/g, ' ')
+                .replace(/^#+\s*/gm, '')
+                .replace(/^[-•]\s*/gm, '')
+                // Remove multiple punctuation
+                .replace(/([.,!?;:]){2,}/g, '$1')
+                .replace(/\s+([.,!?;:])/g, '$1')
+                .replace(/^[.,!?;:]+\s*/gm, '')
+                // Remove control characters
+                .replace(/[\x00-\x1F\x7F]/g, '')
+                // Remove code formatting
+                .replace(/`+/g, '')
+                .replace(/\[\s*\]/g, '')
+                .replace(/\{\s*\}/g, '')
+                // Remove pipe tables
+                .replace(/\|/g, ' ')
+                // Remove excess whitespace
+                .replace(/\s+/g, ' ')
+                // Remove leading/trailing dashes
+                .replace(/^[-–—]+\s*/gm, '')
+                .replace(/\s*[-–—]+$/gm, '')
+                .trim();
+        }
+
+        // =============================================================================
+        // NAVIGATION
+        // =============================================================================
+
+        function goToStep(stepNumber) {
+            document.querySelectorAll('.step-content').forEach(el => el.classList.remove('block', 'fade-in'));
+            const target = document.getElementById(`step-${stepNumber}`);
+            target.classList.add('block', 'fade-in');
+
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            const activeNav = document.getElementById(`nav-step-${stepNumber}`);
+            if (activeNav) activeNav.classList.add('active');
+
+            if (stepNumber > 1) document.querySelector('#nav-step-1 .status-text').innerText = 'Concluído';
+        }
+
+        function nextStep(step) {
+            if (step === 2) collectPatientData();
+            goToStep(step);
+        }
+
+        function collectPatientData() {
+            const gender = document.querySelector('input[name="gender"]:checked');
+            const rawGender = gender ? gender.value : null;
+            const sex = rawGender === 'masculino' ? 'M' : (rawGender === 'feminino' ? 'F' : null);
+
+            patientData = {
+                age: parseInt(document.getElementById('age').value) || 0,
+                weight: parseFloat(document.getElementById('weight').value) || null,
+                sex,
+                conditions: parseTextList(document.getElementById('conditions').value),
+                current_medications: currentMedications.map(m => m.name),
+                allergies: parseTextList(document.getElementById('allergies').value)
+            };
+        }
+
+        function parseTextList(text) {
+            if (!text || !text.trim()) return [];
+            return text.split(/[,\n]/).map(item => item.trim()).filter(item => item.length > 0);
+        }
+
+        // =============================================================================
+        // CURRENT MEDICATIONS
+        // =============================================================================
+
+        function addCurrentMed() {
+            const input = document.getElementById('current-med-input');
+            const name = input.value.trim();
+            if (!name) return;
+
+            currentMedications.push({ id: Date.now(), name });
+            input.value = '';
+            renderCurrentMeds();
+        }
+
+        function removeCurrentMed(id) {
+            currentMedications = currentMedications.filter(m => m.id !== id);
+            renderCurrentMeds();
+        }
+
+        function renderCurrentMeds() {
+            const container = document.getElementById('current-meds-list');
+            const countEl = document.getElementById('current-meds-count');
+            countEl.textContent = currentMedications.length;
+
+            if (currentMedications.length === 0) {
+                container.innerHTML = '<p class="text-[11px] text-slate-500 text-center py-3">Nenhum medicamento adicionado</p>';
+                return;
+            }
+
+            container.innerHTML = currentMedications.map(med => `
+                <div class="med-item flex items-center justify-between p-2 rounded-lg glass-card group">
+                    <div class="flex items-center gap-2">
+                        <div class="w-6 h-6 rounded bg-brand-teal/15 text-brand-teal flex items-center justify-center text-[10px]">
+                            <i class="fas fa-pill"></i>
+                        </div>
+                        <span class="text-sm font-medium text-slate-300">${sanitizeText(med.name)}</span>
+                    </div>
+                    <button onclick="removeCurrentMed(${med.id})" class="w-6 h-6 rounded bg-brand-rose/10 text-brand-rose opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                        <i class="fas fa-times text-[10px]"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        // =============================================================================
+        // IMAGE UPLOAD (OCR)
+        // =============================================================================
+
+        async function handleImageUpload(file) {
+            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+            if (!allowedTypes.includes(file.type)) {
+                alert('Tipo de arquivo não suportado. Use JPG ou PNG.');
+                return;
+            }
+
+            if (file.size > 10 * 1024 * 1024) {
+                alert('Arquivo muito grande. Máximo 10MB.');
+                return;
+            }
+
+            const previewContainer = document.getElementById('image-preview');
+            const previewImg = document.getElementById('preview-img');
+            const ocrResult = document.getElementById('ocr-result');
+
+            previewImg.src = URL.createObjectURL(file);
+            previewContainer.classList.remove('hidden');
+            ocrResult.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Processando OCR...';
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch(`${API_URL}/api/v2/vision/analyze`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Erro no OCR');
+                const result = await response.json();
+
+                if (result.medication_name) {
+                    const cleanedName = cleanText(result.medication_name);
+                    document.getElementById('medication-search').value = cleanedName;
+                    ocrResult.innerHTML = `<i class="fas fa-check-circle mr-2 text-brand-emerald"></i>Medicamento identificado: <strong class="text-brand-cyan">${sanitizeText(cleanedName)}</strong>`;
+                } else {
+                    ocrResult.innerHTML = `<i class="fas fa-info-circle mr-2 text-brand-amber"></i>Texto extraído, mas medicamento não identificado`;
+                }
+
+            } catch (error) {
+                ocrResult.innerHTML = '<i class="fas fa-exclamation-triangle mr-2 text-brand-rose"></i>Erro ao processar imagem';
+            }
+        }
+
+        // =============================================================================
+        // ANALYSIS
+        // =============================================================================
+
+        function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+        async function pollAnalysisStatus(sessionId, timeoutMs = 600000, intervalMs = 2000) {
+            const start = Date.now();
+            while (true) {
+                if (Date.now() - start > timeoutMs) {
+                    throw new Error('Análise excedeu o tempo limite. Tente novamente.');
+                }
+
+                const resp = await fetch(`${API_URL}/api/v2/status/${encodeURIComponent(sessionId)}`, { method: 'GET' });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || `Erro ao consultar status: ${resp.status}`);
+                }
+                const data = await resp.json();
+                const status = (data.status || '').toLowerCase();
+
+                const statusMessages = {
+                    'pending': 'Aguardando processamento...',
+                    'running': 'Analisando interações com IA...',
+                    'awaiting_review': 'Análise concluída - aguardando revisão',
+                };
+                if (statusMessages[status]) {
+                    document.getElementById('loading-text').innerText = statusMessages[status];
+                }
+
+                if (status === 'completed' || status === 'failed' || status === 'rejected' || status === 'awaiting_review') {
+                    return data;
+                }
+
+                await sleep(intervalMs);
+            }
+        }
+
+        async function startAnalysis() {
+            const medicationText = document.getElementById('medication-search').value.trim();
+
+            if (!medicationText) {
+                alert('Por favor, informe o medicamento a ser analisado.');
+                return;
+            }
+
+            if (!patientData || Object.keys(patientData).length === 0) {
+                collectPatientData();
+            }
+
+            patientData.current_medications = currentMedications.map(m => m.name);
+
+            goToStep(3);
+            document.getElementById('nav-step-3').classList.remove('opacity-50', 'pointer-events-none');
+
+            document.getElementById('analyzing-med').innerText = medicationText;
+            document.getElementById('analyzing-vs').innerText = currentMedications.length > 0 
+                ? `vs. ${currentMedications.map(m => m.name).join(', ')}`
+                : 'Paciente sem medicamentos em uso';
+
+            const loadingText = document.getElementById('loading-text');
+            const messages = [
+                "Conectando com LLM...",
+                "Analisando interações medicamentosas...",
+                "Consultando base ANVISA...",
+                "Verificando contraindicações...",
+                "Gerando recomendações clínicas...",
+                "Finalizando relatório..."
+            ];
+
+            let i = 0;
+            const interval = setInterval(() => {
+                loadingText.innerText = messages[i % messages.length];
+                i++;
+            }, 3000);
+
+            try {
+                const payload = {
+                    medication: medicationText,
+                    patient_data: patientData,
+                    save_to_db: true
+                };
+
+                const response = await fetch(`${API_URL}/api/v2/analyze`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.detail || `Erro ${response.status}`);
+                }
+
+                const started = await response.json();
+                sessionId = started.session_id;
+                if (!sessionId) throw new Error('Servidor não retornou session_id');
+
+                analysisResult = await pollAnalysisStatus(sessionId);
+                clearInterval(interval);
+
+                displayResults();
+                goToStep(4);
+
+                document.getElementById('nav-step-4').classList.remove('opacity-50', 'pointer-events-none');
+                document.querySelector('#nav-step-2 .status-text').innerText = 'Concluído';
+                document.querySelector('#nav-step-3 .status-text').innerText = 'Concluído';
+
+            } catch (error) {
+                clearInterval(interval);
+                let errorMsg = 'Erro ao analisar medicamento';
+                if (error.name === 'AbortError') {
+                    errorMsg = 'Análise excedeu o tempo limite. Verifique se o Ollama está rodando.';
+                } else if (error.message) {
+                    errorMsg = cleanText(error.message);
+                }
+                alert(errorMsg);
+                goToStep(2);
+            }
+        }
+
+        // =============================================================================
+        // DISPLAY RESULTS
+        // =============================================================================
+
+        function displayResults() {
+            if (!analysisResult) return;
+
+            const riskLevel = analysisResult.risk_level || 'low';
+            updateRiskDisplay(riskLevel);
+
+            // Get calibrated accuracy from backend (includes anamnesis completeness, critique, etc.)
+            const accuracy = (analysisResult.accuracy_score !== undefined && analysisResult.accuracy_score !== null)
+                ? analysisResult.accuracy_score
+                : (analysisResult.confidence_score || 0);
+            const accuracyPct = Math.round(accuracy * 100);
+            
+            // Color-code accuracy display based on confidence level
+            const accuracyEl = document.getElementById('confidence-value');
+            const accuracyBar = document.getElementById('confidence-bar');
+            accuracyEl.textContent = `${accuracyPct}%`;
+            
+            let barColor = 'bg-brand-cyan';
+            if (accuracyPct >= 85) {
+                accuracyEl.className = 'font-display font-bold text-brand-emerald text-sm text-center';
+                barColor = 'bg-brand-emerald';
+            } else if (accuracyPct >= 70) {
+                accuracyEl.className = 'font-display font-bold text-brand-cyan text-sm text-center';
+                barColor = 'bg-brand-cyan';
+            } else if (accuracyPct >= 50) {
+                accuracyEl.className = 'font-display font-bold text-brand-amber text-sm text-center';
+                barColor = 'bg-brand-amber';
+            } else {
+                accuracyEl.className = 'font-display font-bold text-brand-rose text-sm text-center';
+                barColor = 'bg-brand-rose';
+            }
+            
+            // Animate the confidence bar
+            accuracyBar.className = `h-full ${barColor} rounded-full transition-all duration-500`;
+            setTimeout(() => { accuracyBar.style.width = `${accuracyPct}%`; }, 100);
+
+            const model = (analysisResult.model_used || analysisResult.final_report?.model_used || 'LangGraph');
+            document.getElementById('model-used').textContent = cleanText(String(model).split(':')[0] || model);
+            document.getElementById('agent-model').textContent = cleanText(model);
+
+            const contraindications = analysisResult.contraindications || [];
+            displayContraindications(contraindications);
+            document.getElementById('contraindication-count').textContent = contraindications.length;
+
+            const interactions = analysisResult.interactions || [];
+            displayInteractions(interactions);
+            document.getElementById('interaction-count').textContent = interactions.length;
+
+            const adverse = analysisResult.adverse_reactions || [];
+            displayAdverseReactions(adverse);
+            document.getElementById('adverse-count').textContent = adverse.length;
+
+            let recommendations = analysisResult.recommendations || [];
+            if ((!recommendations || recommendations.length === 0) && analysisResult.structured_recommendations) {
+                const sr = analysisResult.structured_recommendations;
+                const fromStructured = [];
+                const pushList = (label, list) => {
+                    if (Array.isArray(list)) {
+                        list.forEach(it => {
+                            const t = (it === null || it === undefined) ? '' : cleanText(String(it));
+                            if (t) fromStructured.push(`${label}: ${t}`);
+                        });
+                    }
+                };
+                if (sr.header) fromStructured.push(cleanText(String(sr.header)));
+                pushList('Ações imediatas', sr.immediate_actions);
+                pushList('Monitorização', sr.monitoring_required);
+                pushList('Exames', sr.laboratory_tests);
+                pushList('Alertas', sr.patient_alerts);
+                pushList('Alternativas', sr.alternatives);
+                pushList('Acompanhamento', sr.follow_up);
+                pushList('Orientações', sr.patient_counseling);
+                recommendations = fromStructured;
+            }
+            if ((!recommendations || recommendations.length === 0) && Array.isArray(analysisResult.dosage_adjustments)) {
+                recommendations = analysisResult.dosage_adjustments.map(d => {
+                    if (d && typeof d === 'object') return cleanText(d.recommendation || d.description || JSON.stringify(d));
+                    return cleanText(d);
+                }).filter(Boolean);
+            }
+            displayRecommendations(recommendations);
+            document.getElementById('recommendation-count').textContent = recommendations.length;
+
+            const summary =
+                analysisResult.analysis_notes ||
+                analysisResult.analysis?.analysis_notes ||
+                analysisResult.summary ||
+                analysisResult.message ||
+                'Análise concluída com sucesso.';
+            document.getElementById('agent-summary').textContent = cleanText(summary).substring(0, 180);
+        }
+
+        function updateRiskDisplay(risk) {
+            const riskConfig = {
+                'low': { score: 2.5, label: 'Baixo', color: '#10b981', bgColor: 'bg-brand-emerald/10', textColor: 'text-brand-emerald', offset: 242 },
+                'medium': { score: 5.0, label: 'Moderado', color: '#f59e0b', bgColor: 'bg-brand-amber/10', textColor: 'text-brand-amber', offset: 151 },
+                'high': { score: 7.5, label: 'Alto', color: '#f43f5e', bgColor: 'bg-brand-rose/10', textColor: 'text-brand-rose', offset: 75 },
+                'critical': { score: 9.5, label: 'Crítico', color: '#dc2626', bgColor: 'bg-red-500/10', textColor: 'text-red-500', offset: 30 }
+            };
+
+            const config = riskConfig[risk] || riskConfig['low'];
+
+            document.getElementById('risk-score').textContent = config.score.toFixed(1);
+            document.getElementById('risk-label').textContent = config.label;
+            document.getElementById('risk-label').className = `text-[9px] uppercase font-bold mt-0.5 px-2 py-0.5 rounded-full ${config.bgColor} ${config.textColor}`;
+
+            const circle = document.getElementById('risk-circle');
+            circle.style.stroke = config.color;
+            circle.style.strokeDashoffset = config.offset;
+
+            const badge = document.getElementById('risk-badge');
+            badge.className = `px-3 py-1 rounded-full text-[10px] font-bold ${config.bgColor} ${config.textColor}`;
+            badge.innerHTML = `<i class="fas fa-exclamation-triangle mr-1"></i> ${config.label}`;
+        }
+
+        function displayContraindications(items) {
+            const container = document.getElementById('contraindications-list');
+            if (!items || items.length === 0) {
+                container.innerHTML = '<p class="text-slate-500 text-sm">Nenhuma contraindicação identificada para este perfil.</p>';
+                return;
+            }
+
+            container.innerHTML = items.map(item => {
+                const type = sanitizeText(cleanText(item.type || item.condition || 'Contraindicação'));
+                // Translate contraindication description
+                const rawDescription = item.description || item.reason || '';
+                const translatedDescription = translateInteraction(rawDescription);
+                const description = sanitizeText(cleanText(translatedDescription));
+                const severity = item.severity || 'high';
+                const severityPt = translateSeverity(severity);
+                return `
+                    <div class="flex items-start gap-3 mb-3 p-3 rounded-lg severity-high">
+                        <div class="w-1 h-8 bg-brand-rose rounded-full flex-shrink-0 mt-1"></div>
+                        <div>
+                            <h4 class="font-display font-semibold text-slate-200 text-sm">${type}</h4>
+                            <p class="text-[11px] text-slate-400 mt-1 leading-relaxed">${description}</p>
+                            <span class="inline-block mt-2 px-2 py-0.5 bg-brand-rose/15 text-brand-rose text-[9px] uppercase font-bold rounded">${severityPt}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function displayInteractions(items) {
+            const container = document.getElementById('interactions-list');
+            if (!items || items.length === 0) {
+                container.innerHTML = '<p class="text-slate-500 text-sm">Nenhuma interação medicamentosa significativa.</p>';
+                return;
+            }
+
+            container.innerHTML = '<div class="space-y-2">' + items.map(item => {
+                const drug1 = sanitizeText(cleanText(item.drug1 || ''));
+                const drug2 = sanitizeText(cleanText(item.drug2 || item.interacting_drug || ''));
+                // Translate the description from English to Portuguese
+                const rawDescription = item.description || item.effect || '';
+                const translatedDescription = translateInteraction(rawDescription);
+                const description = sanitizeText(cleanText(translatedDescription));
+                const severity = item.severity || 'medium';
+                const severityPt = translateSeverity(severity);
+
+                const severityClass = severity === 'high' || severity === 'critical' ? 'severity-high' :
+                                      severity === 'medium' ? 'severity-medium' : 'severity-low';
+                
+                const severityColors = {
+                    'high': 'bg-brand-rose/15 text-brand-rose',
+                    'critical': 'bg-red-500/15 text-red-400',
+                    'medium': 'bg-brand-amber/15 text-brand-amber',
+                    'low': 'bg-brand-emerald/15 text-brand-emerald'
+                };
+                const severityColor = severityColors[severity] || severityColors['medium'];
+
+                return `
+                    <div class="flex items-start gap-3 p-3 rounded-lg ${severityClass}">
+                        <i class="fas fa-link text-brand-amber mt-1 text-xs"></i>
+                        <div class="flex-1">
+                            <h4 class="font-display font-semibold text-slate-200 text-sm">${drug1}${drug2 ? ' + ' + drug2 : ''}</h4>
+                            <p class="text-[11px] text-slate-400 mt-1 leading-relaxed">${description}</p>
+                            <span class="inline-block mt-2 px-2 py-0.5 ${severityColor} text-[9px] uppercase font-bold rounded">${severityPt}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('') + '</div>';
+        }
+
+        function displayAdverseReactions(items) {
+            const container = document.getElementById('adverse-reactions-list');
+            if (!items || items.length === 0) {
+                container.innerHTML = '<p class="text-slate-500 text-sm">Perfil de segurança favorável para este paciente.</p>';
+                return;
+            }
+
+            container.innerHTML = '<div class="flex flex-wrap gap-2">' + items.map(item => {
+                const reaction = sanitizeText(cleanText(
+                    (item && typeof item === 'object')
+                        ? (item.description || item.reaction || item.type || item.recommendation || JSON.stringify(item))
+                        : item
+                ));
+                return `<span class="px-2.5 py-1 rounded-lg bg-violet-500/10 text-violet-400 text-[11px] font-medium border border-violet-500/15">${reaction}</span>`;
+            }).join('') + '</div>';
+        }
+
+        function displayRecommendations(items) {
+            const container = document.getElementById('recommendations-list');
+            if (!items || items.length === 0) {
+                container.innerHTML = '<p class="text-slate-500 text-sm">Nenhuma recomendação específica.</p>';
+                return;
+            }
+
+            container.innerHTML = '<ul class="space-y-2">' + items.map(item => {
+                const action = sanitizeText(cleanText(item.action || item.description || item.recommendation || item));
+                return `
+                    <li class="flex items-start gap-2 text-sm text-slate-300">
+                        <i class="fas fa-check mt-1 text-brand-cyan text-xs flex-shrink-0"></i>
+                        <span>${action}</span>
+                    </li>
+                `;
+            }).join('') + '</ul>';
+        }
+
+        // =============================================================================
+        // UTILITIES
+        // =============================================================================
+
+        function sanitizeText(text) {
+            if (!text) return '';
+            if (typeof DOMPurify !== 'undefined') {
+                return DOMPurify.sanitize(text, { ALLOWED_TAGS: [] });
+            }
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function resetAnalysis() {
+            patientData = {};
+            currentMedications = [];
+            analysisResult = null;
+            sessionId = null;
+
+            document.getElementById('age').value = '45';
+            document.getElementById('weight').value = '78';
+            document.getElementById('conditions').value = '';
+            document.getElementById('allergies').value = '';
+            document.getElementById('current-med-input').value = '';
+            document.getElementById('medication-search').value = '';
+            document.getElementById('image-preview').classList.add('hidden');
+
+            renderCurrentMeds();
+
+            document.querySelectorAll('.nav-item').forEach(el => {
+                el.classList.remove('active', 'opacity-50', 'pointer-events-none');
+            });
+
+            document.querySelector('#nav-step-1 .status-text').innerText = 'Em preenchimento';
+            document.querySelector('#nav-step-2 .status-text').innerText = 'Pendente';
+            document.querySelector('#nav-step-3 .status-text').innerText = 'Aguardando';
+            document.querySelector('#nav-step-4 .status-text').innerText = '---';
+
+            document.getElementById('nav-step-3').classList.add('opacity-50', 'pointer-events-none');
+            document.getElementById('nav-step-4').classList.add('opacity-50', 'pointer-events-none');
+
+            goToStep(1);
+        }
+
+        function downloadReport() {
+            if (!analysisResult) {
+                alert('Nenhuma análise disponível para download.');
+                return;
+            }
+
+            const report = {
+                timestamp: new Date().toISOString(),
+                session_id: sessionId,
+                patient: {
+                    age: patientData.age,
+                    sex: patientData.sex,
+                    weight: patientData.weight,
+                    conditions: patientData.conditions,
+                    current_medications: patientData.current_medications,
+                    allergies: patientData.allergies
+                },
+                medication_analyzed: document.getElementById('medication-search').value,
+                risk_level: analysisResult.risk_level,
+                confidence: analysisResult.confidence_score,
+                contraindications: analysisResult.contraindications,
+                interactions: analysisResult.interactions,
+                adverse_reactions: analysisResult.adverse_reactions,
+                recommendations: analysisResult.recommendations,
+                disclaimer: 'Esta análise é baseada em diretrizes OMS e ANVISA. Sempre consulte um profissional de saúde.'
+            };
+
+            const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `medsafe-report-${sessionId || Date.now()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
 </body>
 </html>

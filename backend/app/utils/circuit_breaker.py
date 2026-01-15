@@ -66,20 +66,19 @@ def with_circuit_breaker(failure_threshold: int = 5, recovery_timeout: int = 60)
     Returns:
         Decorator function
     """
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        @circuit(
-            failure_threshold=failure_threshold,
-            recovery_timeout=recovery_timeout,
-            expected_exception=Exception
-        )
+        @circuit(failure_threshold=failure_threshold, recovery_timeout=recovery_timeout, expected_exception=Exception)
         async def wrapper(*args, **kwargs):
             try:
                 return await func(*args, **kwargs)
             except Exception as e:
                 logger.error(f"{func.__name__} failed: {e}")
                 raise
+
         return wrapper
+
     return decorator
 
 

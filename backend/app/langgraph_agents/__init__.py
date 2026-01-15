@@ -30,7 +30,7 @@ from .state import (
 )
 from .config import get_settings, LangGraphSettings
 from .checkpointing import get_checkpointer, MedSafeCheckpointer
-from .graph import get_graph, create_medsafe_graph
+from .graph import get_graph, create_medsafe_graph, reset_graph
 
 # Import agent factory functions
 from .triage_agent import create_triage_agent
@@ -48,19 +48,16 @@ __all__ = [
     "RiskLevel",
     "CritiqueLevel",
     "SafetyClassification",
-
     # Config
     "get_settings",
     "LangGraphSettings",
-
     # Checkpointing
     "get_checkpointer",
     "MedSafeCheckpointer",
-
     # Graph
     "get_graph",
     "create_medsafe_graph",
-
+    "reset_graph",
     # Agents
     "create_triage_agent",
     "create_document_agent",

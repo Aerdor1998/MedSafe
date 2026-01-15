@@ -1,0 +1,287 @@
+# MedSafe Drug Data - Consolidated from multiple sources
+# This file consolidates all drug lists previously scattered across code files
+# Sources: drug_interactions.py, clinical_rules.py, interaction_classifier.py
+
+version: "1.0.0"
+last_updated: "2025-12-19"
+
+# ============================================================================
+# HIGH RISK DRUG CLASSES (for classification)
+# ============================================================================
+high_risk_drug_classes:
+  maoi:
+    - phenelzine
+    - tranylcypromine
+    - isocarboxazid
+    - selegiline
+    - moclobemide
+    - fenelzina
+    - tranilcipromina
+    - isocarboxazida
+    - selegilina
+    - moclobemida
+
+  stimulant:
+    - methylphenidate
+    - amphetamine
+    - dexamphetamine
+    - lisdexamfetamine
+    - metilfenidato
+    - anfetamina
+    - ritalina
+    - concerta
+    - venvanse
+
+# ============================================================================
+# POPULATION-SPECIFIC DRUG ALERTS
+# ============================================================================
+population_alerts:
+  pregnancy:
+    # Category X FDA (absolute teratogens)
+    contraindicated:
+      - warfarin
+      - isotretinoin
+      - methotrexate
+      - valproic acid
+      - thalidomide
+      - leflunomide
+      - misoprostol
+      - finasteride
+      - dutasteride
+      - ribavirin
+      - bosentan
+    # Category D (demonstrated risk but may be necessary)
+    high_risk:
+      - phenytoin
+      - carbamazepine
+      - lithium
+      - atenolol
+      - tetracycline
+      - doxycycline
+      - ciprofloxacin
+    severity_increase: 2
+
+  pediatric:
+    contraindicated:
+      - aspirin  # Reye syndrome
+      - tetracycline
+      - doxycycline
+      - fluoroquinolone
+      - ciprofloxacin
+      - levofloxacin
+    high_risk:
+      - codeine
+      - tramadol
+      - metoclopramide
+    severity_increase: 1
+
+  geriatric:
+    # Beers List (potentially inappropriate medications)
+    high_risk:
+      - diazepam
+      - alprazolam
+      - lorazepam
+      - clonazepam
+      - diphenhydramine
+      - chlorpheniramine
+      - amitriptyline
+      - imipramine
+      - meperidine
+      - indomethacin
+      - nifedipine
+    severity_increase: 1
+
+  renal_impaired:
+    contraindicated:
+      - metformin  # if GFR < 30
+      - lithium
+    high_risk:
+      - nsaid
+      - ibuprofen
+      - naproxen
+      - diclofenac
+      - gentamicin
+      - amikacin
+      - tobramycin
+      - vancomycin
+      - digoxin
+      - gabapentin
+      - pregabalin
+      - allopurinol
+    severity_increase: 1
+
+  hepatic_impaired:
+    contraindicated:
+      - methotrexate
+    high_risk:
+      - acetaminophen
+      - paracetamol
+      - statins
+      - atorvastatin
+      - simvastatin
+      - isoniazid
+      - valproic acid
+      - ketoconazole
+    severity_increase: 1
+
+# ============================================================================
+# CRITICAL DRUG COMBINATIONS
+# ============================================================================
+critical_combinations:
+  - drugs: [warfarin, aspirin]
+    reason: "Significant bleeding risk"
+    category: "Coagulation"
+
+  - drugs: [warfarin, nsaid]
+    reason: "NSAID + anticoagulant increases GI bleeding risk"
+    category: "Coagulation"
+
+  - drugs: [lithium, nsaid]
+    reason: "NSAID reduces renal excretion of lithium -> toxicity"
+    category: "Renal"
+
+  - drugs: [methotrexate, nsaid]
+    reason: "NSAID reduces renal excretion of methotrexate -> toxicity"
+    category: "Renal"
+
+  - drugs: [digoxin, amiodarone]
+    reason: "Amiodarone increases digoxin levels by 70-100%"
+    category: "Cardiovascular"
+
+  - drugs: [simvastatin, amiodarone]
+    reason: "Risk of rhabdomyolysis"
+    category: "Musculoskeletal"
+
+  - drugs: [clopidogrel, omeprazole]
+    reason: "PPI reduces clopidogrel activation (CYP2C19)"
+    category: "Pharmacokinetic"
+
+# ============================================================================
+# KNOWN CRITICAL INTERACTIONS (fallback when DB unavailable)
+# ============================================================================
+critical_interactions:
+  spironolactone_losartan:
+    drugs: [spironolactone, losartan]
+    severity: high
+    mechanism: "Both drugs increase potassium levels"
+    effect: "Risk of hyperkalemia"
+    recommendation: "Monitor potassium levels closely"
+    category: "Renal"
+
+  warfarin_aspirin:
+    drugs: [warfarin, aspirin]
+    severity: critical
+    mechanism: "Both affect coagulation"
+    effect: "Increased bleeding risk"
+    recommendation: "Avoid combination if possible"
+    category: "Coagulation"
+
+# ============================================================================
+# DRUG SYNONYMS (common aliases)
+# This is a subset - full list should be in database
+# ============================================================================
+common_synonyms:
+  # Pain/Inflammation
+  aspirin: [asa, acetylsalicylic acid, aas]
+  ibuprofen: [advil, motrin, brufen]
+  acetaminophen: [paracetamol, tylenol]
+  naproxen: [naprosyn, aleve]
+
+  # Cardiovascular
+  warfarin: [coumadin, marevan]
+  losartan: [cozaar]
+  lisinopril: [zestril, prinivil]
+  metoprolol: [lopressor, toprol]
+  amlodipine: [norvasc]
+  atorvastatin: [lipitor]
+  simvastatin: [zocor]
+
+  # Diabetes
+  metformin: [glucophage, glifage]
+  glibenclamide: [glyburide, daonil]
+
+  # Antibiotics
+  amoxicillin: [amoxil]
+  ciprofloxacin: [cipro]
+  azithromycin: [zithromax]
+
+  # Psychiatric
+  sertraline: [zoloft]
+  fluoxetine: [prozac]
+  escitalopram: [lexapro]
+  diazepam: [valium]
+  alprazolam: [xanax]
+
+  # Antacids/GI
+  omeprazole: [prilosec, losec]
+  pantoprazole: [protonix]
+  ranitidine: [zantac]
+
+# ============================================================================
+# RECOMMENDATION TEMPLATES
+# ============================================================================
+recommendation_templates:
+  critical:
+    header: "CRITICAL ALERT - IMMEDIATE ACTION REQUIRED"
+    actions:
+      - "DO NOT ADMINISTER without in-person medical evaluation"
+      - "Evaluate therapeutic alternatives immediately"
+      - "If already in use, consider supervised discontinuation"
+    monitoring:
+      - "Vital signs every 4 hours"
+      - "ECG if indicated"
+      - "Laboratory tests per specific drug"
+
+  high:
+    header: "HIGH ALERT - MEDICAL REVIEW RECOMMENDED"
+    actions:
+      - "Evaluate risk-benefit before prescribing"
+      - "Consider dose adjustment or alternative"
+      - "Document justification if maintaining prescription"
+    monitoring:
+      - "Weekly clinical monitoring initially"
+      - "Baseline labs and 2-week follow-up"
+
+  medium:
+    header: "CAUTION - CARE REQUIRED"
+    actions:
+      - "May be prescribed with precautions"
+      - "Inform patient about warning signs"
+    monitoring:
+      - "Re-evaluation at follow-up visit"
+
+  low:
+    header: "LOW RISK INTERACTION"
+    actions:
+      - "May be prescribed normally"
+    monitoring:
+      - "Routine follow-up"
+
+# ============================================================================
+# CATEGORY-SPECIFIC RECOMMENDATIONS
+# ============================================================================
+category_recommendations:
+  Cardiovascular:
+    monitoring: [ECG baseline and serial, Monitor QTc, Daily BP and HR]
+    labs: [Electrolytes (K, Mg), Renal function]
+    alerts: [Palpitations, Dizziness, Syncope]
+
+  Coagulation:
+    monitoring: [Weekly INR initially, Signs of bleeding]
+    labs: [CBC, PT/INR, Platelets]
+    alerts: [Gum bleeding, Bruising, Melena, Hematuria]
+
+  Renal:
+    monitoring: [Urine output, Daily weight]
+    labs: [Creatinine, BUN, Electrolytes]
+    alerts: [Oliguria, Edema, Nausea]
+
+  Hepatic:
+    monitoring: [Signs of jaundice, Hepatomegaly]
+    labs: [AST/ALT, Bilirubin, ALP, GGT]
+    alerts: [Jaundice, RUQ pain, Pruritus]
+
+  Neurological:
+    monitoring: [Level of consciousness, Reflexes]
+    labs: [Drug levels if available]
+    alerts: [Confusion, Tremors, Seizures, Excessive sedation]

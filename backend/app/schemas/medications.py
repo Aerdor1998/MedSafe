@@ -44,28 +44,16 @@ class MedicationInfo(BaseSchema):
     warnings: List[str] = Field(default=[], description="Advertências")
 
     # Interações
-    drug_interactions: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Interações medicamentosas"
-    )
+    drug_interactions: List[Dict[str, Any]] = Field(default=[], description="Interações medicamentosas")
 
     # Reações adversas
-    side_effects: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Efeitos colaterais e reações adversas"
-    )
+    side_effects: List[Dict[str, Any]] = Field(default=[], description="Efeitos colaterais e reações adversas")
 
     # Posologia
-    dosage_info: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Informações de posologia"
-    )
+    dosage_info: Optional[Dict[str, Any]] = Field(None, description="Informações de posologia")
 
     # Fontes
-    sources: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Fontes dos dados (ANVISA, SIDER, DrugCentral)"
-    )
+    sources: List[Dict[str, Any]] = Field(default=[], description="Fontes dos dados (ANVISA, SIDER, DrugCentral)")
 
     # Metadados
     last_updated: Optional[str] = Field(None, description="Última atualização")

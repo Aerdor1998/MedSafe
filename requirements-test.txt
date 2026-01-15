@@ -1,11 +1,44 @@
 # MedSafe - Dependências para Testes
+# PHASE 1: Enhanced testing dependencies
 # Arquivo separado para evitar conflitos de dependências no CI
 
-# Framework de testes
+# =============================================================================
+# FRAMEWORK DE TESTES
+# =============================================================================
 pytest>=7.4.3
-pytest-asyncio>=0.21.1
+pytest-asyncio>=0.24.0  # Requires 0.24.0+ for pytest 8.x compatibility
 pytest-cov>=4.1.0
 pytest-mock>=3.12.0
+pytest-timeout>=2.2.0   # Timeout for long-running tests
+pytest-xdist>=3.5.0     # Parallel test execution
 
-# HTTP client para testes (se não estiver em requirements.txt)
-# httpx já está em requirements.txt
+# =============================================================================
+# E2E TESTING (Playwright)
+# =============================================================================
+playwright>=1.40.0
+pytest-playwright>=0.4.4
+
+# =============================================================================
+# API TESTING
+# =============================================================================
+httpx>=0.25.0,<0.28.0   # Async HTTP client (compat: starlette TestClient uses httpx.Client(app=...))
+respx>=0.20.0           # Mock httpx requests
+
+# =============================================================================
+# TEST UTILITIES
+# =============================================================================
+factory-boy>=3.3.0      # Test fixtures
+faker>=21.0.0           # Fake data generation
+freezegun>=1.2.2        # Time mocking
+
+# =============================================================================
+# COVERAGE & REPORTING
+# =============================================================================
+coverage>=7.3.0
+pytest-html>=4.1.0      # HTML test reports
+
+# =============================================================================
+# SECURITY TESTING
+# =============================================================================
+bandit>=1.7.5           # Security linter
+safety>=2.3.5           # Dependency vulnerability check

@@ -16,44 +16,44 @@ sys.path.insert(0, str(backend_path))
 
 def check_dependencies():
     """Verificar dependências do sistema"""
-    print("🔍 Verificando dependências...")
+    print("Verificando dependências...")
     
     # Verificar Python
     if sys.version_info < (3, 8):
-        print("❌ Python 3.8+ é necessário")
+        print("Python 3.8+ é necessário")
         return False
     
     # Verificar Tesseract
     try:
         subprocess.run(["tesseract", "--version"], check=True, capture_output=True)
-        print("✅ Tesseract OCR encontrado")
+        print("Tesseract OCR encontrado")
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print("❌ Tesseract OCR não encontrado")
+        print("Tesseract OCR não encontrado")
         print("   Instale com: sudo apt-get install tesseract-ocr tesseract-ocr-por")
         return False
     
     # Verificar Ollama
     try:
         subprocess.run(["ollama", "list"], check=True, capture_output=True)
-        print("✅ Ollama encontrado")
+        print("Ollama encontrado")
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print("⚠️  Ollama não encontrado - funcionalidade de IA será limitada")
+        print(" Ollama não encontrado - funcionalidade de IA será limitada")
         print("   Instale com: curl -fsSL https://ollama.com/install.sh | sh")
     
     return True
 
 def install_python_deps():
     """Instalar dependências Python"""
-    print("📦 Instalando dependências Python...")
+    print("Instalando dependências Python...")
     
     try:
         subprocess.run([
             sys.executable, "-m", "pip", "install", "-r", "requirements.txt"
         ], check=True)
-        print("✅ Dependências Python instaladas")
+        print("Dependências Python instaladas")
         return True
     except subprocess.CalledProcessError:
-        print("❌ Erro ao instalar dependências Python")
+        print("Erro ao instalar dependências Python")
         return False
 
 def setup_database():
@@ -63,33 +63,37 @@ def setup_database():
     try:
         from app.db.database import init_db
         init_db()
-        print("✅ Banco de dados configurado")
+        print("Banco de dados configurado")
         return True
     except Exception as e:
-        print(f"⚠️  Aviso ao configurar banco: {e}")
+        print(f" Aviso ao configurar banco: {e}")
         print("   O banco será inicializado quando a aplicação iniciar")
         return True  # Continuar mesmo sem o banco configurado aqui
 
 def start_server():
     """Iniciar servidor FastAPI"""
-    print("🚀 Iniciando MedSafe...")
-    print("📍 Acesse: http://localhost:8000")
-    print("📍 Documentação: http://localhost:8000/docs")
+    # SKILL: debugging-strategies
+    # FIX: Porta mudada 8000 → 9000 → 9001 (conflito de porta)
+    print("Iniciando MedSafe...")
+    print("📍 Acesse: http://localhost:9001")
+    print("📍 Documentação: http://localhost:9001/docs")
     print("⏹️  Pressione Ctrl+C para parar")
     
     try:
         # Usar uvicorn para iniciar a aplicação
+        # SKILL: debugging-strategies
+        # FIX: Porta mudada para 9001
         subprocess.run([
             sys.executable, "-m", "uvicorn",
             "backend.app.main:app",
             "--host", "0.0.0.0",
-            "--port", "8000",
+            "--port", "9001",
             "--reload"
         ], check=True)
     except KeyboardInterrupt:
         print("\n👋 MedSafe encerrado")
     except Exception as e:
-        print(f"❌ Erro ao iniciar servidor: {e}")
+        print(f"Erro ao iniciar servidor: {e}")
 
 def main():
     """Função principal"""
@@ -100,7 +104,7 @@ def main():
     
     # Verificar dependências
     if not check_dependencies():
-        print("\n❌ Dependências não atendidas. Verifique a instalação.")
+        print("\nDependências não atendidas. Verifique a instalação.")
         sys.exit(1)
     
     # Instalar dependências Python se necessário
@@ -113,7 +117,7 @@ def main():
         sys.exit(1)
     
     print("\n" + "=" * 60)
-    print("✅ Sistema pronto!")
+    print("Sistema pronto!")
     print("📋 Funcionalidades:")
     print("   • Anamnese digital interativa")
     print("   • OCR para reconhecimento de medicamentos")

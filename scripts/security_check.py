@@ -20,10 +20,17 @@ class SecurityChecker:
         self.issues = []
         self.warnings = []
         self.info = []
+
+    def _should_skip_file(self, path: Path) -> bool:
+        """Skip files that should not be scanned (avoid self-reporting noise)."""
+        rel = str(path.relative_to(self.project_root))
+        if rel == "scripts/security_check.py":
+            return True
+        return False
     
     def check_hardcoded_secrets(self) -> List[Dict]:
         """Verificar secrets hardcoded"""
-        print("🔍 Verificando secrets hardcoded...")
+        print("Verificando secrets hardcoded...")
         
         dangerous_patterns = [
             (r'secret_key\s*=\s*["\']change_me', 'SECRET_KEY com valor padrão'),
@@ -38,6 +45,8 @@ class SecurityChecker:
         # Verificar arquivos Python
         for py_file in self.project_root.rglob('*.py'):
             if 'venv' in str(py_file) or '__pycache__' in str(py_file):
+                continue
+            if self._should_skip_file(py_file):
                 continue
             
             try:
@@ -72,7 +81,7 @@ class SecurityChecker:
     
     def check_sql_injection(self) -> List[Dict]:
         """Verificar possíveis SQL Injections"""
-        print("🔍 Verificando SQL Injection...")
+        print("Verificando SQL Injection...")
         
         sql_patterns = [
             (r'execute\(text\(f["\']', 'SQL query com f-string'),
@@ -84,6 +93,8 @@ class SecurityChecker:
         
         for py_file in self.project_root.rglob('*.py'):
             if 'venv' in str(py_file) or '__pycache__' in str(py_file):
+                continue
+            if self._should_skip_file(py_file):
                 continue
             
             try:
@@ -106,12 +117,17 @@ class SecurityChecker:
     
     def check_cors_config(self) -> List[Dict]:
         """Verificar configuração de CORS"""
-        print("🔍 Verificando configuração CORS...")
+        print("Verificando configuração CORS...")
         
         issues_found = []
         
         for py_file in self.project_root.rglob('*.py'):
             if 'venv' in str(py_file):
+                continue
+            if self._should_skip_file(py_file):
+                continue
+            # Ignore test-only configs (wildcards are acceptable in unit tests)
+            if "backend/tests/" in str(py_file).replace("\\", "/"):
                 continue
             
             try:
@@ -135,12 +151,14 @@ class SecurityChecker:
     
     def check_file_upload_security(self) -> List[Dict]:
         """Verificar segurança de upload de arquivos"""
-        print("🔍 Verificando segurança de upload...")
+        print("Verificando segurança de upload...")
         
         issues_found = []
         
         for py_file in self.project_root.rglob('*.py'):
             if 'venv' in str(py_file):
+                continue
+            if self._should_skip_file(py_file):
                 continue
             
             try:
@@ -173,28 +191,37 @@ class SecurityChecker:
     
     def check_rate_limiting(self) -> List[Dict]:
         """Verificar se há rate limiting"""
-        print("🔍 Verificando rate limiting...")
+        print("Verificando rate limiting...")
         
         findings = []
         
-        main_file = self.project_root / 'backend' / 'app' / 'main.py'
-        if main_file.exists():
-            content = main_file.read_text()
-            
-            if '@limiter.limit' not in content and 'slowapi' not in content:
-                findings.append({
-                    'file': 'backend/app/main.py',
-                    'line': 0,
-                    'issue': 'Rate limiting não implementado',
-                    'severity': 'HIGH'
-                })
+        # Consider rate limiting implemented if SlowAPI limiter module exists and is wired in middleware.
+        rate_limit_module = self.project_root / 'backend' / 'app' / 'middleware' / 'rate_limit.py'
+        middleware_init = self.project_root / 'backend' / 'app' / 'middleware' / '__init__.py'
+        if not rate_limit_module.exists():
+            findings.append({
+                'file': 'backend/app/middleware/rate_limit.py',
+                'line': 0,
+                'issue': 'Rate limiting module ausente',
+                'severity': 'HIGH'
+            })
+        else:
+            if middleware_init.exists():
+                content = middleware_init.read_text()
+                if 'RateLimitExceeded' not in content or 'rate_limit_exceeded_handler' not in content:
+                    findings.append({
+                        'file': 'backend/app/middleware/__init__.py',
+                        'line': 0,
+                        'issue': 'Rate limiting não parece estar registrado no middleware stack',
+                        'severity': 'HIGH'
+                    })
         
         self.warnings.extend(findings)
         return findings
     
     def check_dependencies(self) -> List[Dict]:
         """Verificar dependências desatualizadas ou vulneráveis"""
-        print("🔍 Verificando dependências...")
+        print("Verificando dependências...")
         
         findings = []
         
@@ -222,7 +249,7 @@ class SecurityChecker:
     
     def check_docker_security(self) -> List[Dict]:
         """Verificar segurança do Docker"""
-        print("🔍 Verificando configuração Docker...")
+        print("Verificando configuração Docker...")
         
         findings = []
         
@@ -254,7 +281,7 @@ class SecurityChecker:
     
     def check_env_file(self) -> List[Dict]:
         """Verificar arquivo .env"""
-        print("🔍 Verificando arquivo .env...")
+        print("Verificando arquivo .env...")
         
         findings = []
         
@@ -289,7 +316,7 @@ class SecurityChecker:
     
     def check_gitignore(self) -> List[Dict]:
         """Verificar .gitignore"""
-        print("🔍 Verificando .gitignore...")
+        print("Verificando .gitignore...")
         
         findings = []
         
@@ -349,7 +376,7 @@ class SecurityChecker:
         """Imprimir relatório"""
         print()
         print("=" * 60)
-        print("📊 RESULTADO DA ANÁLISE")
+        print("RESULTADO DA ANÁLISE")
         print("=" * 60)
         print()
         
@@ -392,15 +419,15 @@ class SecurityChecker:
         
         # Status final
         if critical:
-            print("❌ STATUS: NÃO SEGURO PARA PRODUÇÃO")
+            print("STATUS: NÃO SEGURO PARA PRODUÇÃO")
             print(f"   {len(critical)} problema(s) crítico(s) encontrado(s)")
             return 1
         elif high:
-            print("⚠️  STATUS: REQUER ATENÇÃO")
+            print(" STATUS: REQUER ATENÇÃO")
             print(f"   {len(high)} problema(s) de alta prioridade")
             return 1
         else:
-            print("✅ STATUS: VERIFICAÇÕES BÁSICAS OK")
+            print("STATUS: VERIFICAÇÕES BÁSICAS OK")
             print("   Considere executar ferramentas adicionais:")
             print("   - bandit -r backend/")
             print("   - safety check")
@@ -420,7 +447,7 @@ def main():
     
     # Verificar se estamos no diretório do projeto
     if not (current_dir / 'backend').exists():
-        print("❌ Erro: Execute este script do diretório raiz do projeto MedSafe")
+        print("Erro: Execute este script do diretório raiz do projeto MedSafe")
         sys.exit(1)
     
     checker = SecurityChecker(current_dir)

@@ -1,0 +1,342 @@
+"""
+Tests for Authentication and RBAC
+
+PHASE 1: Comprehensive auth tests
+SKILLS: @debugging-strategies
+"""
+
+import pytest
+from unittest.mock import patch, MagicMock, AsyncMock
+from datetime import datetime, timedelta
+import uuid
+import sys
+import os
+import time
+
+
+class TestJWTTokens:
+    """Test JWT token creation and verification"""
+
+    @pytest.fixture
+    def mock_settings(self):
+        """Mock settings with valid secrets"""
+        # Garantir timezone consistente para testes de expiração
+        os.environ["TZ"] = "UTC"
+        if hasattr(time, "tzset"):
+            time.tzset()
+        with patch("backend.app.auth.jwt.settings") as mock:
+            mock.secret_key = "test-secret-key-minimum-32-characters-long"
+            mock.jwt_secret = "test-jwt-secret-minimum-32-characters-long"
+            # FASE 1.1: Novos campos de configuração
+            mock.jwt_algorithm = "HS256"
+            mock.jwt_allowed_algorithms = ["HS256", "HS384", "HS512"]
+            mock.jwt_key_version = 1
+            mock.jwt_expire_minutes = 30
+            mock.jwt_refresh_expire_days = 7
+            mock.jwt_enable_revocation = False  # Desabilitar para testes unitários
+            yield mock
+
+    def test_create_access_token(self, mock_settings):
+        """Test access token creation"""
+        from backend.app.auth.jwt import create_access_token
+
+        data = {"sub": "test-user-id"}
+        token, jti = create_access_token(data)
+
+        assert token is not None
+        assert len(token) > 0
+        assert jti is not None
+        assert len(jti) > 0
+
+    def test_create_refresh_token(self, mock_settings):
+        """Test refresh token creation"""
+        from backend.app.auth.jwt import create_refresh_token
+
+        data = {"sub": "test-user-id"}
+        token, jti = create_refresh_token(data)
+
+        assert token is not None
+        assert len(token) > 0
+        assert jti is not None
+
+    def test_access_token_contains_correct_type(self, mock_settings):
+        """Test that access token has correct type claim"""
+        from backend.app.auth.jwt import create_access_token, verify_token
+
+        data = {"sub": "test-user-id"}
+        token, jti = create_access_token(data)
+
+        # Verify token
+        payload = verify_token(token, expected_type="access")
+
+        assert payload["type"] == "access"
+        assert payload["sub"] == "test-user-id"
+        assert payload["jti"] == jti
+
+    def test_refresh_token_contains_correct_type(self, mock_settings):
+        """Test that refresh token has correct type claim"""
+        from backend.app.auth.jwt import create_refresh_token, verify_refresh_token
+
+        data = {"sub": "test-user-id"}
+        token, jti = create_refresh_token(data)
+
+        # Verify refresh token
+        payload = verify_refresh_token(token)
+
+        assert payload["type"] == "refresh"
+        assert payload["sub"] == "test-user-id"
+
+    def test_access_token_has_issuer_and_audience(self, mock_settings):
+        """Test that tokens have issuer and audience claims"""
+        from backend.app.auth.jwt import create_access_token, verify_token
+
+        data = {"sub": "test-user-id"}
+        token, _ = create_access_token(data)
+
+        payload = verify_token(token)
+
+        assert payload["iss"] == "medsafe-api"
+        assert payload["aud"] == "medsafe-client"
+
+    def test_verify_token_rejects_refresh_as_access(self, mock_settings):
+        """Test that verify_token rejects refresh tokens"""
+        from backend.app.auth.jwt import create_refresh_token, verify_token
+        from fastapi import HTTPException
+
+        data = {"sub": "test-user-id"}
+        token, _ = create_refresh_token(data)
+
+        # Should raise exception when verifying refresh token as access
+        with pytest.raises(HTTPException) as exc_info:
+            verify_token(token, expected_type="access")
+
+        assert exc_info.value.status_code == 401
+
+    def test_verify_refresh_token_rejects_access(self, mock_settings):
+        """Test that verify_refresh_token rejects access tokens"""
+        from backend.app.auth.jwt import create_access_token, verify_refresh_token
+        from fastapi import HTTPException
+
+        data = {"sub": "test-user-id"}
+        token, _ = create_access_token(data)
+
+        # Should raise exception when verifying access token as refresh
+        with pytest.raises(HTTPException) as exc_info:
+            verify_refresh_token(token)
+
+        assert exc_info.value.status_code == 401
+
+    def test_token_with_device_id(self, mock_settings):
+        """Test token creation with device ID"""
+        from backend.app.auth.jwt import create_access_token, verify_token
+
+        data = {"sub": "test-user-id"}
+        token, _ = create_access_token(data, device_id="device-123")
+
+        payload = verify_token(token)
+
+        assert payload["device_id"] == "device-123"
+
+
+class TestJWTRevocation:
+    """Test JWT revocation helpers (Redis-backed, mocked)"""
+
+    @pytest.mark.asyncio
+    async def test_revoke_token_sets_key_with_ttl(self):
+        from backend.app.auth import jwt as jwt_mod
+
+        mock_redis = AsyncMock()
+        mock_redis.setex = AsyncMock(return_value=True)
+
+        with patch.object(jwt_mod, "_get_redis_client", AsyncMock(return_value=mock_redis)):
+            exp = datetime.utcnow() + timedelta(minutes=5)
+            ok = await jwt_mod.revoke_token("jti-123", exp)
+
+        assert ok is True
+        mock_redis.setex.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_is_token_revoked_true_when_exists(self):
+        from backend.app.auth import jwt as jwt_mod
+
+        mock_redis = AsyncMock()
+        mock_redis.exists = AsyncMock(return_value=1)
+
+        with patch.object(jwt_mod, "_get_redis_client", AsyncMock(return_value=mock_redis)):
+            revoked = await jwt_mod.is_token_revoked("jti-xyz")
+
+        assert revoked is True
+
+    @pytest.mark.asyncio
+    async def test_is_token_revoked_false_when_no_redis(self):
+        from backend.app.auth import jwt as jwt_mod
+
+        with patch.object(jwt_mod, "_get_redis_client", AsyncMock(return_value=None)):
+            revoked = await jwt_mod.is_token_revoked("jti-xyz")
+
+        assert revoked is False
+
+
+class TestRBAC:
+    """Test Role-Based Access Control"""
+
+    def test_role_hierarchy(self):
+        """Test role hierarchy is correct"""
+        from backend.app.auth.rbac import UserRole, check_role_hierarchy
+
+        # Admin has all permissions
+        assert check_role_hierarchy(UserRole.ADMIN, UserRole.ADMIN) is True
+        assert check_role_hierarchy(UserRole.ADMIN, UserRole.PHYSICIAN) is True
+        assert check_role_hierarchy(UserRole.ADMIN, UserRole.PHARMACIST) is True
+        assert check_role_hierarchy(UserRole.ADMIN, UserRole.READONLY) is True
+
+        # Physician has physician and below
+        assert check_role_hierarchy(UserRole.PHYSICIAN, UserRole.ADMIN) is False
+        assert check_role_hierarchy(UserRole.PHYSICIAN, UserRole.PHYSICIAN) is True
+        assert check_role_hierarchy(UserRole.PHYSICIAN, UserRole.PHARMACIST) is True
+        assert check_role_hierarchy(UserRole.PHYSICIAN, UserRole.READONLY) is True
+
+        # Pharmacist has pharmacist and below
+        assert check_role_hierarchy(UserRole.PHARMACIST, UserRole.ADMIN) is False
+        assert check_role_hierarchy(UserRole.PHARMACIST, UserRole.PHYSICIAN) is False
+        assert check_role_hierarchy(UserRole.PHARMACIST, UserRole.PHARMACIST) is True
+        assert check_role_hierarchy(UserRole.PHARMACIST, UserRole.READONLY) is True
+
+        # Readonly only has readonly
+        assert check_role_hierarchy(UserRole.READONLY, UserRole.ADMIN) is False
+        assert check_role_hierarchy(UserRole.READONLY, UserRole.PHYSICIAN) is False
+        assert check_role_hierarchy(UserRole.READONLY, UserRole.PHARMACIST) is False
+        assert check_role_hierarchy(UserRole.READONLY, UserRole.READONLY) is True
+
+    def test_permission_check(self):
+        """Test permission checking for roles"""
+        from backend.app.auth.rbac import UserRole, Permission, check_permission
+
+        # Admin has all permissions
+        assert check_permission(UserRole.ADMIN, Permission.USER_CREATE) is True
+        assert check_permission(UserRole.ADMIN, Permission.ANALYSIS_APPROVE) is True
+
+        # Physician can approve analysis
+        assert check_permission(UserRole.PHYSICIAN, Permission.ANALYSIS_APPROVE) is True
+        assert check_permission(UserRole.PHYSICIAN, Permission.USER_CREATE) is False
+
+        # Pharmacist cannot approve
+        assert check_permission(UserRole.PHARMACIST, Permission.ANALYSIS_APPROVE) is False
+        assert check_permission(UserRole.PHARMACIST, Permission.TRIAGE_CREATE) is True
+
+        # Readonly can only read
+        assert check_permission(UserRole.READONLY, Permission.TRIAGE_READ) is True
+        assert check_permission(UserRole.READONLY, Permission.TRIAGE_CREATE) is False
+
+
+class TestUserModel:
+    """Test User database model"""
+
+    def test_password_hashing(self):
+        """Test password hashing and verification"""
+        from backend.app.db.user_models import User
+
+        password = "test-password-123"
+        hashed = User.hash_password(password)
+
+        # Hash should be different from plain password
+        assert hashed != password
+        assert len(hashed) > 0
+
+    def test_failed_login_tracking(self):
+        """Test failed login attempt tracking"""
+        from backend.app.db.user_models import User
+
+        user = User(
+            email="test@example.com",
+            password_hash="hashed",
+            failed_login_attempts=0,
+        )
+
+        # Record failed logins
+        user.record_failed_login()
+        assert user.failed_login_attempts == 1
+
+        user.record_failed_login()
+        assert user.failed_login_attempts == 2
+
+        # After 5 attempts, should be locked
+        for _ in range(3):
+            user.record_failed_login()
+
+        assert user.failed_login_attempts == 5
+        assert user.is_locked() is True
+        assert user.locked_until is not None
+
+    def test_successful_login_resets_attempts(self):
+        """Test that successful login resets failed attempts"""
+        from backend.app.db.user_models import User
+
+        user = User(
+            email="test@example.com",
+            password_hash="hashed",
+            failed_login_attempts=3,
+        )
+
+        user.record_successful_login()
+
+        assert user.failed_login_attempts == 0
+        assert user.locked_until is None
+        assert user.last_login is not None
+
+    def test_is_locked_expires(self):
+        """Test that lock expires after timeout"""
+        from backend.app.db.user_models import User
+        from datetime import datetime, timedelta
+
+        user = User(
+            email="test@example.com",
+            password_hash="hashed",
+            failed_login_attempts=5,
+            locked_until=datetime.utcnow() - timedelta(minutes=1),  # Already expired
+        )
+
+        # Should not be locked since lock expired
+        assert user.is_locked() is False
+
+
+class TestUserSessionModel:
+    """Test user_sessions model used for refresh token tracking"""
+
+    def test_is_expired(self):
+        """Test session expiration check"""
+        from datetime import datetime, timedelta
+        from backend.app.db.user_models import UserSession
+
+        # Not expired
+        token = UserSession(
+            user_id=uuid.uuid4(),
+            jti=str(uuid.uuid4()),
+            expires_at=datetime.utcnow() + timedelta(days=7),
+        )
+        assert token.is_expired() is False
+
+        # Expired
+        token_expired = UserSession(
+            user_id=uuid.uuid4(),
+            jti=str(uuid.uuid4()),
+            expires_at=datetime.utcnow() - timedelta(days=1),
+        )
+        assert token_expired.is_expired() is True
+
+    def test_revoke(self):
+        """Test session revocation"""
+        from datetime import datetime, timedelta
+        from backend.app.db.user_models import UserSession
+
+        token = UserSession(
+            user_id=uuid.uuid4(),
+            jti=str(uuid.uuid4()),
+            expires_at=datetime.utcnow() + timedelta(days=7),
+            is_active=True,
+        )
+
+        token.revoke()
+
+        assert token.is_active is False
+        assert token.revoked_at is not None

@@ -53,7 +53,7 @@ class ANVISAIngester:
             Lista de medicamentos encontrados
         """
         try:
-            logger.info(f"🔍 Buscando medicamentos: {query}")
+            logger.info(f"Buscando medicamentos: {query}")
             
             # Endpoint de busca da ANVISA
             search_url = f"{self.base_url}/#/medicamentos/25331320000169911"
@@ -72,11 +72,11 @@ class ANVISAIngester:
             # Processar resposta (implementar parsing específico da ANVISA)
             medications = self._parse_search_results(response.text, max_results)
             
-            logger.info(f"✅ {len(medications)} medicamentos encontrados")
+            logger.info(f"{len(medications)} medicamentos encontrados")
             return medications
             
         except Exception as e:
-            logger.error(f"❌ Erro na busca: {e}")
+            logger.error(f"Erro na busca: {e}")
             return []
     
     def _parse_search_results(
@@ -101,7 +101,7 @@ class ANVISAIngester:
         # TODO: Implementar parsing real do HTML da ANVISA
         # Usar BeautifulSoup ou similar para extrair dados
         
-        logger.warning("⚠️  Parsing de resultados não implementado completamente")
+        logger.warning(" Parsing de resultados não implementado completamente")
         
         return medications[:max_results]
     
@@ -131,7 +131,7 @@ class ANVISAIngester:
             return details
             
         except Exception as e:
-            logger.error(f"❌ Erro ao obter detalhes: {e}")
+            logger.error(f"Erro ao obter detalhes: {e}")
             return None
     
     def _parse_medication_details(self, html_content: str) -> Dict[str, Any]:
@@ -180,7 +180,7 @@ class ANVISAIngester:
             return bula_content
             
         except Exception as e:
-            logger.error(f"❌ Erro ao baixar bula: {e}")
+            logger.error(f"Erro ao baixar bula: {e}")
             return None
     
     def _parse_bula_content(self, html_content: str) -> str:
@@ -215,7 +215,7 @@ class ANVISAIngester:
         """
         try:
             start_time = datetime.now()
-            logger.info(f"🚀 Iniciando ingestão ANVISA: {query}")
+            logger.info(f"Iniciando ingestão ANVISA: {query}")
             
             # Criar job de ingestão
             ingest_job = await self._create_ingest_job(query, max_results)
@@ -224,7 +224,7 @@ class ANVISAIngester:
             medications = await self.search_medications(query, max_results)
             
             if not medications:
-                logger.warning("⚠️  Nenhum medicamento encontrado")
+                logger.warning(" Nenhum medicamento encontrado")
                 return {
                     "status": "completed",
                     "total_processed": 0,
@@ -281,7 +281,7 @@ class ANVISAIngester:
                     await self._update_ingest_job(ingest_job.id, progress, successful, failed)
                     
                 except Exception as e:
-                    logger.error(f"❌ Erro ao processar medicamento: {e}")
+                    logger.error(f"Erro ao processar medicamento: {e}")
                     failed += 1
                     processed_items.append({
                         "medication_id": med.get('id'),
@@ -302,7 +302,7 @@ class ANVISAIngester:
                 processed_items
             )
             
-            logger.info(f"✅ Ingestão concluída: {successful} sucessos, {failed} falhas")
+            logger.info(f"Ingestão concluída: {successful} sucessos, {failed} falhas")
             
             return {
                 "status": "completed",
@@ -314,7 +314,7 @@ class ANVISAIngester:
             }
             
         except Exception as e:
-            logger.error(f"❌ Erro na ingestão: {e}")
+            logger.error(f"Erro na ingestão: {e}")
             return {
                 "status": "failed",
                 "error": str(e),
@@ -349,7 +349,7 @@ class ANVISAIngester:
                 return job
                 
         except Exception as e:
-            logger.error(f"❌ Erro ao criar job: {e}")
+            logger.error(f"Erro ao criar job: {e}")
             raise
     
     async def _update_ingest_job(
@@ -371,7 +371,7 @@ class ANVISAIngester:
                     db.commit()
                     
         except Exception as e:
-            logger.error(f"❌ Erro ao atualizar job: {e}")
+            logger.error(f"Erro ao atualizar job: {e}")
     
     async def _finalize_ingest_job(
         self, 
@@ -399,7 +399,7 @@ class ANVISAIngester:
                     db.commit()
                     
         except Exception as e:
-            logger.error(f"❌ Erro ao finalizar job: {e}")
+            logger.error(f"Erro ao finalizar job: {e}")
     
     async def _save_medication_data(
         self, 
@@ -427,10 +427,10 @@ class ANVISAIngester:
                 db.add(document)
                 db.commit()
                 
-                logger.info(f"💾 Medicamento salvo: {details.get('name')}")
+                logger.info(f"Medicamento salvo: {details.get('name')}")
                 
         except Exception as e:
-            logger.error(f"❌ Erro ao salvar medicamento: {e}")
+            logger.error(f"Erro ao salvar medicamento: {e}")
             raise
 
 

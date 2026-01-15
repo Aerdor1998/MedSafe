@@ -34,8 +34,7 @@ class VisionResponse(IDSchema, TimestampSchema):
 
     # Seções extraídas da bula
     sections: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Seções extraídas (contraindicações, advertências, posologia, interações)"
+        default=[], description="Seções extraídas (contraindicações, advertências, posologia, interações)"
     )
 
     # Dados de processamento

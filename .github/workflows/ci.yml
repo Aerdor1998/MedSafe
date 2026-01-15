@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: MedSafe CI/CD
 
 on:
   push:
@@ -7,92 +7,95 @@ on:
     branches: [main, develop]
 
 env:
-  PYTHON_VERSION: '3.10'
-  POSTGRES_DB: test_medsafe
-  POSTGRES_USER: test_user
-  POSTGRES_PASSWORD: test_password
+  PYTHON_VERSION: "3.10"
+  POSTGRES_USER: medsafe
+  POSTGRES_PASSWORD: test_password_ci
+  POSTGRES_DB: medsafe_test
+  SECRET_KEY: "ci-test-secret-key-minimum-32-chars"
+  JWT_SECRET: "ci-test-jwt-secret-minimum-32-chars"
 
 jobs:
+  # =================================================================
+  # JOB 1: Linting e Code Quality
+  # =================================================================
   lint:
-    name: Lint e Qualidade de Código
+    name: 🔍 Lint & Code Quality
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
+      - name: 📥 Checkout code
         uses: actions/checkout@v4
       
-      - name: Set up Python
+      - name: 🐍 Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+          cache: "pip"
       
-      - name: Install dependencies
+      - name: 📦 Install lint dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-lint.txt
+      
+      - name: 🎨 Check code formatting with Black
+        run: black --check --diff backend/
+        continue-on-error: false
+      
+      - name: 📝 Check import sorting with isort
+        run: isort --check-only --diff backend/
+        continue-on-error: false
+      
+      - name: 🔍 Run Flake8 linting
+        run: flake8 backend/ --max-line-length=120 --extend-ignore=E203,W503
+        continue-on-error: true
+      
+      - name: 🔒 Run Bandit security scan
+        run: |
+          pip install bandit
+          bandit -r backend/app/ -ll -ii --exclude "**/tests/**"
+        continue-on-error: true
+
+  # =================================================================
+  # JOB 2: Type Checking
+  # =================================================================
+  type-check:
+    name: 📊 Type Checking
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      
+      - name: 📦 Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install -r requirements-lint.txt
+          pip install mypy types-redis types-python-dateutil
       
-      - name: Lint with flake8
-        run: |
-          flake8 backend/ --count --select=E9,F63,F7,F82 --show-source --statistics
-          flake8 backend/ --count --max-line-length=88 --statistics --ignore=E203,W503
-      
-      - name: Format check with black
-        run: black --check backend/
-      
-      - name: Import sorting with isort
-        run: isort --check-only backend/
-      
-      - name: Type check with mypy
-        run: mypy backend/app --ignore-missing-imports --no-strict-optional
+      - name: 🔍 Run MyPy type checking
+        run: mypy backend/app/ --ignore-missing-imports --no-error-summary
         continue-on-error: true
 
-  security:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install bandit safety
-      
-      - name: Security scan with Bandit
-        run: bandit -r backend/ -ll -f json -o bandit-report.json
-        continue-on-error: true
-      
-      - name: Check dependencies with Safety
-        run: safety check --json
-        continue-on-error: true
-      
-      - name: Upload security reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-reports
-          path: |
-            bandit-report.json
-          retention-days: 30
-
-  test:
-    name: Testes Automatizados
+  # =================================================================
+  # JOB 3: Unit Tests
+  # =================================================================
+  unit-tests:
+    name: 🧪 Unit Tests
     runs-on: ubuntu-latest
     
     services:
       postgres:
-        image: ankane/pgvector:latest
+        image: pgvector/pgvector:pg16
         env:
-          POSTGRES_DB: ${{ env.POSTGRES_DB }}
           POSTGRES_USER: ${{ env.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
         ports:
           - 5432:5432
         options: >-
@@ -112,124 +115,262 @@ jobs:
           --health-retries 5
     
     steps:
-      - name: Checkout code
+      - name: 📥 Checkout code
         uses: actions/checkout@v4
       
-      - name: Set up Python
+      - name: 🐍 Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+          cache: "pip"
       
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          
-          # Install tesseract core
-          sudo apt-get install -y --no-install-recommends tesseract-ocr
-          
-          # Install Portuguese language pack if available (skip safely if not)
-          if apt-cache show tesseract-ocr-por >/dev/null 2>&1; then
-            sudo apt-get install -y --no-install-recommends tesseract-ocr-por
-          else
-            echo "tesseract-ocr-por not found in apt, skipping"
-          fi
-          
-          # Install GL runtime: try the common package names as fallbacks
-          if ! sudo apt-get install -y --no-install-recommends libgl1; then
-            if ! sudo apt-get install -y --no-install-recommends libgl1-mesa-glx; then
-              sudo apt-get install -y --no-install-recommends libgl1-mesa-dri
-            fi
-          fi
-      
-      - name: Install Python dependencies
+      - name: 📦 Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-test.txt
       
-      - name: Run tests with coverage
+      - name: 🧪 Run unit tests
         env:
+          TESTING: "true"
+          DEBUG: "true"
           DATABASE_URL: postgresql://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
           REDIS_URL: redis://localhost:6379/0
-          OLLAMA_HOST: http://localhost:11434
+          SECRET_KEY: ${{ env.SECRET_KEY }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
         run: |
-          cd backend
-          pytest tests/ -v --cov=app --cov-report=xml --cov-report=term --cov-report=html
+          pytest backend/tests/ \
+            --ignore=backend/tests/e2e/ \
+            -v \
+            --tb=short \
+            --cov=backend/app \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-fail-under=60
       
-      - name: Upload coverage to Codecov
+      - name: 📊 Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
-          files: ./backend/coverage.xml
+          file: coverage.xml
           flags: unittests
-          name: codecov-umbrella
+          name: medsafe-coverage
           fail_ci_if_error: false
-      
-      - name: Upload coverage reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-reports
-          path: backend/htmlcov/
-          retention-days: 30
 
-  build:
-    name: Build Docker Image
-    needs: [lint, security, test]
+  # =================================================================
+  # JOB 4: Integration Tests
+  # =================================================================
+  integration-tests:
+    name: 🔗 Integration Tests
     runs-on: ubuntu-latest
+    needs: [lint, unit-tests]
+    
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
     
     steps:
-      - name: Checkout code
+      - name: 📥 Checkout code
         uses: actions/checkout@v4
       
-      - name: Set up Docker Buildx
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+      
+      - name: 🔗 Run integration tests
+        env:
+          TESTING: "true"
+          DEBUG: "true"
+          DATABASE_URL: postgresql://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: ${{ env.SECRET_KEY }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+        run: |
+          pytest backend/tests/ \
+            -k "integration" \
+            -v \
+            --tb=short
+
+  # =================================================================
+  # JOB 5: Security Scan
+  # =================================================================
+  security-scan:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    needs: [lint]
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      
+      - name: 📦 Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install safety bandit pip-audit
+      
+      - name: 🔍 Check dependencies for vulnerabilities (Safety)
+        run: safety check -r requirements.txt --output json
+        continue-on-error: true
+      
+      - name: 🔍 Check dependencies for vulnerabilities (pip-audit)
+        run: pip-audit -r requirements.txt
+        continue-on-error: true
+      
+      - name: 🔒 Run Bandit security analysis
+        run: |
+          bandit -r backend/app/ \
+            -ll \
+            -ii \
+            --exclude "**/tests/**" \
+            -f json \
+            -o bandit-report.json
+        continue-on-error: true
+      
+      - name: 📤 Upload security report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+          retention-days: 30
+
+  # =================================================================
+  # JOB 6: Docker Build Test
+  # =================================================================
+  docker-build:
+    name: 🐳 Docker Build
+    runs-on: ubuntu-latest
+    needs: [unit-tests]
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🐳 Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       
-      - name: Build Docker image
+      - name: 🏗️ Build Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile
           push: false
-          tags: medsafe:${{ github.sha }}
+          tags: medsafe:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
       
-      - name: Test Docker image
-        run: |
-          docker run --rm medsafe:${{ github.sha }} python --version
+      - name: 🔍 Scan Docker image for vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: medsafe:test
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+        continue-on-error: true
 
-  deploy-staging:
-    name: Deploy to Staging
-    needs: [build]
+  # =================================================================
+  # JOB 7: E2E Tests (só em push para main)
+  # =================================================================
+  e2e-tests:
+    name: 🎭 E2E Tests
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop'
-    environment: staging
+    needs: [integration-tests, docker-build]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     
     steps:
-      - name: Checkout code
+      - name: 📥 Checkout code
         uses: actions/checkout@v4
       
-      - name: Deploy to staging
+      - name: 🐳 Set up Docker Compose
         run: |
-          echo "🚀 Deploying to staging environment..."
-          echo "This would trigger deployment to staging server"
-          # Implementar deploy real aqui (SSH, Kubernetes, etc)
+          docker compose version
+      
+      - name: 🚀 Start services with Docker Compose
+        env:
+          SECRET_KEY: ${{ env.SECRET_KEY }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        run: |
+          docker compose -f docker-compose.yml up -d db redis
+          sleep 10
+      
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+      
+      - name: 🎭 Run E2E tests
+        env:
+          TESTING: "true"
+          DATABASE_URL: postgresql://medsafe:${{ env.POSTGRES_PASSWORD }}@localhost:5433/medsafe
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: ${{ env.SECRET_KEY }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+        run: |
+          pytest backend/tests/e2e/ -v --tb=short
+        continue-on-error: true
+      
+      - name: 🧹 Cleanup
+        if: always()
+        run: docker compose down -v
 
-  deploy-production:
-    name: Deploy to Production
-    needs: [build]
+  # =================================================================
+  # JOB 8: Summary
+  # =================================================================
+  ci-summary:
+    name: 📋 CI Summary
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    environment: production
+    needs: [lint, type-check, unit-tests, integration-tests, security-scan, docker-build]
+    if: always()
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Deploy to production
+      - name: 📋 Generate summary
         run: |
-          echo "🚀 Deploying to production environment..."
-          echo "This would trigger deployment to production server"
-          # Implementar deploy real aqui (SSH, Kubernetes, etc)
-
-
+          echo "## 🔬 MedSafe CI/CD Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔍 Lint | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📊 Type Check | ${{ needs.type-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🧪 Unit Tests | ${{ needs.unit-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔗 Integration Tests | ${{ needs.integration-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔒 Security Scan | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🐳 Docker Build | ${{ needs.docker-build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY

@@ -16,7 +16,7 @@ alerting:
 
 # Load rules once and periodically evaluate them
 rule_files:
-  # - "alerts.yml"
+  - "alerts.yml"
 
 # Scrape configurations
 scrape_configs:
@@ -29,7 +29,8 @@ scrape_configs:
   - job_name: 'medsafe-api'
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['api:9090']
+      # API exposes Prometheus metrics at /metrics on the main HTTP port
+      - targets: ['api:9000']
         labels:
           service: 'api'
           env: 'production'

@@ -43,15 +43,9 @@ class IngestResponse(IDSchema, TimestampSchema):
     failed: int = Field(..., description="Itens que falharam")
 
     # Detalhes
-    processed_items: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Detalhes dos itens processados"
-    )
+    processed_items: List[Dict[str, Any]] = Field(default=[], description="Detalhes dos itens processados")
 
-    errors: List[Dict[str, Any]] = Field(
-        default=[],
-        description="Erros encontrados durante o processamento"
-    )
+    errors: List[Dict[str, Any]] = Field(default=[], description="Erros encontrados durante o processamento")
 
     # Metadados
     processing_time: float = Field(..., description="Tempo de processamento em segundos")

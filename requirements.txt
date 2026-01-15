@@ -1,52 +1,111 @@
-# MedSafe - Dependências Principais
+# ============================================================================
+# MEDSAFE - Dependências Consolidadas (Simplificado)
+# SKILLS: @ultrathink - Menos restrições = pip resolve mais fácil
+# ============================================================================
 
-# FastAPI e servidor
-fastapi>=0.104.1,<0.105.0
-uvicorn[standard]>=0.24.0,<0.25.0
-python-multipart>=0.0.6,<0.1.0
+# ============================================================================
+# Core LangGraph (principal requirement)
+# ============================================================================
+langgraph>=0.2.50
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-ollama>=0.3.0
 
-# Banco de dados
-sqlalchemy>=2.0.23,<3.0.0
-alembic>=1.12.1,<2.0.0
-psycopg2-binary>=2.9.9,<3.0.0
-pgvector>=0.2.4,<0.3.0
+# State Management
+langgraph-checkpoint>=2.0.0
+langgraph-checkpoint-postgres>=2.0.0
 
-# Validação e schemas
-pydantic>=2.5.0,<3.0.0
-pydantic-settings>=2.1.0,<3.0.0
-email-validator>=2.1.0,<3.0.0
+# LangChain Postgres (replaces deprecated langchain-community PGVector)
+langchain-postgres>=0.0.12
 
-# Autenticação e segurança
-python-jose[cryptography]>=3.3.0,<4.0.0
-passlib[bcrypt]>=1.7.4,<2.0.0
+# ============================================================================
+# FastAPI Stack
+# ============================================================================
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart
 
-# HTTP client
-httpx>=0.25.2,<0.26.0
-aiofiles>=23.2.1,<24.0.0
+# ============================================================================
+# Database
+# ============================================================================
+sqlalchemy>=2.0.0
+alembic
+psycopg2-binary
+psycopg[binary,pool]>=3.0.0
+pgvector
 
-# Processamento de imagens e OCR
-Pillow>=10.1.0,<11.0.0
-pytesseract>=0.3.10,<0.4.0
-opencv-python>=4.8.1.78,<5.0.0
+# ============================================================================
+# Validation
+# ============================================================================
+pydantic>=2.0.0
+pydantic-settings
+email-validator
 
-# IA e ML
-openai>=1.3.7,<2.0.0
-ollama>=0.1.7,<0.2.0
-numpy>=1.24.4,<2.0.0
-scikit-learn>=1.3.2,<2.0.0
+# ============================================================================
+# Security
+# ============================================================================
+python-jose[cryptography]
+passlib[bcrypt]
 
-# Utilitários
-python-dotenv>=1.0.0,<2.0.0
-python-dateutil>=2.8.2,<3.0.0
-pytz>=2023.3,<2024.0
-requests>=2.31.0,<3.0.0
+# ============================================================================
+# Rate Limiting
+# ============================================================================
+slowapi>=0.1.9
+redis>=5.0.0
 
-# Logging e monitoramento
-structlog>=23.2.0,<24.0.0
-prometheus-client>=0.19.0,<1.0.0
+# ============================================================================
+# HTTP & Async
+# ============================================================================
+httpx
+aiofiles
+requests
 
-# Circuit breaker
-pybreaker>=1.0.1,<2.0.0
+# ============================================================================
+# Image Processing
+# ============================================================================
+Pillow>=10.0.0
+pytesseract
+opencv-python>=4.8.0
 
-# Desenvolvimento (opcional)
-python-json-logger>=2.0.7,<3.0.0
+# ============================================================================
+# AI & ML
+# ============================================================================
+openai
+ollama>=0.5.0
+numpy<2.0.0
+scikit-learn
+
+# ============================================================================
+# Utilities
+# ============================================================================
+python-dotenv
+python-dateutil
+pytz
+pyyaml
+
+# ============================================================================
+# Web Scraping (for literature ingestion)
+# ============================================================================
+beautifulsoup4
+lxml
+
+# ============================================================================
+# Logging & Monitoring
+# ============================================================================
+structlog
+prometheus-client
+python-json-logger
+
+# ============================================================================
+# Resilience
+# ============================================================================
+pybreaker
+
+# ============================================================================
+# Testing
+# ============================================================================
+pytest>=8.0.0
+pytest-cov>=4.0.0
+pytest-asyncio>=0.23.0
+pytest-mock>=3.12.0
+httpx  # Already included above, needed for TestClient

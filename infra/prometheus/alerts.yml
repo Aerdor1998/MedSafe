@@ -1,0 +1,213 @@
+# =============================================================================
+# MedSafe - Prometheus Alert Rules
+# DEPLOY_ROADMAP Section 6: Minimum production alerts
+# =============================================================================
+
+groups:
+  # ==========================================================================
+  # API Alerts
+  # ==========================================================================
+  - name: medsafe_api
+    rules:
+      # High error rate (5xx)
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{job="medsafe-api", status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{job="medsafe-api"}[5m]))
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate on MedSafe API"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      # High latency (p95)
+      - alert: HighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{job="medsafe-api"}[5m])) by (le)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High p95 latency on MedSafe API"
+          description: "p95 latency is {{ $value | humanizeDuration }} (threshold: 2s)"
+
+      # API Down
+      - alert: APIDown
+        expr: up{job="medsafe-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MedSafe API is down"
+          description: "API has been unreachable for more than 1 minute"
+
+      # Too many active connections
+      - alert: TooManyConnections
+        expr: |
+          sum(http_requests_in_progress{job="medsafe-api"}) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Too many concurrent connections"
+          description: "{{ $value }} concurrent connections (threshold: 100)"
+
+  # ==========================================================================
+  # Database Alerts
+  # ==========================================================================
+  - name: medsafe_database
+    rules:
+      # Database Down
+      - alert: DatabaseDown
+        expr: pg_up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL database is down"
+          description: "Database has been unreachable for more than 1 minute"
+
+      # Database Connection Pool Exhausted
+      - alert: DatabaseConnectionPoolExhausted
+        expr: |
+          pg_stat_activity_count{job="postgres", state="active"}
+          /
+          pg_settings_max_connections{job="postgres"}
+          > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database connection pool almost exhausted"
+          description: "{{ $value | humanizePercentage }} of connections in use"
+
+      # Slow queries
+      - alert: SlowQueries
+        expr: |
+          rate(pg_stat_activity_max_tx_duration{job="postgres"}[5m]) > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow database queries detected"
+          description: "Long running transactions detected"
+
+  # ==========================================================================
+  # Redis Alerts
+  # ==========================================================================
+  - name: medsafe_redis
+    rules:
+      # Redis Down
+      - alert: RedisDown
+        expr: redis_up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis cache is down"
+          description: "Redis has been unreachable for more than 1 minute"
+
+      # Redis Memory High
+      - alert: RedisMemoryHigh
+        expr: |
+          redis_memory_used_bytes{job="redis"}
+          /
+          redis_memory_max_bytes{job="redis"}
+          > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory usage high"
+          description: "Redis memory at {{ $value | humanizePercentage }}"
+
+      # Redis Connection Rejected
+      - alert: RedisConnectionRejected
+        expr: rate(redis_rejected_connections_total{job="redis"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis rejecting connections"
+          description: "{{ $value }} connections rejected per second"
+
+  # ==========================================================================
+  # Infrastructure Alerts
+  # ==========================================================================
+  - name: medsafe_infra
+    rules:
+      # High CPU Usage
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value | humanize }}%"
+
+      # High Memory Usage
+      - alert: HighMemoryUsage
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value | humanize }}%"
+
+      # Disk Space Low
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space"
+          description: "Only {{ $value | humanize }}% disk space remaining"
+
+      # Disk Space Critical
+      - alert: DiskSpaceCritical
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical disk space"
+          description: "Only {{ $value | humanize }}% disk space remaining"
+
+  # ==========================================================================
+  # Ollama/LLM Alerts
+  # ==========================================================================
+  - name: medsafe_llm
+    rules:
+      # Ollama Down
+      - alert: OllamaDown
+        expr: up{job="ollama"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ollama LLM service is down"
+          description: "Ollama has been unreachable for more than 2 minutes"
+
+      # LLM Request Timeout
+      - alert: LLMRequestTimeout
+        expr: |
+          rate(llm_request_timeout_total{job="medsafe-api"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM requests timing out"
+          description: "{{ $value }} LLM timeouts per second"
