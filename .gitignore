@@ -13,10 +13,12 @@ dist/
 *.egg-info/
 pip-log.txt
 pip-delete-this-directory.txt
-
+.claude/   
+.cursor/
 # IDEs
 .vscode/
 .idea/
+.playwright-mcp/
 *.swp
 *.swo
 *~
@@ -75,6 +77,9 @@ coverage.xml
 *_backup_*/
 backup_*.sql
 *.bak
+backups/
+security_check_results.json
+security_check_results*.json
 
 # Temporary
 tmp/
@@ -93,6 +98,8 @@ TESTE_SUCESSO.md
 TEST_SUMMARY.md
 START_MVP.md
 MVP_PRODUCTION_READY.md
+/docs /docs/**/*
+docs/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -170,4 +177,3 @@ secrets.json
 # Ollama models (grandes)
 *.gguf
 models/*.bin
-
