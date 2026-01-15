@@ -13,7 +13,7 @@ Sistema de análise de contraindicações medicamentosas baseado em **Multi-Agen
 
 ## Funcionalidades
 
-- **Multi-Agent AI System** (LangGraph Level 3) com 6 agentes especializados
+- **Multi-Agent AI System** (LangGraph Level 3) com 7 agentes especializados
 - **RAG (Retrieval-Augmented Generation)** com documentação médica OMS/ANVISA
 - **OCR de Prescrições** com Tesseract + Vision AI (Qwen2.5-VL)
 - **Base de Interações** com 191k+ interações medicamentosas
@@ -24,16 +24,18 @@ Sistema de análise de contraindicações medicamentosas baseado em **Multi-Agen
 - **Visualização 3D** de interações medicamentosas
 - **Logging Estruturado** com OpenTelemetry
 - **Compliant LGPD** com auditoria e anonimização
+- **Workers Assíncronos** para processamento em background
 
 ## Índice
 
-- [Quick Start](#-quick-start)
-- [Arquitetura](#-arquitetura)
-- [Documentação](#-documentação)
-- [Scripts Utilitários](#-scripts-utilitários)
-- [Desenvolvimento](#-desenvolvimento)
-- [Deploy](#-deploy)
-- [Testes](#-testes)
+- [Quick Start](#quick-start)
+- [Arquitetura](#arquitetura)
+- [Scripts Utilitários](#scripts-utilitários)
+- [Desenvolvimento](#desenvolvimento)
+- [Deploy](#deploy)
+- [Testes](#testes)
+- [API Endpoints](#api-endpoints)
+- [Segurança](#segurança)
 
 ## Quick Start
 
@@ -47,8 +49,8 @@ cd MedSafe
 # 2. Configurar variáveis de ambiente
 cp env.example .env
 
-# 3. Iniciar todos os serviços
-./scripts/docker-start.sh
+# 3. Iniciar todos os serviços (recomendado)
+./scripts/medsafe-full-start.sh
 
 # 4. Verificar status
 ./scripts/docker-status.sh
@@ -58,9 +60,11 @@ cp env.example .env
 ```
 
 Acesse:
-- **Frontend**: http://localhost:9000
-- **API Docs**: http://localhost:9000/docs
-- **Health Check**: http://localhost:9000/healthz
+- **Frontend**: http://localhost:9001
+- **API Docs**: http://localhost:9001/docs
+- **Health Check**: http://localhost:9001/healthz
+- **Prometheus**: http://localhost:9090
+- **Grafana**: http://localhost:3001
 
 ### Desenvolvimento Local
 
@@ -79,7 +83,7 @@ docker-compose up -d medsafe_db medsafe_ollama
 python3 -c "from backend.app.db.database import init_db; init_db()"
 
 # 5. Iniciar aplicação
-uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 9000
+uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 9001
 ```
 
 ## Arquitetura
@@ -90,29 +94,29 @@ MedSafe implementa uma **arquitetura Level 3** de múltiplos agentes colaborativ
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    CaptainAgent (Orchestrator)               │
+│                    TriageAgent (Orchestrator)               │
 │         Com Safety Guardrails + HITL + Reflection           │
 └──────────────────────────┬──────────────────────────────────┘
                            │
         ┌──────────────────┴──────────────────┐
         │                                     │
   ┌─────▼──────┐                      ┌──────▼──────┐
-  │ VisionAgent│                      │  DocAgent   │
-  │  (OCR)     │                      │   (RAG)     │
-  └─────┬──────┘                      └──────┬──────┘
+  │ VisionAgent│                      │ DocumentAgent│
+  │  (OCR/VLM) │                      │   (RAG)      │
+  └─────┬──────┘                      └──────┬───────┘
         │                                     │
         └──────────────────┬──────────────────┘
                            │
                   ┌────────▼─────────┐
-                  │  ClinicalRules   │
-                  │  Agent (191k+)   │
+                  │  ClinicalAgent   │
+                  │  (Rules 191k+)   │
                   └────────┬─────────┘
                            │
         ┌──────────────────┴──────────────────┐
         │                                     │
   ┌─────▼──────────┐              ┌──────────▼────────┐
-  │ SafetyGuardrails│              │ ReflectionAgent   │
-  │    Agent        │              │ (Self-Critique)   │
+  │  SafetyAgent   │              │ ReflectionAgent   │
+  │  (Guardrails)  │              │ (Self-Critique)   │
   └─────┬──────────┘              └──────────┬────────┘
         │                                     │
         └──────────────────┬──────────────────┘
@@ -132,8 +136,9 @@ MedSafe implementa uma **arquitetura Level 3** de múltiplos agentes colaborativ
 | **LLM Local** | Ollama (Qwen2.5) | 7B |
 | **Database** | PostgreSQL + pgvector | 15+ |
 | **OCR** | Tesseract + Vision AI | - |
-| **Observability** | OpenTelemetry | 1.29+ |
+| **Observability** | OpenTelemetry + Prometheus | 1.29+ |
 | **Frontend** | HTML5 + Three.js | - |
+| **Monitoring** | Grafana | 10+ |
 
 ### Estrutura do Projeto
 
@@ -142,117 +147,141 @@ MedSafe/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                    # FastAPI entry point
-│   │   ├── config.py                  # Configurações
-│   │   ├── agents/                    # AG2 Agents (legacy)
-│   │   │   ├── orchestrator.py        # CaptainAgent
-│   │   │   ├── vision.py              # OCR + Vision
-│   │   │   ├── docagent.py            # RAG Agent
-│   │   │   ├── clinical.py            # Clinical Rules
-│   │   │   ├── safety_guardrails.py   # Safety Agent
-│   │   │   ├── human_in_the_loop.py   # HITL Agent
-│   │   │   └── reflection_agent.py    # Reflection Agent
-│   │   ├── langgraph_agents/          # LangGraph Agents (new)
+│   │   ├── config.py                  # Configurações (Pydantic Settings)
+│   │   ├── agents/                    # Agents auxiliares
+│   │   │   └── vision.py              # OCR + Vision helpers
+│   │   ├── langgraph_agents/          # LangGraph Agents (principal)
 │   │   │   ├── state.py               # Shared state
-│   │   │   ├── graph.py               # StateGraph
+│   │   │   ├── graph.py               # StateGraph workflow
 │   │   │   ├── checkpointing.py       # PostgreSQL checkpointer
-│   │   │   └── [agents].py            # Individual agents
-│   │   ├── routers/                   # API routes (planned)
+│   │   │   ├── base_agent.py          # Base class
+│   │   │   ├── triage_agent.py        # Orchestrator
+│   │   │   ├── vision_agent.py        # OCR/VLM
+│   │   │   ├── document_agent.py      # RAG
+│   │   │   ├── clinical_agent.py      # Clinical rules
+│   │   │   ├── safety_agent.py        # Safety guardrails
+│   │   │   ├── reflection_agent.py    # Self-critique
+│   │   │   └── hitl_agent.py          # Human-in-the-loop
+│   │   ├── routers/                   # API routes
+│   │   │   ├── admin.py               # Admin endpoints
+│   │   │   ├── auth.py                # Authentication
+│   │   │   ├── health.py              # Health checks
+│   │   │   ├── human_review.py        # HITL review
+│   │   │   ├── langgraph.py           # LangGraph workflow
+│   │   │   ├── medications.py         # Drug interactions
+│   │   │   ├── monitoring.py          # Metrics
+│   │   │   └── vision.py              # OCR endpoints
 │   │   ├── services/                  # Business logic
+│   │   │   ├── analysis_orchestrator.py
+│   │   │   ├── clinical_rules.py
+│   │   │   ├── drug_identifier.py
 │   │   │   ├── drug_interactions.py   # 191k+ interactions
-│   │   │   └── interaction_classifier.py
+│   │   │   ├── interaction_classifier.py
+│   │   │   ├── literature_ingestion.py
+│   │   │   ├── openfda_service.py
+│   │   │   └── response_formatter.py
 │   │   ├── db/                        # Database layer
 │   │   │   ├── database.py            # SQLAlchemy setup
-│   │   │   └── models.py              # ORM models
+│   │   │   ├── models.py              # ORM models
+│   │   │   ├── user_models.py         # User/Auth models
+│   │   │   ├── vector_store.py        # pgvector store
+│   │   │   └── migrations/            # SQL migrations
+│   │   ├── auth/                      # Authentication
+│   │   │   ├── jwt.py                 # JWT handling
+│   │   │   ├── password.py            # Password hashing
+│   │   │   ├── models.py              # Auth models
+│   │   │   └── rbac.py                # Role-based access
+│   │   ├── middleware/                # HTTP middleware
+│   │   │   ├── logging.py             # Request logging
+│   │   │   ├── metrics.py             # Prometheus metrics
+│   │   │   ├── rate_limit.py          # Rate limiting
+│   │   │   ├── security.py            # Security headers
+│   │   │   ├── prometheus.py          # Prometheus integration
+│   │   │   └── request_id.py          # Correlation IDs
+│   │   ├── workers/                   # Background workers
+│   │   │   ├── analysis_worker.py     # Async analysis
+│   │   │   └── data_retention_worker.py # LGPD compliance
 │   │   ├── utils/                     # Utilities
-│   │   │   └── logging_config.py      # Structured logging
-│   │   └── schemas.py                 # Pydantic models
-│   └── tests/                         # Unit + Integration tests
+│   │   │   ├── logging_config.py      # Structured logging
+│   │   │   ├── audit_logger.py        # Audit trail
+│   │   │   ├── cache.py               # Caching
+│   │   │   ├── circuit_breaker.py     # Resilience
+│   │   │   ├── data_retention.py      # LGPD utils
+│   │   │   └── file_upload.py         # File handling
+│   │   └── schemas/                   # Pydantic models
+│   │       ├── base.py
+│   │       ├── medications.py
+│   │       ├── triage.py
+│   │       ├── vision.py
+│   │       └── reports.py
+│   └── tests/                         # 40+ test files
 ├── frontend/
 │   ├── index.html                     # SPA
 │   └── js/
 │       ├── app.js                     # Main logic
-│       └── three-visualization.js     # 3D graphics
+│       ├── medsafe-api.js             # API client
+│       └── tailwind-config.js         # Styling
+├── alembic/                           # Database migrations
+│   └── versions/                      # 7 migration files
 ├── data/
 │   └── db_drug_interactions.csv       # 191k+ interações
-├── docs/                              # Documentação (organizada)
-│   ├── guides/                        # Guias de uso
-│   ├── architecture/                  # Arquitetura e análises
-│   ├── deployment/                    # Deploy guides
-│   ├── fixes/                         # Histórico de fixes
-│   ├── roadmap/                       # Roadmaps e planejamento
-│   └── setup/                         # Setup e configuração
 ├── scripts/                           # Scripts utilitários
-│   ├── docker-start.sh                # Inicia containers
-│   ├── docker-stop.sh                 # Para containers
-│   ├── docker-status.sh               # Verifica status
-│   └── docker-logs.sh                 # Visualiza logs
-├── logs/                              # Application logs
-├── static/                            # Static files
-├── docker-compose.yml                 # Docker Compose
+│   ├── medsafe-full-start.sh          # Start completo
+│   ├── medsafe-full-stop.sh           # Stop completo
+│   ├── docker-start.sh                # Start Docker
+│   ├── docker-stop.sh                 # Stop Docker
+│   ├── docker-status.sh               # Status
+│   ├── docker-logs.sh                 # Logs
+│   ├── apply-db-indexes.sh            # DB indexes
+│   ├── db-backup.sh                   # Backup
+│   ├── security_check.py              # Security audit
+│   └── README.md                      # Scripts docs
+├── infra/
+│   ├── nginx/nginx.conf               # Reverse proxy
+│   ├── prometheus/                    # Monitoring config
+│   ├── monitoring/grafana/            # Dashboards
+│   └── ollama/                        # Ollama config
+├── tests/
+│   └── e2e/                           # End-to-end tests
+├── docker-compose.yml                 # Development
+├── docker-compose.prod.yml            # Production
+├── docker-compose.monitoring.yml      # Monitoring stack
 ├── Dockerfile                         # Production image
 ├── requirements.txt                   # Python dependencies
+├── requirements-test.txt              # Test dependencies
 ├── env.example                        # Environment template
+├── env.prod.example                   # Production template
+├── pytest.ini                         # Pytest config
+├── alembic.ini                        # Alembic config
 └── README.md                          # Este arquivo
 ```
-
-## Documentação
-
-A documentação está organizada em categorias para facilitar a navegação:
-Observação: a pasta `docs/` é mantida localmente e está no `.gitignore`.
-
-### Guias de Uso
-
-- [Como Usar o Sistema](docs/guides/COMO_USAR.md) - Tutorial completo
-- [Configuração de Modelos](docs/guides/CONFIGURACAO_MODELOS.md) - Setup Ollama
-- [Testes de Interações](docs/guides/TESTES_INTERACOES.md) - Como testar
-
-### Arquitetura
-
-- [Análise de Arquitetura](docs/architecture/MEDSAFE_ARCHITECTURE_ANALYSIS.md) - Análise profunda (31 KB)
-- [Sumário Executivo](docs/architecture/MEDSAFE_ARCHITECTURE_SUMMARY.md) - Overview (7.8 KB)
-- [Referência Rápida](docs/architecture/ANALYSIS_QUICK_REFERENCE.txt) - Cartão de referência
-- [Migração LangGraph](docs/architecture/LANGGRAPH_MIGRATION.md) - Detalhes da migração
-- [Safety Improvements](docs/architecture/SAFETY_IMPROVEMENTS.md) - Melhorias de segurança
-
-### Deploy e Setup
-
-- [Guia de Deploy](docs/deployment/DEPLOYMENT_GUIDE.md) - Deploy em produção
-- [Deploy Success](docs/deployment/DEPLOYMENT_SUCCESS.md) - Checklist de sucesso
-- [Docker Setup](docs/setup/README_DOCKER.md) - Configuração Docker
-- [Testing Guide](docs/setup/TESTING_GUIDE.md) - Como testar
-- [Logging Guide](docs/setup/LOGGING_GUIDE.md) - Sistema de logs
-
-### Roadmap
-
-- [Roadmap Produção](docs/roadmap/MEDSAFE_PRODUCTION_ROADMAP.md) - Planejamento completo
-- [Fase 1-2 Complete](docs/roadmap/FASE_1-2_COMPLETE.md) - Status atual
-- [Roadmap Fase 3-6](docs/roadmap/ROADMAP_FASE_3-6.md) - Próximas fases
-
-### Histórico de Fixes
-
-Ver [docs/fixes/](docs/fixes/) para histórico detalhado de correções e melhorias.
 
 ## Scripts Utilitários
 
 Scripts disponíveis em `scripts/`:
 
 ```bash
+# Full Stack Management
+./scripts/medsafe-full-start.sh        # Inicia TUDO (recomendado)
+./scripts/medsafe-full-stop.sh         # Para TUDO
+
 # Docker Management
-./scripts/docker-start.sh           # Inicia todos os containers
-./scripts/docker-stop.sh            # Para todos os containers
-./scripts/docker-status.sh          # Verifica status dos serviços
-./scripts/docker-logs.sh            # Mostra logs em tempo real
-./scripts/docker-troubleshoot.sh    # Troubleshooting automático
+./scripts/docker-start.sh              # Inicia containers core
+./scripts/docker-stop.sh               # Para containers
+./scripts/docker-status.sh             # Verifica status
+./scripts/docker-logs.sh               # Mostra logs
+./scripts/docker-troubleshoot.sh       # Troubleshooting
 
-# Network Management
-./scripts/docker-fix-network.sh     # Corrige problemas de rede
-./scripts/docker-clean-networks.sh  # Limpa redes não utilizadas
+# Database
+./scripts/apply-db-indexes.sh          # Aplica indexes
+./scripts/db-backup.sh                 # Backup do banco
+./scripts/db-migrate.sh                # Rodar migrations
 
-# Application
-./scripts/start.sh                  # Start app (legacy)
-./scripts/stop.sh                   # Stop app (legacy)
-./scripts/status.sh                 # Check status
+# Security
+python scripts/security_check.py       # Auditoria de segurança
 ```
+
+Ver [scripts/README.md](scripts/README.md) para documentação completa.
 
 ## Desenvolvimento
 
@@ -281,6 +310,7 @@ cp env.example .env
 
 # 4. Instalar dependências
 pip install -r requirements.txt
+pip install -r requirements-test.txt
 
 # 5. Rodar testes
 pytest backend/tests/ -v
@@ -295,7 +325,7 @@ Ver [env.example](env.example) para lista completa. Principais:
 APP_NAME=MedSafe
 APP_VERSION=1.0.0
 DEBUG=true
-PORT=9000
+PORT=9001
 
 # Database
 POSTGRES_HOST=localhost
@@ -308,6 +338,11 @@ POSTGRES_PASSWORD=medsafe123
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_TEXT_MODEL=qwen2.5:7b
 OLLAMA_VISION_MODEL=qwen2.5vl:7b
+
+# Security
+SECRET_KEY=your-secret-key-here
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
 
 # Logging
 LOG_LEVEL=INFO
@@ -325,7 +360,7 @@ docker-compose -f docker-compose.prod.yml build
 docker-compose -f docker-compose.prod.yml up -d
 
 # 3. Verificar health
-curl http://localhost:9000/healthz
+curl http://localhost:9001/healthz
 
 # 4. Ver logs
 docker-compose logs -f medsafe_api
@@ -337,6 +372,7 @@ O sistema expõe os seguintes endpoints de monitoramento:
 
 - `GET /healthz` - Health check geral
 - `GET /readyz` - Readiness probe (Kubernetes)
+- `GET /livez` - Liveness probe (Kubernetes)
 - `GET /metrics` - Métricas Prometheus
 
 ## Testes
@@ -351,6 +387,10 @@ pytest backend/tests/ --cov=backend --cov-report=html
 # Testes específicos
 pytest backend/tests/test_langgraph_workflow.py -v
 pytest backend/tests/test_safety_guardrails.py -v
+pytest backend/tests/test_config.py -v
+
+# Testes E2E
+pytest tests/e2e/ -v
 ```
 
 ## API Endpoints
@@ -358,7 +398,7 @@ pytest backend/tests/test_safety_guardrails.py -v
 ### Análise de Medicamentos
 
 ```bash
-POST /api/triage
+POST /api/v2/triage
 Content-Type: application/json
 
 {
@@ -374,7 +414,7 @@ Content-Type: application/json
 ### OCR de Prescrições
 
 ```bash
-POST /api/vision/analyze
+POST /api/v2/vision/analyze
 Content-Type: multipart/form-data
 
 {
@@ -383,29 +423,32 @@ Content-Type: multipart/form-data
 }
 ```
 
-Documentação completa: http://localhost:9000/docs
+### LangGraph Workflow
 
-## Skills Aplicadas
+```bash
+POST /api/v2/langgraph/analyze
+Content-Type: application/json
 
-Este projeto utiliza as seguintes skills profissionais:
+{
+  "medications": ["Aspirina", "Warfarina"],
+  "patient_info": {...}
+}
+```
 
-- **@debugging-strategies** - Debugging sistemático e análise de root cause
-- **@api-design-principles** - Design de APIs RESTful
-- **@code-review-excellence** - Code review e qualidade de código
-- **@python-performance-optimization** - Otimização de performance
-- **@python-testing-patterns** - Padrões de teste com pytest
-- **@fastapi-templates** - Templates FastAPI production-ready
+Documentação completa: http://localhost:9001/docs
 
 ## Segurança
 
-- ✅ Autenticação JWT (em desenvolvimento)
-- ✅ CORS configurado
+- ✅ Autenticação JWT com RBAC
+- ✅ CORS configurado (sem wildcard em produção)
 - ✅ Sanitização de inputs
-- ✅ Rate limiting (planejado)
+- ✅ Rate limiting
 - ✅ Logs de auditoria LGPD
-- ✅ Anonimização automática
+- ✅ Anonimização automática (data retention worker)
 - ✅ Safety Guardrails em múltiplas camadas
 - ✅ Human-in-the-Loop para decisões críticas
+- ✅ SQL Injection prevention (queries parametrizadas)
+- ✅ Security headers (CSP, HSTS, etc.)
 
 ## Monitoramento
 
@@ -430,19 +473,25 @@ grep "ERROR" logs/medsafe.log | jq
 - Taxa de aprovação HITL
 - Accuracy do Reflection Agent
 
+### Grafana Dashboards
+
+Acesse http://localhost:3001 (admin/medsafe2025):
+- MedSafe Overview
+- HITL Dashboard
+- Performance Optimization
+
 ## Licença
 
 MIT License - veja [LICENSE](LICENSE) para detalhes
 
 ## Suporte
 
-- **Documentação**: [docs/](docs/)
 - **Issues**: [GitHub Issues](https://github.com/Aerdor1998/MedSafe/issues)
 - **Email**: suporte@medsafe.com.br
 
 ---
 
 **Versão**: 1.0.0
-**Última atualização**: 13/11/2025
-**Status**: Production Ready (7/10)
+**Última atualização**: 15/01/2026
+**Status**: Production Ready (8/10)
 **Mantido por**: Equipe MedSafe
