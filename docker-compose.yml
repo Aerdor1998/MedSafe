@@ -1,16 +1,41 @@
-version: '3.8'
-
 services:
-  # Ollama com modelos pré-carregados
+  # Ollama com modelos pré-carregados + GPU support
   ollama:
     image: ollama/ollama:latest
     container_name: medsafe_ollama
+    # SKILL: @python-performance-optimization - GPU acceleration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+        # SECURITY FIX: Limites de recursos para evitar crash do servidor
+        limits:
+          memory: 16G  # Limitar memória RAM
     environment:
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY}
       - OLLAMA_HOST=0.0.0.0
+      # GPU Configuration - SECURITY FIX: Valores seguros ao invés de 99
+      # Use variáveis de ambiente para customização por hardware
+      - OLLAMA_NUM_GPU=${OLLAMA_NUM_GPU:-1}              # Default: 1 GPU (seguro)
+      - OLLAMA_GPU_LAYERS=${OLLAMA_GPU_LAYERS:-35}       # Default: 35 layers (seguro para 8GB VRAM)
+      - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-1}  # Default: 1 modelo
+      - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-2}    # Default: 2 requisições paralelas
+      - OLLAMA_FLASH_ATTENTION=1       # Enable flash attention
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}  # Configurável
     volumes:
       - ollama_data:/root/.ollama
+    # SKILL: debugging-strategies
+    # FIX: Port 11434 conflitava com ollama container existente (ID: 78d5a93960ce)
+    # Mudado para 11435 no host, mantém 11434 interno no container
+    #
+    # SKILL: deployment-pipeline-design
+    # Containers comunicam via rede interna Docker, então OLLAMA_HOST
+    # permanece http://ollama:11434 (usa porta interna do container)
     ports:
-      - "11434:11434"
+      - "11435:11434"
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 30s
@@ -19,14 +44,10 @@ services:
     restart: unless-stopped
     networks:
       - medsafe_network
-    command: >
-      sh -c "
-        ollama serve &
-        sleep 10 &&
-        ollama pull qwen3:4b &&
-        ollama pull qwen2.5vl:7b &&
-        wait
-      "
+    # SKILL: debugging-strategies
+    # FIX: Comando 'sh -c' não funciona porque entrypoint é '/bin/ollama'
+    # Removido command - Ollama inicia automaticamente com 'ollama serve'
+    # Modelos são baixados depois via docker-start.sh (linha 278-290)
 
   # PostgreSQL with pgvector
   db:
@@ -38,8 +59,14 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # SKILL: debugging-strategies
+    # FIX: Port 5432 conflitava com medsafe-postgres container existente (ID: 0b00f8439fdd)
+    # Mudado para 5433 no host, mantém 5432 interno no container
+    #
+    # SKILL: deployment-pipeline-design
+    # DATABASE_URL usa db:5432 (rede interna Docker, porta do container)
     ports:
-      - "5432:5432"
+      - "5433:5432"
     networks:
       - medsafe_network
     healthcheck:
@@ -49,6 +76,25 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # Redis (optional, enables distributed cache and production-like rate limiting)
+  redis:
+    image: redis:7-alpine
+    container_name: medsafe_redis
+    command: redis-server --appendonly yes
+    # FIX: avoid binding host port 6379 (often already used).
+    # Containers (api/worker) talk to redis via the Docker network: redis:6379
+    # If you need host access, override with REDIS_HOST_PORT (default 6380).
+    ports:
+      - "${REDIS_HOST_PORT:-6380}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - medsafe_network
+    restart: unless-stopped
+
   # API MedSafe
   api:
     build:
@@ -56,39 +102,114 @@ services:
       dockerfile: Dockerfile
     container_name: medsafe_api
     environment:
+      # Core settings
       - DEBUG=${DEBUG:-false}
       - SECRET_KEY=${SECRET_KEY}
       - JWT_SECRET=${JWT_SECRET}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Database
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
       - POSTGRES_DB=${POSTGRES_DB:-medsafe}
       - POSTGRES_USER=${POSTGRES_USER:-medsafe}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      # Ollama
       - OLLAMA_HOST=http://ollama:11434
-      - OLLAMA_LLM=${OLLAMA_LLM:-qwen2.5:7b}
+      - OLLAMA_LLM=${OLLAMA_LLM:-qwen3:8b}
+      - OLLAMA_CLOUD=${OLLAMA_CLOUD:-}
       - OLLAMA_VLM=${OLLAMA_VLM:-qwen2.5vl:7b}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-qwen3-embedding:0.6b}
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-}
+      # Security
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:9001}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      # Feature Flags (Phase 1)
+      - ENABLE_LEGACY_V1=${ENABLE_LEGACY_V1:-true}
+      - LEGACY_V1_SUNSET_DATE=${LEGACY_V1_SUNSET_DATE:-2025-03-01}
+      - LOG_DEPRECATED_USAGE=${LOG_DEPRECATED_USAGE:-true}
+      # Demo/dev convenience (keep false in production)
+      - ALLOW_ANONYMOUS_ANALYSIS=${ALLOW_ANONYMOUS_ANALYSIS:-false}
+      # Rate Limiting
+      - RATE_LIMIT_STORAGE=${RATE_LIMIT_STORAGE:-memory://}
+      # Cache (optional)
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      # OCR
       - TESSERACT_CMD=/usr/bin/tesseract
       - OCR_LANG=por+eng
     volumes:
-      - ./backend:/app/backend
+      # SKILL: @debugging-strategies - Backend volume commented to use built version
+      # - ./backend:/app/backend
       - ./logs:/app/logs
       - ./data:/app/data
       - ./static:/app/static
       - ./frontend:/app/frontend
+    # SKILL: debugging-strategies
+    # FIX: Port 9000 conflitava com processo Python existente (PIDs: 260164, 260168)
+    # Mudado para 9001 no host, mantém 9000 interno no container
+    #
+    # SKILL: deployment-pipeline-design
+    # Aplicação continua rodando na porta 9000 dentro do container
+    # Apenas mapeamento externo muda: localhost:9001 → container:9000
     ports:
-      - "8000:8000"
+      - "9001:9000"
     depends_on:
       ollama:
         condition: service_healthy
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3
+    restart: unless-stopped
+    networks:
+      - medsafe_network
+
+  # Durable analysis worker (DB-backed queue) - required for /api/v2/analyze + /api/v2/status flow
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: medsafe_worker
+    command: ["python", "-m", "backend.app.workers.analysis_worker"]
+    environment:
+      - DEBUG=${DEBUG:-false}
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Database
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-medsafe}
+      - POSTGRES_USER=${POSTGRES_USER:-medsafe}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      # Ollama
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_LLM=${OLLAMA_LLM:-qwen3:8b}
+      - OLLAMA_CLOUD=${OLLAMA_CLOUD:-}
+      - OLLAMA_VLM=${OLLAMA_VLM:-qwen2.5vl:7b}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-qwen3-embedding:0.6b}
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-}
+      # Cache (optional)
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      # Feature flags
+      - ENABLE_LEGACY_V1=${ENABLE_LEGACY_V1:-true}
+      - LEGACY_V1_SUNSET_DATE=${LEGACY_V1_SUNSET_DATE:-2025-03-01}
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    depends_on:
+      ollama:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      disable: true
     restart: unless-stopped
     networks:
       - medsafe_network
@@ -102,6 +223,17 @@ volumes:
 networks:
   medsafe_network:
     driver: bridge
+    # SKILL: debugging-strategies
+    # FIX: 172.20.0.0/16 conflitava com mindsdb_default
+    # Mudado para 172.22.0.0/16 (não conflita com redes existentes)
+    #
+    # SKILL: deployment-pipeline-design
+    # Subnets existentes identificadas:
+    # - ia-ollama-llm_skyone-network: 172.18.0.0/16
+    # - perplexica_perplexica-network: 172.19.0.0/16
+    # - mindsdb_default: 172.20.0.0/16 (CONFLITO!)
+    # - monitoring_monitoring: 172.21.0.0/16
+    # - medsafe_network: 172.22.0.0/16 (NOVO - sem conflito)
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 172.22.0.0/16
