@@ -177,4 +177,3 @@ secrets.json
 # Ollama models (grandes)
 *.gguf
 models/*.bin
-
