@@ -9,22 +9,23 @@ Fase 1.5 (Queries N+1):
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import os
-import contextvars
-from typing import Optional, Callable, Any
+from typing import Any, Callable, Optional
 
+from sqlalchemy import event
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
-
-from sqlalchemy import event
 
 from backend.app.db.database import engine
 
 logger = logging.getLogger(__name__)
 
-_query_count: contextvars.ContextVar[Optional[int]] = contextvars.ContextVar("db_query_count", default=None)
+_query_count: contextvars.ContextVar[Optional[int]] = contextvars.ContextVar(
+    "db_query_count", default=None
+)
 _listener_installed: bool = False
 
 
@@ -62,7 +63,9 @@ class DBQueryCountMiddleware(BaseHTTPMiddleware):
         self.warn_threshold = warn_threshold
         _ensure_listener_installed()
 
-    async def dispatch(self, request: Request, call_next: Callable[[Request], Any]) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Any]
+    ) -> Response:
         token = _query_count.set(0)
         try:
             response: Response = await call_next(request)
@@ -71,7 +74,9 @@ class DBQueryCountMiddleware(BaseHTTPMiddleware):
             _query_count.reset(token)
 
         # Only add header in debug-like scenarios
-        if os.getenv("DEBUG", "").lower() in {"1", "true", "yes"} or os.getenv("TESTING", "").lower() in {"1", "true", "yes"}:
+        if os.getenv("DEBUG", "").lower() in {"1", "true", "yes"} or os.getenv(
+            "TESTING", ""
+        ).lower() in {"1", "true", "yes"}:
             response.headers["X-DB-Queries"] = str(count)
 
         if count >= self.warn_threshold:
@@ -85,4 +90,3 @@ class DBQueryCountMiddleware(BaseHTTPMiddleware):
             )
 
         return response
-

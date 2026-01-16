@@ -24,9 +24,9 @@ ATUALIZAÇÃO 2025-12-03:
 
 import logging
 import re
-from typing import Dict, Any, List, Tuple, Optional
-from enum import Enum
 from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +184,7 @@ class InteractionClassifierAgent:
         description: str,
         drug1: str,
         drug2: str,
-        patient_context: Optional[Dict[str, Any]] = None
+        patient_context: Optional[Dict[str, Any]] = None,
     ) -> ClassificationResult:
         """
         Classificar severidade da interação medicamentosa
@@ -213,14 +213,20 @@ class InteractionClassifierAgent:
         logger.debug(f"Classificando: {drug1} + {drug2}")
         logger.debug(f"   Descrição: {description}")
         if patient_context:
-            logger.debug(f"   Contexto do paciente: idade={patient_context.get('age')}, "
-                        f"gestante={patient_context.get('pregnant', False)}")
+            logger.debug(
+                f"   Contexto do paciente: idade={patient_context.get('age')}, "
+                f"gestante={patient_context.get('pregnant', False)}"
+            )
 
         # 0. VERIFICAÇÃO DE CLASSES FARMACOLÓGICAS DE ALTO RISCO
         # SKILL: ULTRATHINK - Certas combinações são SEMPRE críticas, independente da descrição
-        drug_class_result = self._check_high_risk_drug_classes(drug1, drug2, description)
+        drug_class_result = self._check_high_risk_drug_classes(
+            drug1, drug2, description
+        )
         if drug_class_result:
-            logger.warning(f"🚨 CRÍTICO (CLASSE FARMACOLÓGICA): {drug1} + {drug2} - {drug_class_result.reasoning}")
+            logger.warning(
+                f"🚨 CRÍTICO (CLASSE FARMACOLÓGICA): {drug1} + {drug2} - {drug_class_result.reasoning}"
+            )
             return drug_class_result
 
         # 1. Verificar padrões CRÍTICOS primeiro
@@ -286,7 +292,9 @@ class InteractionClassifierAgent:
         logger.info(f"✓ BAIXO: {drug1} + {drug2} - {result.reasoning}")
         return result
 
-    def _check_high_risk_drug_classes(self, drug1: str, drug2: str, description: str) -> ClassificationResult | None:
+    def _check_high_risk_drug_classes(
+        self, drug1: str, drug2: str, description: str
+    ) -> ClassificationResult | None:
         """
         Verificar se a combinação de drogas envolve classes de alto risco conhecidas
 
@@ -309,15 +317,25 @@ class InteractionClassifierAgent:
         drug2_lower = drug2.lower()
 
         # Verificar se uma das drogas é IMAO
-        is_maoi_drug1 = any(maoi in drug1_lower for maoi in self.high_risk_drug_classes["maoi"])
-        is_maoi_drug2 = any(maoi in drug2_lower for maoi in self.high_risk_drug_classes["maoi"])
+        is_maoi_drug1 = any(
+            maoi in drug1_lower for maoi in self.high_risk_drug_classes["maoi"]
+        )
+        is_maoi_drug2 = any(
+            maoi in drug2_lower for maoi in self.high_risk_drug_classes["maoi"]
+        )
 
         # Verificar se uma das drogas é estimulante
-        is_stimulant_drug1 = any(stim in drug1_lower for stim in self.high_risk_drug_classes["stimulant"])
-        is_stimulant_drug2 = any(stim in drug2_lower for stim in self.high_risk_drug_classes["stimulant"])
+        is_stimulant_drug1 = any(
+            stim in drug1_lower for stim in self.high_risk_drug_classes["stimulant"]
+        )
+        is_stimulant_drug2 = any(
+            stim in drug2_lower for stim in self.high_risk_drug_classes["stimulant"]
+        )
 
         # IMAO + ESTIMULANTE = CRISE HIPERTENSIVA CRÍTICA
-        if (is_maoi_drug1 and is_stimulant_drug2) or (is_maoi_drug2 and is_stimulant_drug1):
+        if (is_maoi_drug1 and is_stimulant_drug2) or (
+            is_maoi_drug2 and is_stimulant_drug1
+        ):
             return ClassificationResult(
                 severity=SeverityLevel.CRITICAL,
                 confidence=0.99,
@@ -389,7 +407,9 @@ class InteractionClassifierAgent:
         }
         return category_map.get(pattern_name, "Farmacológica")
 
-    def validate_critical_decision(self, result: ClassificationResult, description: str) -> ClassificationResult:
+    def validate_critical_decision(
+        self, result: ClassificationResult, description: str
+    ) -> ClassificationResult:
         """
         Validar decisões críticas com segundo método (Reflection Pattern)
 
@@ -414,10 +434,14 @@ class InteractionClassifierAgent:
                 r"(?i)(monitor.*closely)",  # Monitoramento sugere gerenciável
             ]
 
-            has_mitigation = any(re.search(factor, description) for factor in mitigating_factors)
+            has_mitigation = any(
+                re.search(factor, description) for factor in mitigating_factors
+            )
 
             if has_mitigation:
-                logger.warning("Reflexão: Padrão crítico com fatores mitigantes. Rebaixando para HIGH.")
+                logger.warning(
+                    "Reflexão: Padrão crítico com fatores mitigantes. Rebaixando para HIGH."
+                )
                 result.severity = SeverityLevel.HIGH
                 result.confidence = 0.80
                 result.reasoning += " (Rebaixado de CRÍTICO após reflexão: fatores mitigantes identificados)"
@@ -429,7 +453,7 @@ class InteractionClassifierAgent:
         self,
         result: ClassificationResult,
         drug_name: str,
-        patient_context: Dict[str, Any]
+        patient_context: Dict[str, Any],
     ) -> ClassificationResult:
         """
         Ajustar severidade baseado no contexto do paciente
@@ -448,7 +472,12 @@ class InteractionClassifierAgent:
         if not patient_context:
             return result
 
-        severity_order = [SeverityLevel.LOW, SeverityLevel.MEDIUM, SeverityLevel.HIGH, SeverityLevel.CRITICAL]
+        severity_order = [
+            SeverityLevel.LOW,
+            SeverityLevel.MEDIUM,
+            SeverityLevel.HIGH,
+            SeverityLevel.CRITICAL,
+        ]
         current_idx = severity_order.index(result.severity)
         max_increase = 0
         risk_factors = []
@@ -463,8 +492,14 @@ class InteractionClassifierAgent:
 
         # ===== REGRA 1: GESTANTE COM TERATOGÊNICO =====
         teratogens = [
-            "warfarin", "isotretinoin", "methotrexate", "valproic",
-            "thalidomide", "leflunomide", "misoprostol", "finasteride",
+            "warfarin",
+            "isotretinoin",
+            "methotrexate",
+            "valproic",
+            "thalidomide",
+            "leflunomide",
+            "misoprostol",
+            "finasteride",
         ]
         if pregnant:
             for teratogen in teratogens:
@@ -480,8 +515,11 @@ class InteractionClassifierAgent:
         # ===== REGRA 2: PEDIATRIA =====
         pediatric_contraindicated = [
             "aspirin",  # Síndrome de Reye
-            "tetracycline", "doxycycline",
-            "fluoroquinolone", "ciprofloxacin", "levofloxacin",
+            "tetracycline",
+            "doxycycline",
+            "fluoroquinolone",
+            "ciprofloxacin",
+            "levofloxacin",
         ]
         if age is not None and age < 12:
             for contra in pediatric_contraindicated:
@@ -496,8 +534,13 @@ class InteractionClassifierAgent:
 
         # ===== REGRA 3: IDOSO (>= 65) =====
         geriatric_high_risk = [
-            "diazepam", "alprazolam", "lorazepam", "clonazepam",
-            "diphenhydramine", "amitriptyline", "meperidine",
+            "diazepam",
+            "alprazolam",
+            "lorazepam",
+            "clonazepam",
+            "diphenhydramine",
+            "amitriptyline",
+            "meperidine",
         ]
         if age is not None and age >= 65:
             for high_risk in geriatric_high_risk:
@@ -521,8 +564,15 @@ class InteractionClassifierAgent:
 
         # ===== REGRA 4: INSUFICIÊNCIA RENAL =====
         nephrotoxic_drugs = [
-            "metformin", "lithium", "nsaid", "ibuprofen", "naproxen",
-            "gentamicin", "vancomycin", "digoxin", "gabapentin",
+            "metformin",
+            "lithium",
+            "nsaid",
+            "ibuprofen",
+            "naproxen",
+            "gentamicin",
+            "vancomycin",
+            "digoxin",
+            "gabapentin",
         ]
         if gfr is not None and gfr < 60:
             for nephro in nephrotoxic_drugs:
@@ -538,8 +588,14 @@ class InteractionClassifierAgent:
 
         # ===== REGRA 5: INSUFICIÊNCIA HEPÁTICA =====
         hepatotoxic_drugs = [
-            "acetaminophen", "paracetamol", "statin", "atorvastatin",
-            "simvastatin", "isoniazid", "valproic", "ketoconazole",
+            "acetaminophen",
+            "paracetamol",
+            "statin",
+            "atorvastatin",
+            "simvastatin",
+            "isoniazid",
+            "valproic",
+            "ketoconazole",
         ]
         if child_pugh in ["B", "C"]:
             for hepato in hepatotoxic_drugs:
@@ -568,16 +624,14 @@ class InteractionClassifierAgent:
             result.severity_modified = True
             result.patient_risk_factors = risk_factors
             result.confidence = min(result.confidence + 0.1, 0.99)
-            result.reasoning += f" | AJUSTADO POR CONTEXTO: {'; '.join(adjustment_reasons)}"
+            result.reasoning += (
+                f" | AJUSTADO POR CONTEXTO: {'; '.join(adjustment_reasons)}"
+            )
 
         return result
 
     def classify_with_patient_context(
-        self,
-        description: str,
-        drug1: str,
-        drug2: str,
-        patient_context: Dict[str, Any]
+        self, description: str, drug1: str, drug2: str, patient_context: Dict[str, Any]
     ) -> ClassificationResult:
         """
         Classificar interação com ajuste automático por contexto do paciente

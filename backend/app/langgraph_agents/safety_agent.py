@@ -12,12 +12,12 @@ RESPONSIBILITIES:
 5. Enforce safety policies and constraints
 """
 
-from typing import Dict, Any, List
-from datetime import datetime
 import logging
+from datetime import datetime
+from typing import Any, Dict, List
 
 from .base_agent import BaseAgent
-from .state import MedSafeState, SafetyClassification, RiskLevel
+from .state import MedSafeState, RiskLevel, SafetyClassification
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,9 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
             classification = self._classify_safety(state, violations)
 
             # Decide if human review needed
-            requires_hitl, escalation_reasons = self._evaluate_hitl_need(state, violations)
+            requires_hitl, escalation_reasons = self._evaluate_hitl_need(
+                state, violations
+            )
 
             # Prepare updates
             updates = {
@@ -106,7 +108,11 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
                 "safety_violations": violations,
                 "requires_human_review": requires_hitl,
                 "escalation_reasons": escalation_reasons,
-                "status": "safety_validated" if classification == SafetyClassification.SAFE else "needs_review",
+                "status": (
+                    "safety_validated"
+                    if classification == SafetyClassification.SAFE
+                    else "needs_review"
+                ),
             }
 
             # Update timestamps - ensure timestamps dict exists in updates
@@ -170,8 +176,14 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
         contraindications = state.get("contraindications", [])
 
         # Count critical/high severity issues
-        critical_count = sum(1 for i in interactions + contraindications if i.get("severity") == "critical")
-        high_count = sum(1 for i in interactions + contraindications if i.get("severity") == "high")
+        critical_count = sum(
+            1
+            for i in interactions + contraindications
+            if i.get("severity") == "critical"
+        )
+        high_count = sum(
+            1 for i in interactions + contraindications if i.get("severity") == "high"
+        )
 
         # Validation logic
         if critical_count > 0 and risk_level != RiskLevel.CRITICAL:
@@ -201,18 +213,28 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
         interactions = state.get("interactions", [])
         contraindications = state.get("contraindications", [])
 
-        critical_issues = [i for i in interactions + contraindications if i.get("severity") == "critical"]
+        critical_issues = [
+            i
+            for i in interactions + contraindications
+            if i.get("severity") == "critical"
+        ]
 
         if critical_issues:
             # Ensure recommendations address critical issues
-            recommendations_text = str(state.get("dosage_adjustments", [])) + str(state.get("adverse_reactions", []))
+            recommendations_text = str(state.get("dosage_adjustments", [])) + str(
+                state.get("adverse_reactions", [])
+            )
 
             for issue in critical_issues:
                 drug_mentioned = False
                 if "drug1" in issue:
-                    drug_mentioned = issue["drug1"].lower() in recommendations_text.lower()
+                    drug_mentioned = (
+                        issue["drug1"].lower() in recommendations_text.lower()
+                    )
                 elif "drug2" in issue:
-                    drug_mentioned = issue["drug2"].lower() in recommendations_text.lower()
+                    drug_mentioned = (
+                        issue["drug2"].lower() in recommendations_text.lower()
+                    )
 
                 if not drug_mentioned:
                     violations.append(
@@ -255,7 +277,9 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
 
         return violations
 
-    def _check_dangerous_combinations(self, state: MedSafeState) -> List[Dict[str, str]]:
+    def _check_dangerous_combinations(
+        self, state: MedSafeState
+    ) -> List[Dict[str, str]]:
         """Check for known dangerous drug combinations"""
         violations = []
 
@@ -274,7 +298,9 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
 
             for dangerous in dangerous_patterns:
                 pattern = dangerous["pattern"]
-                if any(p in drug1 for p in pattern) and any(p in drug2 for p in pattern):
+                if any(p in drug1 for p in pattern) and any(
+                    p in drug2 for p in pattern
+                ):
                     violations.append(
                         {
                             "type": "KNOWN_DANGEROUS_COMBINATION",
@@ -302,7 +328,9 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
 
         return violations
 
-    def _classify_safety(self, state: MedSafeState, violations: List[Dict[str, str]]) -> SafetyClassification:
+    def _classify_safety(
+        self, state: MedSafeState, violations: List[Dict[str, str]]
+    ) -> SafetyClassification:
         """
         Classify overall safety level
 
@@ -312,12 +340,17 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
         critical_violations = [v for v in violations if v.get("severity") == "critical"]
         if critical_violations:
             if self.settings.block_on_critical_violations:
-                logger.error(f"🚫 BLOCKED: {len(critical_violations)} critical violations")
+                logger.error(
+                    f"🚫 BLOCKED: {len(critical_violations)} critical violations"
+                )
                 return SafetyClassification.BLOCKED
 
         # If high violations or high risk → NEEDS_REVIEW
         high_violations = [v for v in violations if v.get("severity") == "high"]
-        if high_violations or state.get("risk_level") in [RiskLevel.CRITICAL, RiskLevel.HIGH]:
+        if high_violations or state.get("risk_level") in [
+            RiskLevel.CRITICAL,
+            RiskLevel.HIGH,
+        ]:
             return SafetyClassification.NEEDS_REVIEW
 
         # If medium violations → NEEDS_REVIEW (cautious)
@@ -328,7 +361,9 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
         # Otherwise → SAFE
         return SafetyClassification.SAFE
 
-    def _evaluate_hitl_need(self, state: MedSafeState, violations: List[Dict[str, str]]) -> tuple[bool, List[str]]:
+    def _evaluate_hitl_need(
+        self, state: MedSafeState, violations: List[Dict[str, str]]
+    ) -> tuple[bool, List[str]]:
         """
         Decide if human-in-the-loop review is needed
 
@@ -349,7 +384,9 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
         # Rule 3: Escalate critical violations
         critical_violations = [v for v in violations if v.get("severity") == "critical"]
         if critical_violations:
-            escalation_reasons.append(f"{len(critical_violations)} critical safety violations")
+            escalation_reasons.append(
+                f"{len(critical_violations)} critical safety violations"
+            )
 
         # Rule 4: Escalate low confidence
         confidence = state.get("confidence_score", 0.0)
@@ -359,7 +396,10 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
         # Rule 5: Escalate vulnerable populations
         patient_data = state.get("patient_data", {})
         conditions = [c.lower() for c in patient_data.get("conditions", [])]
-        if any(keyword in " ".join(conditions) for keyword in ["pregnancy", "pregnant", "gestação"]):
+        if any(
+            keyword in " ".join(conditions)
+            for keyword in ["pregnancy", "pregnant", "gestação"]
+        ):
             escalation_reasons.append("Vulnerable population (pregnancy)")
 
         age = patient_data.get("age")

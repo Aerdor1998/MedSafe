@@ -3,12 +3,13 @@ Script para importar interações medicamentosas do CSV para PostgreSQL
 """
 
 import csv
-import psycopg2
-from psycopg2.extras import execute_batch
+import logging
 import os
 import re
-import logging
 from datetime import datetime
+
+import psycopg2
+from psycopg2.extras import execute_batch
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -39,7 +40,9 @@ def import_interactions():
     # Ler CSV
     csv_path = "../../data/db_drug_interactions.csv"
     if not os.path.exists(csv_path):
-        csv_path = "/home/lucasmsilva/Documentos/Cursor/MedSafe/data/db_drug_interactions.csv"
+        csv_path = (
+            "/home/lucasmsilva/Documentos/Cursor/MedSafe/data/db_drug_interactions.csv"
+        )
 
     logger.info(f"📁 Lendo CSV: {csv_path}")
 
@@ -168,11 +171,18 @@ def classify_interaction_type(description: str) -> str:
     """Classificar tipo de interação"""
     desc_lower = description.lower()
 
-    if any(word in desc_lower for word in ["absorption", "metabolism", "excretion", "distribution"]):
+    if any(
+        word in desc_lower
+        for word in ["absorption", "metabolism", "excretion", "distribution"]
+    ):
         return "farmacocinética"
-    elif any(word in desc_lower for word in ["effect", "activity", "action", "response"]):
+    elif any(
+        word in desc_lower for word in ["effect", "activity", "action", "response"]
+    ):
         return "farmacodinâmica"
-    elif any(word in desc_lower for word in ["serum", "concentration", "level", "plasma"]):
+    elif any(
+        word in desc_lower for word in ["serum", "concentration", "level", "plasma"]
+    ):
         return "farmacocinética"
     else:
         return "farmacodinâmica"

@@ -2,7 +2,10 @@
 Smoke test alinhado ao DrugInteractionService atual.
 """
 
-from backend.app.services.drug_interactions import DrugInteractionService, normalize_drug_name
+from backend.app.services.drug_interactions import (
+    DrugInteractionService,
+    normalize_drug_name,
+)
 
 
 def test_synonym_lookup_returns_scientific_name():

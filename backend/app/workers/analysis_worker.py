@@ -18,8 +18,8 @@ from typing import Optional
 
 from ..db.database import get_db_context
 from ..db.models import AnalysisJob
-from ..services.analysis_orchestrator import get_orchestrator
 from ..langgraph_agents import get_settings as get_lang_settings
+from ..services.analysis_orchestrator import get_orchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -42,12 +42,13 @@ def _claim_next_job() -> Optional[str]:
     """
     from sqlalchemy import text
     from sqlalchemy.orm import Session
-    
+
     with get_db_context() as db:
         # Use raw SQL for FOR UPDATE SKIP LOCKED (SQLAlchemy ORM support varies)
         # This is PostgreSQL-specific but we're targeting PostgreSQL for production
         result = db.execute(
-            text("""
+            text(
+                """
                 UPDATE analysis_jobs
                 SET status = 'running', started_at = NOW(), updated_at = NOW()
                 WHERE id = (
@@ -58,24 +59,25 @@ def _claim_next_job() -> Optional[str]:
                     LIMIT 1
                 )
                 RETURNING id
-            """)
+            """
+            )
         )
-        
+
         row = result.fetchone()
         db.commit()
-        
+
         if row:
             job_id = str(row[0])
             logger.debug("Worker claimed job %s atomically", job_id)
             return job_id
-        
+
         return None
 
 
 def _claim_next_job_sqlite_fallback() -> Optional[str]:
     """
     SQLite fallback for claim (non-atomic, for development only).
-    
+
     SQLite doesn't support FOR UPDATE SKIP LOCKED, so we use the original
     optimistic approach. This is NOT safe for multiple workers.
     """
@@ -144,14 +146,20 @@ async def _execute_job(job_id: str) -> None:
         # Persist report (best-effort)
         report_id = None
         if triage_id:
-            report_id = await orchestrator.save_report(triage_id=triage_id, result=result)
+            report_id = await orchestrator.save_report(
+                triage_id=triage_id, result=result
+            )
             # also write ids into state for /status response
             if isinstance(result, dict):
                 result.setdefault("triage_id", triage_id)
                 if report_id:
                     result.setdefault("report_id", report_id)
 
-        requires_review = bool(result.get("requires_human_review", False)) if isinstance(result, dict) else False
+        requires_review = (
+            bool(result.get("requires_human_review", False))
+            if isinstance(result, dict)
+            else False
+        )
         if requires_review and lang_settings.enable_hitl:
             status = "awaiting_review"
         else:
@@ -180,14 +188,16 @@ async def _execute_job(job_id: str) -> None:
 def _get_claim_function():
     """
     Get the appropriate job claim function based on database type.
-    
+
     PostgreSQL: Uses atomic FOR UPDATE SKIP LOCKED
     SQLite: Uses optimistic locking fallback (dev only)
     """
     from ..db.database import is_sqlite
-    
+
     if is_sqlite:
-        logger.warning("⚠️ Using SQLite fallback for job claim (NOT safe for multiple workers)")
+        logger.warning(
+            "⚠️ Using SQLite fallback for job claim (NOT safe for multiple workers)"
+        )
         return _claim_next_job_sqlite_fallback
     else:
         logger.info("✅ Using atomic PostgreSQL job claim (FOR UPDATE SKIP LOCKED)")
@@ -197,7 +207,7 @@ def _get_claim_function():
 async def main() -> None:
     poll_interval = float(os.getenv("MEDSAFE_WORKER_POLL_INTERVAL", "1.0"))
     idle_sleep = max(0.2, min(poll_interval, 10.0))
-    
+
     # Get the appropriate claim function for our database
     claim_job = _get_claim_function()
 
@@ -214,4 +224,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-

@@ -10,10 +10,11 @@ Configures:
 - Agent Ops & Observability settings
 """
 
-from pydantic_settings import BaseSettings
-from typing import Optional
-from pathlib import Path
 import os
+from pathlib import Path
+from typing import Optional
+
+from pydantic_settings import BaseSettings
 
 
 class LangGraphSettings(BaseSettings):
@@ -29,16 +30,24 @@ class LangGraphSettings(BaseSettings):
     # ========================================================================
     # SKILL: @debugging-strategies - Use environment variables for Docker compatibility
     # SKILL: @python-performance-optimization - Increased timeouts for GPU processing
-    ollama_base_url: str = os.getenv("OLLAMA_HOST", "http://ollama:11434")  # Docker service name
+    ollama_base_url: str = os.getenv(
+        "OLLAMA_HOST", "http://ollama:11434"
+    )  # Docker service name
     # Cloud is OPT-IN: only used when OLLAMA_CLOUD is set (non-empty) AND an API key is provided.
     # Default is local-only to avoid accidental cloud spend.
-    ollama_model: str = os.getenv("OLLAMA_CLOUD", "").strip() or os.getenv("OLLAMA_LLM", "qwen3:8b")
-    ollama_local_model: str = os.getenv("OLLAMA_LLM", "qwen3:8b")  # Local model (also fallback)
-    ollama_api_key: Optional[str] = os.getenv("OLLAMA_API_KEY", None)  # API key for cloud models
+    ollama_model: str = os.getenv("OLLAMA_CLOUD", "").strip() or os.getenv(
+        "OLLAMA_LLM", "qwen3:8b"
+    )
+    ollama_local_model: str = os.getenv(
+        "OLLAMA_LLM", "qwen3:8b"
+    )  # Local model (also fallback)
+    ollama_api_key: Optional[str] = os.getenv(
+        "OLLAMA_API_KEY", None
+    )  # API key for cloud models
     ollama_temperature: float = 0.1  # Low temp for medical accuracy
     ollama_max_tokens: int = 2048
     ollama_timeout: int = 300  # 5 minutes for complex multi-agent analysis
-    
+
     @property
     def is_cloud_model(self) -> bool:
         """Check if using a cloud model (from OLLAMA_CLOUD env)"""
@@ -75,7 +84,9 @@ class LangGraphSettings(BaseSettings):
     # POSTGRESQL CHECKPOINTING (HITL Pattern - PDF pg 22, 32)
     # ========================================================================
     # SKILL: @debugging-strategies - Use environment variables for Docker compatibility
-    postgres_host: str = os.getenv("POSTGRES_HOST", "db")  # 'db' for Docker, 'localhost' for local
+    postgres_host: str = os.getenv(
+        "POSTGRES_HOST", "db"
+    )  # 'db' for Docker, 'localhost' for local
     postgres_port: int = int(os.getenv("POSTGRES_PORT", "5432"))
     postgres_db: str = os.getenv("POSTGRES_DB", "medsafe")
     postgres_user: str = os.getenv("POSTGRES_USER", "medsafe")
@@ -110,7 +121,9 @@ class LangGraphSettings(BaseSettings):
     # RAG CONFIGURATION (PDF pg 21)
     # ========================================================================
     vector_store_enabled: bool = True
-    embedding_model: str = os.getenv("EMBEDDING_MODEL", "qwen3-embedding:0.6b")  # Ollama embedding model
+    embedding_model: str = os.getenv(
+        "EMBEDDING_MODEL", "qwen3-embedding:0.6b"
+    )  # Ollama embedding model
     top_k_documents: int = 5  # Number of evidence documents to retrieve
     similarity_threshold: float = 0.7
 

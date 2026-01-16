@@ -2,9 +2,9 @@
 Testes para o serviço OpenFDA
 """
 
+import httpx
 import pytest
 import respx
-import httpx
 
 from backend.app.services.openfda_service import OpenFDAService
 
@@ -18,7 +18,11 @@ async def test_openfda_adverse_events():
         respx.get("https://api.fda.gov/drug/event.json").mock(
             return_value=httpx.Response(
                 200,
-                json={"results": [{"patient": {"reaction": [{"reactionmeddrapt": "Nausea"}]}}]},
+                json={
+                    "results": [
+                        {"patient": {"reaction": [{"reactionmeddrapt": "Nausea"}]}}
+                    ]
+                },
             )
         )
         events = await service.get_adverse_events("aspirin", limit=5)
@@ -35,7 +39,9 @@ async def test_openfda_drug_label():
 
     with respx.mock:
         respx.get("https://api.fda.gov/drug/label.json").mock(
-            return_value=httpx.Response(200, json={"results": [{"openfda": {"brand_name": ["Aspirin"]}}]})
+            return_value=httpx.Response(
+                200, json={"results": [{"openfda": {"brand_name": ["Aspirin"]}}]}
+            )
         )
         label = await service.get_drug_label("aspirin")
 
@@ -63,7 +69,9 @@ async def test_openfda_enriched_info():
 
     with respx.mock:
         respx.get("https://api.fda.gov/drug/label.json").mock(
-            return_value=httpx.Response(200, json={"results": [{"openfda": {"generic_name": ["Metformin"]}}]})
+            return_value=httpx.Response(
+                200, json={"results": [{"openfda": {"generic_name": ["Metformin"]}}]}
+            )
         )
         respx.get("https://api.fda.gov/drug/event.json").mock(
             return_value=httpx.Response(200, json={"results": []})
@@ -85,7 +93,9 @@ async def test_openfda_invalid_drug():
         respx.get("https://api.fda.gov/drug/event.json").mock(
             return_value=httpx.Response(404, json={"error": {"message": "Not found"}})
         )
-        events = await service.get_adverse_events("medicamento_inexistente_xyz123", limit=1)
+        events = await service.get_adverse_events(
+            "medicamento_inexistente_xyz123", limit=1
+        )
 
     assert isinstance(events, list)
     assert len(events) == 0

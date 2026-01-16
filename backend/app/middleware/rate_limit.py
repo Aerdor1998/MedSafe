@@ -8,11 +8,12 @@ PATTERN: Token bucket algorithm for API rate limiting
 SKILLS: @api-design-principles, @backend-dev-guidelines
 """
 
-import os
 import logging
+import os
+
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -20,13 +21,13 @@ logger = logging.getLogger(__name__)
 
 # Rate limit configurations per endpoint type
 RATE_LIMITS = {
-    "health": "120/minute",      # High limit for health checks
-    "analysis": "10/minute",     # Low limit for expensive LLM analysis
-    "vision": "15/minute",       # Low limit for vision analysis (VLM is slow)
-    "triage": "20/minute",       # Medium limit for triage creation
-    "public": "60/minute",       # Default for public endpoints
-    "admin": "100/minute",       # Higher limit for admin
-    "auth": "30/minute",         # Auth endpoints
+    "health": "120/minute",  # High limit for health checks
+    "analysis": "10/minute",  # Low limit for expensive LLM analysis
+    "vision": "15/minute",  # Low limit for vision analysis (VLM is slow)
+    "triage": "20/minute",  # Medium limit for triage creation
+    "public": "60/minute",  # Default for public endpoints
+    "admin": "100/minute",  # Higher limit for admin
+    "auth": "30/minute",  # Auth endpoints
 }
 
 
@@ -72,7 +73,9 @@ def get_rate_limit_key(request: Request) -> str:
                 # Local import avoids circular deps at import time
                 from backend.app.auth.jwt import verify_token
 
-                payload = verify_token(token, expected_type="access", check_revocation=False)
+                payload = verify_token(
+                    token, expected_type="access", check_revocation=False
+                )
                 user_id = payload.get("sub")
                 role = payload.get("role")
                 if user_id:
@@ -109,7 +112,9 @@ limiter = Limiter(
 )
 
 
-def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+def rate_limit_exceeded_handler(
+    request: Request, exc: RateLimitExceeded
+) -> JSONResponse:
     """
     Custom handler for rate limit exceeded errors.
 

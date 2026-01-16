@@ -4,15 +4,16 @@ Middleware de logging estruturado com redação PHI/PII.
 SECURITY: Todos os logs passam por redação automática para compliance LGPD.
 """
 
-import time
 import logging
+import time
 from typing import Any, Dict
+
+import structlog
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-import structlog
 
-from ..utils.log_redaction import redact_sensitive_data, redact_dict
 from ..config import settings
+from ..utils.log_redaction import redact_dict, redact_sensitive_data
 
 logger = structlog.get_logger(__name__)
 
@@ -61,9 +62,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         request_id = getattr(request.state, "request_id", None)
 
         # Verificar se path é sensível (não logar detalhes)
-        is_sensitive = any(
-            request.url.path.startswith(p) for p in self.SENSITIVE_PATHS
-        )
+        is_sensitive = any(request.url.path.startswith(p) for p in self.SENSITIVE_PATHS)
 
         # Log da requisição (redactado)
         log_data = {

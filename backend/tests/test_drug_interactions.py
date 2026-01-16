@@ -2,7 +2,10 @@
 Testes leves para o serviço de interações (versão atual).
 """
 
-from backend.app.services.drug_interactions import normalize_drug_name, DrugInteractionService
+from backend.app.services.drug_interactions import (
+    DrugInteractionService,
+    normalize_drug_name,
+)
 
 
 def test_normalize_drug_name_handles_accents():

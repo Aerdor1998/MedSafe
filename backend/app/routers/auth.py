@@ -6,26 +6,28 @@ SKILLS: @api-design-principles, @secrets-management, @backend-dev-guidelines
 FASE 1.2: Audit logging integration
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
-from typing import Dict, Any
 import hashlib
 import logging
+from datetime import datetime, timedelta
+from typing import Any, Dict
 
-from ..auth.models import Token, LoginRequest, RefreshTokenRequest, UserCreate, User
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.orm import Session
+
 from ..auth.jwt import (
     create_access_token,
     create_refresh_token,
-    verify_refresh_token,
     get_current_user,
     revoke_token,
+    verify_refresh_token,
 )
+from ..auth.models import LoginRequest, RefreshTokenRequest, Token, User, UserCreate
 from ..auth.rbac import UserRole, require_admin
 from ..db.database import get_db_context
-from ..db.user_models import User as DBUser, UserSession as DBUserSession
+from ..db.user_models import User as DBUser
+from ..db.user_models import UserSession as DBUserSession
 from ..middleware.rate_limit import limiter
-from ..utils.audit_logger import audit_logger, AuditEventType, AuditSeverity
+from ..utils.audit_logger import AuditEventType, AuditSeverity, audit_logger
 
 logger = logging.getLogger(__name__)
 
@@ -194,12 +196,10 @@ async def login(request: Request, credentials: LoginRequest):
         # SECURITY FIX: Create tokens with device tracking
         device_id = request.headers.get("X-Device-ID")
         access_token, access_jti = create_access_token(
-            data={"sub": str(user.id), "role": user.role.value},
-            device_id=device_id
+            data={"sub": str(user.id), "role": user.role.value}, device_id=device_id
         )
         refresh_token_str, refresh_jti = create_refresh_token(
-            data={"sub": str(user.id)},
-            device_id=device_id
+            data={"sub": str(user.id)}, device_id=device_id
         )
 
         # Store refresh token session in database (user_sessions)
@@ -286,7 +286,11 @@ async def refresh_token(request: Request, refresh_request: RefreshTokenRequest):
                 .first()
             )
 
-            if not stored_session or (not stored_session.is_active) or stored_session.is_expired():
+            if (
+                not stored_session
+                or (not stored_session.is_active)
+                or stored_session.is_expired()
+            ):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid or expired refresh token",
@@ -306,12 +310,10 @@ async def refresh_token(request: Request, refresh_request: RefreshTokenRequest):
             # SECURITY FIX: Create new tokens with device tracking
             device_id = request.headers.get("X-Device-ID")
             access_token, access_jti = create_access_token(
-                data={"sub": str(user.id), "role": user.role.value},
-                device_id=device_id
+                data={"sub": str(user.id), "role": user.role.value}, device_id=device_id
             )
             new_refresh_token, refresh_jti = create_refresh_token(
-                data={"sub": str(user.id)},
-                device_id=device_id
+                data={"sub": str(user.id)}, device_id=device_id
             )
 
             # Store new refresh session
@@ -348,7 +350,11 @@ async def refresh_token(request: Request, refresh_request: RefreshTokenRequest):
 
 @router.post("/logout")
 @limiter.limit("30/minute")
-async def logout(request: Request, refresh_request: RefreshTokenRequest, current_user: str = Depends(get_current_user)):
+async def logout(
+    request: Request,
+    refresh_request: RefreshTokenRequest,
+    current_user: str = Depends(get_current_user),
+):
     """
     Logout user and revoke refresh token
 
@@ -380,7 +386,9 @@ async def logout(request: Request, refresh_request: RefreshTokenRequest, current
 
             access_token = auth_header.split(" ", 1)[1].strip()
             try:
-                access_payload = verify_token(access_token, expected_type="access", check_revocation=False)
+                access_payload = verify_token(
+                    access_token, expected_type="access", check_revocation=False
+                )
                 access_jti = access_payload.get("jti")
                 access_exp = access_payload.get("exp")
                 if access_jti and access_exp:

@@ -9,7 +9,7 @@ import uuid
 from io import BytesIO
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, Request, Depends
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from PIL import Image
 
 from ..agents.vision import VisionAgent
@@ -34,7 +34,11 @@ async def analyze_vision(
 
     Anonymous access is allowed only when enabled (or in debug).
     """
-    if not current_user and (not app_settings.debug) and (not getattr(app_settings, "allow_anonymous_analysis", False)):
+    if (
+        not current_user
+        and (not app_settings.debug)
+        and (not getattr(app_settings, "allow_anonymous_analysis", False))
+    ):
         raise HTTPException(status_code=401, detail="Authentication required")
 
     session_id = str(uuid.uuid4())
@@ -66,7 +70,9 @@ async def analyze_vision(
             with Image.open(BytesIO(raw)) as img:
                 img.verify()  # raises if corrupt/invalid
                 if img.format not in {"JPEG", "PNG"}:
-                    raise HTTPException(status_code=415, detail="Unsupported image format")
+                    raise HTTPException(
+                        status_code=415, detail="Unsupported image format"
+                    )
         except HTTPException:
             raise
         except Exception:
@@ -85,4 +91,3 @@ async def analyze_vision(
     )
 
     return result
-

@@ -125,7 +125,9 @@ def build_recommendations_from_state(state_dict: dict) -> list[str]:
     if isinstance(dosage_adjustments, list):
         for adj in dosage_adjustments:
             if isinstance(adj, dict):
-                text = normalize_str(adj.get("recommendation") or adj.get("description")).strip()
+                text = normalize_str(
+                    adj.get("recommendation") or adj.get("description")
+                ).strip()
             else:
                 text = normalize_str(adj).strip()
             if text:
@@ -143,7 +145,9 @@ def build_recommendations_from_state(state_dict: dict) -> list[str]:
     return deduped[:30]
 
 
-def compute_accuracy(state_dict: dict, patient_info_dict: dict) -> tuple[float, list[str]]:
+def compute_accuracy(
+    state_dict: dict, patient_info_dict: dict
+) -> tuple[float, list[str]]:
     """
     Compute calibrated quality metric for UI (0..1).
 
@@ -194,13 +198,15 @@ def compute_accuracy(state_dict: dict, patient_info_dict: dict) -> tuple[float, 
     # Refinement cycles
     refinement_count = state_dict.get("refinement_count")
     if refinement_count is None:
-        refinement_count = (state_dict.get("final_report") or {}).get("refinement_cycles")
+        refinement_count = (state_dict.get("final_report") or {}).get(
+            "refinement_cycles"
+        )
     try:
         refinement_count_int = int(refinement_count or 0)
     except Exception:
         refinement_count_int = 0
     if refinement_count_int > 0:
-        mult = 0.95 ** refinement_count_int
+        mult = 0.95**refinement_count_int
         accuracy *= mult
         factors.append(f"Refinements={refinement_count_int}: x{mult:.2f}")
 

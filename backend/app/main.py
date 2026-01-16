@@ -3,10 +3,10 @@ MedSafe API - Drug Contraindication System
 Main application entry point with FastAPI, LangGraph Multi-Agent, PostgreSQL + pgvector
 """
 
-from contextlib import asynccontextmanager
-from pathlib import Path
 import logging
 import os
+from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
@@ -27,6 +27,7 @@ async def check_services_health():
     """Check health of dependent services"""
     # Import here to avoid circular imports
     from .routers.health import check_services_health as _check
+
     await _check()
 
 
@@ -39,7 +40,9 @@ async def lifespan(app: FastAPI):
         # During automated tests we avoid heavyweight startup side-effects
         # (DB init, network checks, external services).
         if settings.testing or os.getenv("TESTING", "").lower() in {"1", "true", "yes"}:
-            logger.info("TESTING mode enabled: skipping init_db() and service health checks")
+            logger.info(
+                "TESTING mode enabled: skipping init_db() and service health checks"
+            )
             yield
             return
 
@@ -71,9 +74,11 @@ def create_app() -> FastAPI:
     Returns:
         Configured FastAPI application instance
     """
-    logger.info("MedSafe - Drug Contraindication System v%s [%s]",
-                settings.app_version,
-                "Production" if not settings.debug else "Development")
+    logger.info(
+        "MedSafe - Drug Contraindication System v%s [%s]",
+        settings.app_version,
+        "Production" if not settings.debug else "Development",
+    )
 
     app = FastAPI(
         title=settings.app_name,
@@ -104,13 +109,13 @@ def create_app() -> FastAPI:
 
 def _register_routers(app: FastAPI) -> None:
     """Register all API routers"""
+    from backend.app.routers.admin import router as admin_router
+    from backend.app.routers.auth import router as auth_router
     from backend.app.routers.health import router as health_router
     from backend.app.routers.langgraph import router as langgraph_router
-    from backend.app.routers.monitoring import router as monitoring_router
-    from backend.app.routers.auth import router as auth_router
-    from backend.app.routers.admin import router as admin_router
-    from backend.app.routers.vision import router as vision_router
     from backend.app.routers.medications import router as medications_router
+    from backend.app.routers.monitoring import router as monitoring_router
+    from backend.app.routers.vision import router as vision_router
 
     app.include_router(health_router)
     logger.info("Health endpoints registered")
@@ -153,4 +158,5 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("app.main:app", host="0.0.0.0", port=9000, reload=settings.debug)

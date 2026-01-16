@@ -11,13 +11,13 @@ RESPONSIBILITIES:
 4. Set up session for multi-agent workflow
 """
 
-from typing import Dict, Any
-from datetime import datetime
 import logging
 import uuid
+from datetime import datetime
+from typing import Any, Dict
 
 from .base_agent import BaseAgent
-from .state import MedSafeState, RiskLevel, CritiqueLevel, SafetyClassification
+from .state import CritiqueLevel, MedSafeState, RiskLevel, SafetyClassification
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,9 @@ Output format: Structured JSON with validated fields.
             # Validate inputs
             self.agent_logger.progress("Validando campos obrigatórios")
             if not self.validate_state(state, ["patient_data", "medication_text"]):
-                raise ValueError("Missing required fields: patient_data or medication_text")
+                raise ValueError(
+                    "Missing required fields: patient_data or medication_text"
+                )
 
             patient_data = state["patient_data"]
             medication_text = state["medication_text"]
@@ -103,11 +105,15 @@ Output format: Structured JSON with validated fields.
             # Extract structured information using LLM (may fail)
             self.agent_logger.progress("Analisando dados do paciente com LLM")
             try:
-                triage_result = self._analyze_patient_data(patient_data, medication_text)
+                triage_result = self._analyze_patient_data(
+                    patient_data, medication_text
+                )
             except Exception as llm_error:
                 llm_failed = True
                 self.agent_logger.error(f"LLM falhou na análise: {llm_error}")
-                logger.warning(f" LLM failed during triage, using fallback: {llm_error}")
+                logger.warning(
+                    f" LLM failed during triage, using fallback: {llm_error}"
+                )
                 # Fallback: proceed with basic data completeness assessment
                 triage_result = {
                     "medication_normalized": medication_text.strip().lower(),
@@ -132,7 +138,8 @@ Output format: Structured JSON with validated fields.
             # Log completion
             duration = (datetime.now() - start_time).total_seconds()
             self.agent_logger.end(
-                "Triagem concluída" + (" (parcial - LLM falhou)" if llm_failed else " com sucesso"),
+                "Triagem concluída"
+                + (" (parcial - LLM falhou)" if llm_failed else " com sucesso"),
                 success=not llm_failed,
                 data_completeness=triage_result["data_completeness"]["score"],
                 medication=medication_text,
@@ -148,18 +155,31 @@ Output format: Structured JSON with validated fields.
                 patient_data = state.get("patient_data", {})
                 medication_text = state.get("medication_text", "unknown")
                 fallback_result = {
-                    "medication_normalized": medication_text.strip().lower() if medication_text else "unknown",
+                    "medication_normalized": (
+                        medication_text.strip().lower()
+                        if medication_text
+                        else "unknown"
+                    ),
                     "analysis": f"Erro na triagem: {str(e)}",
-                    "data_completeness": {"score": 0.0, "is_complete": False, "critical_missing": ["triage_failed"]},
+                    "data_completeness": {
+                        "score": 0.0,
+                        "is_complete": False,
+                        "critical_missing": ["triage_failed"],
+                    },
                 }
                 updates = self._initialize_state(state, fallback_result)
-                updates["timestamps"] = {"triage_start": start_time, "triage_end": datetime.now()}
+                updates["timestamps"] = {
+                    "triage_start": start_time,
+                    "triage_end": datetime.now(),
+                }
                 updates["error"] = str(e)
                 return updates
             except Exception:
                 return self.handle_error(state, e, "Failed to triage patient")
 
-    def _analyze_patient_data(self, patient_data: Dict[str, Any], medication_text: str) -> Dict[str, Any]:
+    def _analyze_patient_data(
+        self, patient_data: Dict[str, Any], medication_text: str
+    ) -> Dict[str, Any]:
         """
         Analyze patient data using LLM for extraction and validation
 
@@ -171,7 +191,10 @@ Output format: Structured JSON with validated fields.
             "Weight": patient_data.get("weight", "Not provided"),
             "Conditions": ", ".join(patient_data.get("conditions", [])) or "None",
             "Allergies": ", ".join(patient_data.get("allergies", [])) or "None",
-            "Current Medications": ", ".join(patient_data.get("current_medications", [])) or "None",
+            "Current Medications": ", ".join(
+                patient_data.get("current_medications", [])
+            )
+            or "None",
         }
 
         # Construct analysis prompt
@@ -202,7 +225,8 @@ Provide a brief structured assessment."""
         """
         completeness = {
             "has_age": "age" in patient_data and patient_data["age"] is not None,
-            "has_weight": "weight" in patient_data and patient_data["weight"] is not None,
+            "has_weight": "weight" in patient_data
+            and patient_data["weight"] is not None,
             "has_conditions": bool(patient_data.get("conditions", [])),
             "has_allergies": "allergies" in patient_data,  # Can be empty list
             "has_current_medications": "current_medications" in patient_data,
@@ -226,7 +250,9 @@ Provide a brief structured assessment."""
 
         return completeness
 
-    def _initialize_state(self, state: MedSafeState, triage_result: Dict[str, Any]) -> Dict[str, Any]:
+    def _initialize_state(
+        self, state: MedSafeState, triage_result: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Initialize all state fields with proper defaults
 

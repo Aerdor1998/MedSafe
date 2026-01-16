@@ -27,29 +27,30 @@ logger = logging.getLogger(__name__)
 # Configuração de Retenção
 # ============================================================================
 
+
 class DataCategory(str, Enum):
     """Categorias de dados para política de retenção."""
-    
+
     ANALYSIS_JOBS = "analysis_jobs"  # Jobs de análise (contém state com PHI)
-    TRIAGES = "triages"              # Dados de triagem de pacientes
-    REPORTS = "reports"              # Relatórios de análise
-    HITL_REVIEWS = "hitl_reviews"    # Revisões HITL
-    AUDIT_LOGS = "audit_logs"        # Logs de auditoria (compliance)
+    TRIAGES = "triages"  # Dados de triagem de pacientes
+    REPORTS = "reports"  # Relatórios de análise
+    HITL_REVIEWS = "hitl_reviews"  # Revisões HITL
+    AUDIT_LOGS = "audit_logs"  # Logs de auditoria (compliance)
     USER_SESSIONS = "user_sessions"  # Sessões de usuário
-    INGEST_JOBS = "ingest_jobs"      # Jobs de ingestão
+    INGEST_JOBS = "ingest_jobs"  # Jobs de ingestão
 
 
 @dataclass
 class RetentionPolicy:
     """Define política de retenção para uma categoria de dados."""
-    
+
     category: DataCategory
     retention_days: int
     description: str
     requires_anonymization: bool = False
     can_be_archived: bool = True
     compliance_requirement: Optional[str] = None
-    
+
     @property
     def retention_period(self) -> timedelta:
         return timedelta(days=self.retention_days)
@@ -120,17 +121,18 @@ DEFAULT_RETENTION_POLICIES: Dict[DataCategory, RetentionPolicy] = {
 # Serviço de Retenção
 # ============================================================================
 
+
 @dataclass
 class RetentionResult:
     """Resultado de uma operação de retenção."""
-    
+
     category: DataCategory
     records_processed: int = 0
     records_anonymized: int = 0
     records_archived: int = 0
     records_deleted: int = 0
     errors: List[str] = field(default_factory=list)
-    
+
     @property
     def success(self) -> bool:
         return len(self.errors) == 0
@@ -139,12 +141,12 @@ class RetentionResult:
 class DataRetentionService:
     """
     Serviço para aplicação de políticas de retenção de dados.
-    
+
     Uso:
         service = DataRetentionService(db_session)
         results = await service.apply_retention_policies()
     """
-    
+
     def __init__(
         self,
         db: Session,
@@ -154,36 +156,36 @@ class DataRetentionService:
         self.db = db
         self.policies = policies or DEFAULT_RETENTION_POLICIES
         self.dry_run = dry_run
-    
+
     async def apply_retention_policies(
         self,
         categories: Optional[List[DataCategory]] = None,
     ) -> Dict[DataCategory, RetentionResult]:
         """
         Aplica políticas de retenção para categorias especificadas.
-        
+
         Args:
             categories: Lista de categorias (todas se None)
-            
+
         Returns:
             Dicionário com resultados por categoria
         """
         categories = categories or list(self.policies.keys())
         results = {}
-        
+
         for category in categories:
             if category not in self.policies:
                 logger.warning(f"Categoria {category} não tem política definida")
                 continue
-            
+
             policy = self.policies[category]
             cutoff_date = datetime.utcnow() - policy.retention_period
-            
+
             logger.info(
                 f"Aplicando retenção para {category.value}: "
                 f"registros antes de {cutoff_date.isoformat()}"
             )
-            
+
             try:
                 result = await self._apply_policy(category, policy, cutoff_date)
                 results[category] = result
@@ -193,9 +195,9 @@ class DataRetentionService:
                     category=category,
                     errors=[str(e)],
                 )
-        
+
         return results
-    
+
     async def _apply_policy(
         self,
         category: DataCategory,
@@ -203,9 +205,9 @@ class DataRetentionService:
         cutoff_date: datetime,
     ) -> RetentionResult:
         """Aplica política de retenção para uma categoria específica."""
-        
+
         result = RetentionResult(category=category)
-        
+
         # Mapeamento de categoria para handler
         handlers = {
             DataCategory.ANALYSIS_JOBS: self._process_analysis_jobs,
@@ -216,15 +218,15 @@ class DataRetentionService:
             DataCategory.USER_SESSIONS: self._process_user_sessions,
             DataCategory.INGEST_JOBS: self._process_ingest_jobs,
         }
-        
+
         handler = handlers.get(category)
         if handler:
             result = await handler(policy, cutoff_date)
         else:
             result.errors.append(f"Handler não implementado para {category}")
-        
+
         return result
-    
+
     async def _process_analysis_jobs(
         self,
         policy: RetentionPolicy,
@@ -232,9 +234,9 @@ class DataRetentionService:
     ) -> RetentionResult:
         """Processa retenção de analysis_jobs."""
         from ..db.models import AnalysisJob
-        
+
         result = RetentionResult(category=DataCategory.ANALYSIS_JOBS)
-        
+
         try:
             # Buscar jobs antigos completados
             query = self.db.query(AnalysisJob).filter(
@@ -243,14 +245,14 @@ class DataRetentionService:
                     AnalysisJob.status.in_(["completed", "failed", "cancelled"]),
                 )
             )
-            
+
             old_jobs = query.all()
             result.records_processed = len(old_jobs)
-            
+
             if self.dry_run:
                 logger.info(f"[DRY RUN] Processaria {len(old_jobs)} analysis_jobs")
                 return result
-            
+
             for job in old_jobs:
                 if policy.requires_anonymization:
                     # Anonimizar state (contém PHI)
@@ -260,16 +262,16 @@ class DataRetentionService:
                 else:
                     self.db.delete(job)
                     result.records_deleted += 1
-            
+
             self.db.commit()
-            
+
         except Exception as e:
             self.db.rollback()
             result.errors.append(str(e))
             logger.error(f"Erro processando analysis_jobs: {e}")
-        
+
         return result
-    
+
     async def _process_triages(
         self,
         policy: RetentionPolicy,
@@ -277,21 +279,19 @@ class DataRetentionService:
     ) -> RetentionResult:
         """Processa retenção de triages."""
         from ..db.models import Triage
-        
+
         result = RetentionResult(category=DataCategory.TRIAGES)
-        
+
         try:
-            query = self.db.query(Triage).filter(
-                Triage.created_at < cutoff_date
-            )
-            
+            query = self.db.query(Triage).filter(Triage.created_at < cutoff_date)
+
             old_triages = query.all()
             result.records_processed = len(old_triages)
-            
+
             if self.dry_run:
                 logger.info(f"[DRY RUN] Processaria {len(old_triages)} triages")
                 return result
-            
+
             for triage in old_triages:
                 if policy.requires_anonymization:
                     # Anonimizar dados sensíveis
@@ -304,16 +304,16 @@ class DataRetentionService:
                 else:
                     self.db.delete(triage)
                     result.records_deleted += 1
-            
+
             self.db.commit()
-            
+
         except Exception as e:
             self.db.rollback()
             result.errors.append(str(e))
             logger.error(f"Erro processando triages: {e}")
-        
+
         return result
-    
+
     async def _process_reports(
         self,
         policy: RetentionPolicy,
@@ -321,21 +321,19 @@ class DataRetentionService:
     ) -> RetentionResult:
         """Processa retenção de reports."""
         from ..db.models import Report
-        
+
         result = RetentionResult(category=DataCategory.REPORTS)
-        
+
         try:
-            query = self.db.query(Report).filter(
-                Report.created_at < cutoff_date
-            )
-            
+            query = self.db.query(Report).filter(Report.created_at < cutoff_date)
+
             old_reports = query.all()
             result.records_processed = len(old_reports)
-            
+
             if self.dry_run:
                 logger.info(f"[DRY RUN] Processaria {len(old_reports)} reports")
                 return result
-            
+
             for report in old_reports:
                 if policy.requires_anonymization:
                     # Manter estrutura mas anonimizar conteúdo
@@ -344,16 +342,16 @@ class DataRetentionService:
                 else:
                     self.db.delete(report)
                     result.records_deleted += 1
-            
+
             self.db.commit()
-            
+
         except Exception as e:
             self.db.rollback()
             result.errors.append(str(e))
             logger.error(f"Erro processando reports: {e}")
-        
+
         return result
-    
+
     async def _process_hitl_reviews(
         self,
         policy: RetentionPolicy,
@@ -361,28 +359,28 @@ class DataRetentionService:
     ) -> RetentionResult:
         """Processa retenção de hitl_reviews (geralmente arquivamento)."""
         from ..db.models import HITLReview
-        
+
         result = RetentionResult(category=DataCategory.HITL_REVIEWS)
-        
+
         try:
             query = self.db.query(HITLReview).filter(
                 HITLReview.created_at < cutoff_date
             )
-            
+
             old_reviews = query.count()
             result.records_processed = old_reviews
-            
+
             # HITL reviews são importantes para auditoria - apenas arquivar
             if policy.can_be_archived:
                 logger.info(f"HITL reviews ({old_reviews}) marcados para arquivamento")
                 result.records_archived = old_reviews
-            
+
         except Exception as e:
             result.errors.append(str(e))
             logger.error(f"Erro processando hitl_reviews: {e}")
-        
+
         return result
-    
+
     async def _process_audit_logs(
         self,
         policy: RetentionPolicy,
@@ -390,30 +388,28 @@ class DataRetentionService:
     ) -> RetentionResult:
         """Processa retenção de audit_logs (arquivamento obrigatório)."""
         from ..db.user_models import AuditLog
-        
+
         result = RetentionResult(category=DataCategory.AUDIT_LOGS)
-        
+
         try:
-            query = self.db.query(AuditLog).filter(
-                AuditLog.created_at < cutoff_date
-            )
-            
+            query = self.db.query(AuditLog).filter(AuditLog.created_at < cutoff_date)
+
             old_logs = query.count()
             result.records_processed = old_logs
-            
+
             # Audit logs NUNCA são deletados - apenas arquivados
             logger.info(
                 f"Audit logs ({old_logs}) antes de {cutoff_date.isoformat()} "
                 "devem ser arquivados em cold storage"
             )
             result.records_archived = old_logs
-            
+
         except Exception as e:
             result.errors.append(str(e))
             logger.error(f"Erro processando audit_logs: {e}")
-        
+
         return result
-    
+
     async def _process_user_sessions(
         self,
         policy: RetentionPolicy,
@@ -421,9 +417,9 @@ class DataRetentionService:
     ) -> RetentionResult:
         """Processa retenção de user_sessions (deleção)."""
         from ..db.user_models import UserSession
-        
+
         result = RetentionResult(category=DataCategory.USER_SESSIONS)
-        
+
         try:
             # Sessões expiradas e inativas
             query = self.db.query(UserSession).filter(
@@ -435,28 +431,28 @@ class DataRetentionService:
                     UserSession.created_at < cutoff_date,
                 )
             )
-            
+
             old_sessions = query.all()
             result.records_processed = len(old_sessions)
-            
+
             if self.dry_run:
                 logger.info(f"[DRY RUN] Deletaria {len(old_sessions)} sessions")
                 return result
-            
+
             # Sessões podem ser deletadas permanentemente
             for session in old_sessions:
                 self.db.delete(session)
                 result.records_deleted += 1
-            
+
             self.db.commit()
-            
+
         except Exception as e:
             self.db.rollback()
             result.errors.append(str(e))
             logger.error(f"Erro processando user_sessions: {e}")
-        
+
         return result
-    
+
     async def _process_ingest_jobs(
         self,
         policy: RetentionPolicy,
@@ -464,9 +460,9 @@ class DataRetentionService:
     ) -> RetentionResult:
         """Processa retenção de ingest_jobs."""
         from ..db.models import IngestJob
-        
+
         result = RetentionResult(category=DataCategory.INGEST_JOBS)
-        
+
         try:
             query = self.db.query(IngestJob).filter(
                 and_(
@@ -474,31 +470,32 @@ class DataRetentionService:
                     IngestJob.status.in_(["completed", "failed"]),
                 )
             )
-            
+
             old_jobs = query.all()
             result.records_processed = len(old_jobs)
-            
+
             if self.dry_run:
                 logger.info(f"[DRY RUN] Deletaria {len(old_jobs)} ingest_jobs")
                 return result
-            
+
             for job in old_jobs:
                 self.db.delete(job)
                 result.records_deleted += 1
-            
+
             self.db.commit()
-            
+
         except Exception as e:
             self.db.rollback()
             result.errors.append(str(e))
             logger.error(f"Erro processando ingest_jobs: {e}")
-        
+
         return result
 
 
 # ============================================================================
 # Funções utilitárias
 # ============================================================================
+
 
 def get_retention_policy(category: DataCategory) -> RetentionPolicy:
     """Retorna a política de retenção para uma categoria."""
@@ -517,12 +514,12 @@ async def run_retention_cleanup(
 ) -> Dict[DataCategory, RetentionResult]:
     """
     Executa limpeza de retenção.
-    
+
     Args:
         db: Sessão do banco de dados
         categories: Categorias a processar (todas se None)
         dry_run: Se True, apenas simula (padrão seguro)
-        
+
     Returns:
         Resultados por categoria
     """
@@ -544,4 +541,3 @@ __all__ = [
     "run_retention_cleanup",
     "DEFAULT_RETENTION_POLICIES",
 ]
-

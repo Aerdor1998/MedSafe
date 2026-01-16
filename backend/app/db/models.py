@@ -2,18 +2,30 @@
 Modelos SQLAlchemy para o MedSafe
 """
 
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, Text, JSON, ForeignKey, Index
+import uuid
+from datetime import datetime
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from datetime import datetime
-import uuid
 
 from .database import Base
 
 # Importação condicional de tipos PostgreSQL
 try:
-    from sqlalchemy.dialects.postgresql import UUID
     from pgvector.sqlalchemy import Vector as VECTOR
+    from sqlalchemy.dialects.postgresql import UUID
 
     POSTGRES_AVAILABLE = True
 except ImportError:
@@ -92,7 +104,9 @@ class Report(Base):
         default=uuid.uuid4 if not USE_POSTGRES else None,
     )
     triage_id = Column(
-        UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36), ForeignKey("triage.id"), nullable=False
+        UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36),
+        ForeignKey("triage.id"),
+        nullable=False,
     )
     vision_id = Column(UUID(as_uuid=True), nullable=True)
 
@@ -133,13 +147,19 @@ class Document(Base):
 
     __tablename__ = "documents"
 
-    id = Column(UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36), primary_key=True, default=uuid.uuid4)
+    id = Column(
+        UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
 
     # Metadados do documento
     source = Column(String, nullable=False, index=True)  # ANVISA, SIDER, DrugCentral
     source_url = Column(String, nullable=True)
     drug_name = Column(String, nullable=False, index=True)
-    section = Column(String, nullable=False, index=True)  # contraindicações, advertências, etc.
+    section = Column(
+        String, nullable=False, index=True
+    )  # contraindicações, advertências, etc.
 
     # Conteúdo
     text = Column(Text, nullable=False)
@@ -166,9 +186,15 @@ class Embedding(Base):
 
     __tablename__ = "embeddings"
 
-    id = Column(UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36), primary_key=True, default=uuid.uuid4)
+    id = Column(
+        UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
     document_id = Column(
-        UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36), ForeignKey("documents.id"), nullable=False
+        UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36),
+        ForeignKey("documents.id"),
+        nullable=False,
     )
 
     # Vetor de embedding (pgvector ou Text para SQLite)
@@ -198,7 +224,11 @@ class IngestJob(Base):
 
     __tablename__ = "ingest_jobs"
 
-    id = Column(UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36), primary_key=True, default=uuid.uuid4)
+    id = Column(
+        UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
 
     # Configuração da ingestão
     source = Column(String, nullable=False, index=True)
@@ -263,7 +293,12 @@ class AnalysisJob(Base):
 
     # Identifiers
     session_id = Column(String, nullable=False, unique=True, index=True)
-    triage_id = Column(UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36), ForeignKey("triage.id"), nullable=True, index=True)
+    triage_id = Column(
+        UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36),
+        ForeignKey("triage.id"),
+        nullable=True,
+        index=True,
+    )
     user_id = Column(String, nullable=True, index=True)
 
     # Status lifecycle
@@ -304,8 +339,18 @@ class HITLReview(Base):
     )
 
     session_id = Column(String, nullable=False, index=True)
-    job_id = Column(UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36), ForeignKey("analysis_jobs.id"), nullable=True, index=True)
-    triage_id = Column(UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36), ForeignKey("triage.id"), nullable=True, index=True)
+    job_id = Column(
+        UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36),
+        ForeignKey("analysis_jobs.id"),
+        nullable=True,
+        index=True,
+    )
+    triage_id = Column(
+        UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36),
+        ForeignKey("triage.id"),
+        nullable=True,
+        index=True,
+    )
 
     reviewer_id = Column(String, nullable=False, index=True)
     approved = Column(Boolean, nullable=False)
@@ -362,4 +407,8 @@ Index("idx_embeddings_document_chunk", Embedding.document_id, Embedding.chunk_id
 Index("idx_ingest_jobs_status_created", IngestJob.status, IngestJob.created_at)
 Index("idx_analysis_jobs_status_created", AnalysisJob.status, AnalysisJob.created_at)
 Index("idx_hitl_reviews_created", HITLReview.created_at)
-Index("idx_drug_interactions_pair", DrugInteraction.drug_a_norm, DrugInteraction.drug_b_norm)
+Index(
+    "idx_drug_interactions_pair",
+    DrugInteraction.drug_a_norm,
+    DrugInteraction.drug_b_norm,
+)

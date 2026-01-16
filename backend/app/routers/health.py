@@ -5,11 +5,13 @@ SKILL: @api-design-principles - Observability endpoints
 SKILL: @fastapi-templates - Health check patterns
 """
 
-from fastapi import APIRouter
-from datetime import datetime
-from typing import Dict, Any
 import logging
+from datetime import datetime
+from typing import Any, Dict
+
 import requests
+from fastapi import APIRouter
+
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -55,7 +57,11 @@ async def health_check() -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
-        return {"status": "unhealthy", "error": str(e), "timestamp": datetime.now().isoformat()}
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat(),
+        }
 
 
 @router.get("/metrics")

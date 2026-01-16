@@ -2,13 +2,14 @@
 Configuração do banco de dados PostgreSQL com pgvector
 """
 
+import logging
+from contextlib import contextmanager
+from typing import Generator
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
-from contextlib import contextmanager
-import logging
-from typing import Generator
 
 from ..config import settings
 
@@ -71,10 +72,14 @@ def init_db():
                 # PRODUCTION POLICY:
                 # - Postgres schema MUST be managed by Alembic migrations (source of truth)
                 # - Do NOT run Base.metadata.create_all() in production to avoid schema drift
-                is_prod = (not settings.debug) and (not getattr(settings, "testing", False))
+                is_prod = (not settings.debug) and (
+                    not getattr(settings, "testing", False)
+                )
 
                 # Verificar se a extensão pgvector está disponível
-                result = conn.execute(text("SELECT 1 FROM pg_extension WHERE extname = 'vector'"))
+                result = conn.execute(
+                    text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
+                )
                 has_vector = bool(result.fetchone())
 
                 if not has_vector:
@@ -84,7 +89,9 @@ def init_db():
                             "Em produção, habilite com: CREATE EXTENSION IF NOT EXISTS vector; "
                             "ou ajuste o provisionamento do banco antes do deploy."
                         )
-                    logger.warning("Extensão pgvector não encontrada. Criando (dev/test)...")
+                    logger.warning(
+                        "Extensão pgvector não encontrada. Criando (dev/test)..."
+                    )
                     conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
                     conn.commit()
 
@@ -98,7 +105,9 @@ def init_db():
             Base.metadata.create_all(bind=engine)
             logger.info("Tabelas criadas com sucesso")
         else:
-            logger.info("ℹ️  Produção/Postgres: pulando create_all(); use Alembic migrations (alembic upgrade head).")
+            logger.info(
+                "ℹ️  Produção/Postgres: pulando create_all(); use Alembic migrations (alembic upgrade head)."
+            )
 
         # Criar índices específicos (apenas para PostgreSQL) em dev/test.
         # Em produção, índices devem vir de migrations.
@@ -206,15 +215,21 @@ def check_db_health() -> bool:
 def get_db_stats() -> dict:
     """Obter estatísticas do banco de dados"""
     try:
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
         from sqlalchemy.schema import MetaData
-        from .models import Triage, Report, Document, Embedding
+
+        from .models import Document, Embedding, Report, Triage
 
         with engine.connect() as conn:
             stats = {}
 
             # Mapear modelos (seguro - não usa SQL dinâmico)
-            models = {"triage": Triage, "reports": Report, "documents": Document, "embeddings": Embedding}
+            models = {
+                "triage": Triage,
+                "reports": Report,
+                "documents": Document,
+                "embeddings": Embedding,
+            }
 
             # Contar registros usando ORM (seguro)
             metadata = MetaData()

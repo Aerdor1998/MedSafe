@@ -16,27 +16,21 @@ no audit_logs com justificativa LGPD e não podem ser revertidos.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field
-import json
-import time
 import re
+import time
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import text, and_, func, table, column, update, delete, or_, inspect
+from sqlalchemy import and_, column, delete, func, inspect, or_, table, text, update
 from sqlalchemy.orm import Session
 
-from ..db.database import get_db_context
-from ..db.models import (
-    AnalysisJob,
-    Triage,
-    Report,
-    HITLReview,
-    IngestJob,
-)
 from ..config import settings
+from ..db.database import get_db_context
+from ..db.models import AnalysisJob, HITLReview, IngestJob, Report, Triage
 
 logger = logging.getLogger(__name__)
 _IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
@@ -46,9 +40,11 @@ _IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 # Data Classes
 # =============================================================================
 
+
 @dataclass
 class RetentionPolicy:
     """Define uma política de retenção para uma tabela."""
+
     table_name: str
     retention_days: int
     date_column: str = "created_at"
@@ -60,6 +56,7 @@ class RetentionPolicy:
 @dataclass
 class RetentionResult:
     """Resultado da execução de uma política de retenção."""
+
     table_name: str
     records_processed: int
     records_deleted: int
@@ -71,6 +68,7 @@ class RetentionResult:
 # =============================================================================
 # Políticas de Retenção LGPD
 # =============================================================================
+
 
 def get_retention_policies() -> List[RetentionPolicy]:
     """
@@ -93,7 +91,6 @@ def get_retention_policies() -> List[RetentionPolicy]:
             soft_delete=False,  # Hard delete - dados operacionais
             anonymize_columns=["payload", "state", "last_error"],
         ),
-
         # Triagens - dados clínicos (PHI)
         RetentionPolicy(
             table_name="triage",
@@ -103,7 +100,6 @@ def get_retention_policies() -> List[RetentionPolicy]:
             anonymize_columns=["meds_in_use", "allergies", "notes", "cid_codes"],
             cascade_tables=["reports"],
         ),
-
         # Relatórios - derivados de triagens
         RetentionPolicy(
             table_name="reports",
@@ -112,7 +108,6 @@ def get_retention_policies() -> List[RetentionPolicy]:
             soft_delete=True,
             anonymize_columns=["contraindications", "interactions", "analysis_notes"],
         ),
-
         # Revisões HITL - auditoria médica
         RetentionPolicy(
             table_name="hitl_reviews",
@@ -121,7 +116,6 @@ def get_retention_policies() -> List[RetentionPolicy]:
             soft_delete=True,  # Nunca hard delete - compliance
             anonymize_columns=["physician_notes", "modifications"],
         ),
-
         # Jobs de ingestão - dados operacionais
         RetentionPolicy(
             table_name="ingest_jobs",
@@ -136,6 +130,7 @@ def get_retention_policies() -> List[RetentionPolicy]:
 # =============================================================================
 # Funções de Retenção
 # =============================================================================
+
 
 def _get_cutoff_date(retention_days: int) -> datetime:
     """Calcula a data de corte para retenção."""
@@ -184,7 +179,9 @@ def _execute_anonymization(
     )
     stmt = update(t).where(column(date_column) < cutoff_date)
     if has_is_deleted:
-        stmt = stmt.where(or_(column("is_deleted") == False, column("is_deleted").is_(None)))  # noqa: E712
+        stmt = stmt.where(
+            or_(column("is_deleted") == False, column("is_deleted").is_(None))
+        )  # noqa: E712
     values = {col: '"[ANONYMIZED_LGPD]"' for col in valid_columns}
     if has_updated_at:
         values["updated_at"] = func.now()
@@ -214,7 +211,9 @@ def _execute_soft_delete(
 
     # Verificar se tabela suporta soft delete
     if not _table_has_column(db, table_name, "is_deleted"):
-        logger.warning(f"Tabela {table_name} não tem coluna is_deleted, pulando soft delete")
+        logger.warning(
+            f"Tabela {table_name} não tem coluna is_deleted, pulando soft delete"
+        )
         return 0
 
     has_deleted_at = _table_has_column(db, table_name, "deleted_at")
@@ -234,7 +233,9 @@ def _execute_soft_delete(
     stmt = (
         update(t)
         .where(column(date_column) < cutoff_date)
-        .where(or_(column("is_deleted") == False, column("is_deleted").is_(None)))  # noqa: E712
+        .where(
+            or_(column("is_deleted") == False, column("is_deleted").is_(None))
+        )  # noqa: E712
         .values(**values)
     )
 
@@ -325,11 +326,15 @@ def _log_retention_action(
         }
 
         import json
-        db.execute(text(sql), {
-            "event_type": f"data_retention_{action}",
-            "resource_type": table_name,
-            "details": json.dumps(details),
-        })
+
+        db.execute(
+            text(sql),
+            {
+                "event_type": f"data_retention_{action}",
+                "resource_type": table_name,
+                "details": json.dumps(details),
+            },
+        )
     except Exception as e:
         logger.warning(f"Não foi possível registrar auditoria: {e}")
 
@@ -337,6 +342,7 @@ def _log_retention_action(
 # =============================================================================
 # Executor Principal
 # =============================================================================
+
 
 def execute_retention_policy(policy: RetentionPolicy) -> RetentionResult:
     """
@@ -348,9 +354,15 @@ def execute_retention_policy(policy: RetentionPolicy) -> RetentionResult:
     3. Registrar ação no audit_log
     """
     import time
+
     start_time = time.time()
 
-    result = RetentionResult(table_name=policy.table_name, records_processed=0, records_deleted=0, records_anonymized=0)
+    result = RetentionResult(
+        table_name=policy.table_name,
+        records_processed=0,
+        records_deleted=0,
+        records_anonymized=0,
+    )
 
     cutoff_date = _get_cutoff_date(policy.retention_days)
 
@@ -360,21 +372,30 @@ def execute_retention_policy(policy: RetentionPolicy) -> RetentionResult:
     )
     # #region agent log
     try:
-        with open("/home/lucasmsilva/Documentos/Cursor/MedSafe/.cursor/debug.log", "a", encoding="utf-8") as f:
-            f.write(json.dumps({
-                "sessionId": "debug-session",
-                "runId": "pre-fix",
-                "hypothesisId": "H10",
-                "location": "data_retention_worker.py:execute_retention_policy",
-                "message": "retention policy inputs",
-                "data": {
-                    "table_name": policy.table_name,
-                    "date_column": policy.date_column,
-                    "soft_delete": policy.soft_delete,
-                    "anonymize_columns_count": len(policy.anonymize_columns),
-                },
-                "timestamp": int(time.time() * 1000),
-            }) + "\n")
+        with open(
+            "/home/lucasmsilva/Documentos/Cursor/MedSafe/.cursor/debug.log",
+            "a",
+            encoding="utf-8",
+        ) as f:
+            f.write(
+                json.dumps(
+                    {
+                        "sessionId": "debug-session",
+                        "runId": "pre-fix",
+                        "hypothesisId": "H10",
+                        "location": "data_retention_worker.py:execute_retention_policy",
+                        "message": "retention policy inputs",
+                        "data": {
+                            "table_name": policy.table_name,
+                            "date_column": policy.date_column,
+                            "soft_delete": policy.soft_delete,
+                            "anonymize_columns_count": len(policy.anonymize_columns),
+                        },
+                        "timestamp": int(time.time() * 1000),
+                    }
+                )
+                + "\n"
+            )
     except Exception:
         pass
     # #endregion agent log
@@ -384,13 +405,18 @@ def execute_retention_policy(policy: RetentionPolicy) -> RetentionResult:
             # 1. Anonimizar colunas sensíveis
             if policy.anonymize_columns:
                 anonymized = _execute_anonymization(
-                    db, policy.table_name, policy.anonymize_columns,
-                    cutoff_date, policy.date_column
+                    db,
+                    policy.table_name,
+                    policy.anonymize_columns,
+                    cutoff_date,
+                    policy.date_column,
                 )
                 result.records_anonymized = anonymized
 
                 if anonymized > 0:
-                    _log_retention_action(db, "anonymize", policy.table_name, anonymized, policy)
+                    _log_retention_action(
+                        db, "anonymize", policy.table_name, anonymized, policy
+                    )
 
             # 2. Executar delete (soft ou hard)
             if policy.soft_delete:
@@ -413,7 +439,9 @@ def execute_retention_policy(policy: RetentionPolicy) -> RetentionResult:
 
     except Exception as e:
         result.errors.append(str(e))
-        logger.error(f"Erro ao executar retenção para {policy.table_name}: {e}", exc_info=True)
+        logger.error(
+            f"Erro ao executar retenção para {policy.table_name}: {e}", exc_info=True
+        )
 
     result.execution_time_ms = (time.time() - start_time) * 1000
 
@@ -446,13 +474,15 @@ def run_all_retention_policies() -> List[RetentionResult]:
             results.append(result)
         except Exception as e:
             logger.error(f"Falha crítica na política {policy.table_name}: {e}")
-            results.append(RetentionResult(
-                table_name=policy.table_name,
-                records_processed=0,
-                records_deleted=0,
-                records_anonymized=0,
-                errors=[str(e)],
-            ))
+            results.append(
+                RetentionResult(
+                    table_name=policy.table_name,
+                    records_processed=0,
+                    records_deleted=0,
+                    records_anonymized=0,
+                    errors=[str(e)],
+                )
+            )
 
     # Resumo final
     total_processed = sum(r.records_processed for r in results)
@@ -474,6 +504,7 @@ def run_all_retention_policies() -> List[RetentionResult]:
 # =============================================================================
 # Worker Loop
 # =============================================================================
+
 
 async def main() -> None:
     """

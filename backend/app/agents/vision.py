@@ -3,19 +3,20 @@ VisionAgent - Agente para análise de imagem/PDF com qwen2.5-vl
 """
 
 import asyncio
-import logging
 import base64
+import io
 import json
-from typing import Dict, Any, List, Optional
-from datetime import datetime
+import logging
 import uuid
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 import httpx
 from PIL import Image
-import io
 
 from ..config import settings
-from ..db.models import Document
 from ..db.database import get_db_context
+from ..db.models import Document
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,9 @@ class VisionAgent:
 
         logger.info(f"VisionAgent inicializado com modelo: {self.model}")
 
-    async def analyze_document(self, image_data: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+    async def analyze_document(
+        self, image_data: Dict[str, Any], session_id: str
+    ) -> Dict[str, Any]:
         """
         Analisar documento (imagem/PDF) para extrair informações de medicamento
 
@@ -51,7 +54,9 @@ class VisionAgent:
             elif image_data.get("file_type") == "pdf":
                 result = await self._analyze_pdf(image_data, session_id)
             else:
-                raise ValueError(f"Tipo de arquivo não suportado: {image_data.get('file_type')}")
+                raise ValueError(
+                    f"Tipo de arquivo não suportado: {image_data.get('file_type')}"
+                )
 
             # Calcular tempo de processamento
             processing_time = (datetime.now() - start_time).total_seconds()
@@ -65,9 +70,16 @@ class VisionAgent:
 
         except Exception as e:
             logger.error(f"Erro na análise de documento: {e}")
-            return {"session_id": session_id, "status": "error", "error_message": str(e), "processing_time": 0}
+            return {
+                "session_id": session_id,
+                "status": "error",
+                "error_message": str(e),
+                "processing_time": 0,
+            }
 
-    async def _analyze_image(self, image_data: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+    async def _analyze_image(
+        self, image_data: Dict[str, Any], session_id: str
+    ) -> Dict[str, Any]:
         """Analisar imagem com qwen2.5-vl"""
         try:
             # Preparar prompt para extração
@@ -88,7 +100,9 @@ class VisionAgent:
             logger.error(f"Erro na análise de imagem: {e}")
             raise
 
-    async def _analyze_pdf(self, pdf_data: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+    async def _analyze_pdf(
+        self, pdf_data: Dict[str, Any], session_id: str
+    ) -> Dict[str, Any]:
         """Analisar PDF com qwen2.5-vl"""
         try:
             # Para PDFs, converter páginas para imagens
@@ -158,7 +172,9 @@ Responda em formato JSON válido com a seguinte estrutura:
             logger.error(f"Erro ao preparar imagem: {e}")
             raise
 
-    async def _call_ollama_vision(self, prompt: str, image_content: str) -> Dict[str, Any]:
+    async def _call_ollama_vision(
+        self, prompt: str, image_content: str
+    ) -> Dict[str, Any]:
         """Chamar Ollama para análise de visão"""
         try:
             payload = {
@@ -173,7 +189,9 @@ Responda em formato JSON válido com a seguinte estrutura:
                 response = await client.post(self.ollama_url, json=payload)
 
                 if response.status_code != 200:
-                    raise Exception(f"Erro na API Ollama: {response.status_code} - {response.text}")
+                    raise Exception(
+                        f"Erro na API Ollama: {response.status_code} - {response.text}"
+                    )
 
                 return response.json()
 
@@ -181,7 +199,9 @@ Responda em formato JSON válido com a seguinte estrutura:
             logger.error(f"Erro na chamada Ollama: {e}")
             raise
 
-    def _parse_vision_response(self, response: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+    def _parse_vision_response(
+        self, response: Dict[str, Any], session_id: str
+    ) -> Dict[str, Any]:
         """Processar resposta do Ollama"""
         try:
             # Extrair texto da resposta
@@ -258,7 +278,9 @@ Responda em formato JSON válido com a seguinte estrutura:
         except Exception:
             return 0.5
 
-    async def _save_vision_result(self, result: Dict[str, Any], session_id: str) -> None:
+    async def _save_vision_result(
+        self, result: Dict[str, Any], session_id: str
+    ) -> None:
         """Salvar resultado da análise no banco de dados"""
         try:
             # Por enquanto, apenas log

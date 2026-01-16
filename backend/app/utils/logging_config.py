@@ -11,12 +11,12 @@ Fornece:
 - Métricas de performance
 """
 
+import json
 import logging
 import sys
 from datetime import datetime
-from typing import Optional, Dict, Any
-import json
 from enum import Enum
+from typing import Any, Dict, Optional
 
 
 class LogLevel(str, Enum):
@@ -85,7 +85,9 @@ class ColoredFormatter(logging.Formatter):
         emoji = self.EMOJIS.get(record.levelname, "")
 
         # Timestamp
-        timestamp = datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        timestamp = datetime.fromtimestamp(record.created).strftime(
+            "%Y-%m-%d %H:%M:%S.%f"
+        )[:-3]
 
         # Nome do módulo/agente
         module = record.name.split(".")[-1] if "." in record.name else record.name
@@ -94,7 +96,13 @@ class ColoredFormatter(logging.Formatter):
         message = record.getMessage()
 
         # Montar log formatado
-        log_parts = [f"{color}{emoji}", f"[{timestamp}]", f"[{record.levelname}]", f"[{module}]", f"{reset}{message}"]
+        log_parts = [
+            f"{color}{emoji}",
+            f"[{timestamp}]",
+            f"[{record.levelname}]",
+            f"[{module}]",
+            f"{reset}{message}",
+        ]
 
         # Adicionar informações extras se disponíveis
         if hasattr(record, "extra_data"):
@@ -135,7 +143,13 @@ class AgentLogger:
         self.step_count = 0
 
         record = self.logger.makeRecord(
-            self.logger.name, logging.INFO, "(start)", 0, f"{self.agent_name} STARTED: {message}", (), None
+            self.logger.name,
+            logging.INFO,
+            "(start)",
+            0,
+            f"{self.agent_name} STARTED: {message}",
+            (),
+            None,
         )
         record.levelname = "AGENT_START"
         record.agent_name = self.agent_name
@@ -235,7 +249,13 @@ class AgentLogger:
     def error(self, message: str, exc_info=None, **kwargs):
         """Log erro do agente"""
         record = self.logger.makeRecord(
-            self.logger.name, logging.ERROR, "(error)", 0, f"{self.agent_name} ERROR: {message}", (), exc_info
+            self.logger.name,
+            logging.ERROR,
+            "(error)",
+            0,
+            f"{self.agent_name} ERROR: {message}",
+            (),
+            exc_info,
         )
         record.levelname = "AGENT_ERROR"
         record.agent_name = self.agent_name
@@ -270,7 +290,7 @@ def setup_logging(
     - LGPD-compliant: Redação automática de dados sensíveis em produção
     """
     import os
-    
+
     # Determinar se deve habilitar redação (sempre em produção)
     is_production = os.getenv("ENVIRONMENT", "development").lower() == "production"
     should_redact = enable_redaction or is_production
@@ -281,7 +301,7 @@ def setup_logging(
 
     # Remover handlers existentes
     root_logger.handlers.clear()
-    
+
     # Remover filtros existentes
     root_logger.filters.clear()
 
@@ -289,17 +309,20 @@ def setup_logging(
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(getattr(logging, log_level.upper()))
     console_handler.setFormatter(ColoredFormatter())
-    
+
     # SECURITY: Adicionar filtro de redação de PHI/PII
     if should_redact:
         try:
             from .log_redaction import PHIRedactionFilter
+
             redaction_filter = PHIRedactionFilter(enabled=True)
             console_handler.addFilter(redaction_filter)
             root_logger.addFilter(redaction_filter)
         except ImportError:
-            root_logger.warning("PHIRedactionFilter não disponível - logs podem conter PHI")
-    
+            root_logger.warning(
+                "PHIRedactionFilter não disponível - logs podem conter PHI"
+            )
+
     root_logger.addHandler(console_handler)
 
     # Handler para arquivo (OPCIONAL - com tratamento de erros)
@@ -315,25 +338,29 @@ def setup_logging(
 
             # Formato sem cores para arquivo
             file_formatter = logging.Formatter(
-                "%(asctime)s [%(levelname)s] [%(name)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+                "%(asctime)s [%(levelname)s] [%(name)s] %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
             )
             file_handler.setFormatter(file_formatter)
-            
+
             # SECURITY: Adicionar filtro de redação também ao arquivo
             if should_redact:
                 try:
                     from .log_redaction import PHIRedactionFilter
+
                     file_handler.addFilter(PHIRedactionFilter(enabled=True))
                 except ImportError:
                     pass
-            
+
             root_logger.addHandler(file_handler)
 
             root_logger.info(f"File logging habilitado: {log_file}")
 
         except (PermissionError, OSError) as e:
             # Se falhar, apenas avisar e continuar com console
-            root_logger.warning(f" Não foi possível criar arquivo de log '{log_file}': {e}")
+            root_logger.warning(
+                f" Não foi possível criar arquivo de log '{log_file}': {e}"
+            )
             root_logger.warning("   Continuando apenas com console logging (stdout)")
 
     # Reduzir verbosidade de bibliotecas externas
@@ -364,7 +391,13 @@ def log_api_request(method: str, path: str, **kwargs):
     logger = logging.getLogger("medsafe.api")
 
     record = logger.makeRecord(
-        logger.name, logging.INFO, "(api_request)", 0, f"📥 API Request: {method} {path}", (), None
+        logger.name,
+        logging.INFO,
+        "(api_request)",
+        0,
+        f"📥 API Request: {method} {path}",
+        (),
+        None,
     )
     record.levelname = "API_REQUEST"
 
@@ -374,12 +407,20 @@ def log_api_request(method: str, path: str, **kwargs):
     logger.handle(record)
 
 
-def log_api_response(method: str, path: str, status_code: int, duration: float, **kwargs):
+def log_api_response(
+    method: str, path: str, status_code: int, duration: float, **kwargs
+):
     """Log resposta API"""
     logger = logging.getLogger("medsafe.api")
 
     record = logger.makeRecord(
-        logger.name, logging.INFO, "(api_response)", 0, f"📤 API Response: {method} {path} → {status_code}", (), None
+        logger.name,
+        logging.INFO,
+        "(api_response)",
+        0,
+        f"📤 API Response: {method} {path} → {status_code}",
+        (),
+        None,
     )
     record.levelname = "API_RESPONSE"
     record.duration = duration

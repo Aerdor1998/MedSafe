@@ -23,15 +23,15 @@ CSP MIGRATION PATH:
 SKILLS: @api-design-principles, @secrets-management
 """
 
+import base64
+import hashlib
 import os
 import secrets
-import hashlib
-import base64
 from typing import List, Optional
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
-
 
 # ============================================================================
 # CSP Configuration
@@ -87,12 +87,12 @@ TRUSTED_IMG_SOURCES = [
 
 def get_script_sources(nonce: str, strict: bool = CSP_STRICT_MODE) -> List[str]:
     """Build script-src directive based on strictness level.
-    
+
     IMPORTANT: In CSP Level 2+, if a nonce or hash is present, 'unsafe-inline'
     is ignored. So we only add nonce in strict mode, and unsafe-inline in non-strict.
     """
     sources = list(TRUSTED_SCRIPT_SOURCES_BASE)
-    
+
     if strict:
         # Strict mode: use nonce + hashes only
         sources.append(f"'nonce-{nonce}'")
@@ -100,18 +100,18 @@ def get_script_sources(nonce: str, strict: bool = CSP_STRICT_MODE) -> List[str]:
     else:
         # Non-strict mode: allow unsafe-inline (no nonce needed, as it would disable unsafe-inline)
         sources.append("'unsafe-inline'")
-    
+
     return sources
 
 
 def get_style_sources(nonce: str, strict: bool = CSP_STRICT_MODE) -> List[str]:
     """Build style-src directive based on strictness level.
-    
+
     IMPORTANT: In CSP Level 2+, if a nonce or hash is present, 'unsafe-inline'
     is ignored. So we only add nonce in strict mode, and unsafe-inline in non-strict.
     """
     sources = list(TRUSTED_STYLE_SOURCES_BASE)
-    
+
     if strict:
         # Strict mode: use nonce + hashes only
         sources.append(f"'nonce-{nonce}'")
@@ -119,14 +119,14 @@ def get_style_sources(nonce: str, strict: bool = CSP_STRICT_MODE) -> List[str]:
     else:
         # Non-strict mode: allow unsafe-inline (no nonce needed, as it would disable unsafe-inline)
         sources.append("'unsafe-inline'")
-    
+
     return sources
 
 
 def compute_sha256_hash(content: str) -> str:
     """Compute SHA256 hash for CSP hash-source."""
-    digest = hashlib.sha256(content.encode('utf-8')).digest()
-    b64 = base64.b64encode(digest).decode('utf-8')
+    digest = hashlib.sha256(content.encode("utf-8")).digest()
+    b64 = base64.b64encode(digest).decode("utf-8")
     return f"'sha256-{b64}'"
 
 
@@ -139,7 +139,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     - HSTS com preload
     - Permissions-Policy completo
     - Cross-Origin headers relaxados para CDNs
-    
+
     CSP MODES:
     - CSP_STRICT_MODE=false (default): allows unsafe-inline + nonces
     - CSP_STRICT_MODE=true: nonces only (requires frontend build pipeline)
@@ -164,7 +164,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # HSTS com preload (requer submissão em hstspreload.org para funcionar)
         # NOTE: Em desenvolvimento, pode ser desabilitado via HSTS_ENABLED=false
-        hsts_enabled = os.getenv("HSTS_ENABLED", "true").lower() not in ("0", "false", "no")
+        hsts_enabled = os.getenv("HSTS_ENABLED", "true").lower() not in (
+            "0",
+            "false",
+            "no",
+        )
         if hsts_enabled:
             response.headers["Strict-Transport-Security"] = (
                 "max-age=31536000; includeSubDomains; preload"
@@ -189,12 +193,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "base-uri 'self'",
             "object-src 'none'",
         ]
-        
+
         # Add report-uri for CSP violation monitoring (if configured)
         csp_report_uri = os.getenv("CSP_REPORT_URI")
         if csp_report_uri:
             csp_directives.append(f"report-uri {csp_report_uri}")
-        
+
         response.headers["Content-Security-Policy"] = "; ".join(csp_directives)
 
         # Referrer Policy
@@ -220,7 +224,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Removido Cross-Origin-Embedder-Policy para permitir recursos externos
 
         # Remove headers que expõem informações do servidor
-        headers_to_remove = ["Server", "X-Powered-By", "X-AspNet-Version", "X-AspNetMvc-Version"]
+        headers_to_remove = [
+            "Server",
+            "X-Powered-By",
+            "X-AspNet-Version",
+            "X-AspNetMvc-Version",
+        ]
         for header in headers_to_remove:
             if header in response.headers:
                 del response.headers[header]
@@ -238,7 +247,9 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Strict-Transport-Security"] = (
+        "max-age=31536000; includeSubDomains"
+    )
     response.headers["Content-Security-Policy"] = "default-src 'self'"
 
     return response

@@ -10,10 +10,11 @@ RESILIENCE PATTERNS:
 - Retry com backoff exponencial
 """
 
-from typing import Any, Dict, List, Optional
-from datetime import datetime
 import asyncio
 import logging
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 import httpx
 
 from ..config import settings
@@ -103,7 +104,9 @@ class OpenFDAService:
             "failure_count": self._failure_count,
             "threshold": OPENFDA_CIRCUIT_FAILURE_THRESHOLD,
             "recovery_timeout": OPENFDA_CIRCUIT_RECOVERY_TIMEOUT,
-            "open_since": self._circuit_open_time.isoformat() if self._circuit_open_time else None,
+            "open_since": (
+                self._circuit_open_time.isoformat() if self._circuit_open_time else None
+            ),
         }
 
     async def _get(self, path: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -120,8 +123,7 @@ class OpenFDAService:
         for attempt in range(self.max_retries):
             try:
                 resp = await self.session.get(
-                    f"{self.base_url}/{path}",
-                    params=req_params
+                    f"{self.base_url}/{path}", params=req_params
                 )
                 resp.raise_for_status()
                 self._record_success()
@@ -129,7 +131,7 @@ class OpenFDAService:
             except httpx.HTTPStatusError as e:
                 last_error = e
                 if e.response.status_code == 429:  # Rate limit
-                    wait_time = self.retry_delay * (2 ** attempt)
+                    wait_time = self.retry_delay * (2**attempt)
                     logger.warning(f"OpenFDA rate limit, waiting {wait_time}s...")
                     await asyncio.sleep(wait_time)
                 elif e.response.status_code == 404:
@@ -140,16 +142,22 @@ class OpenFDAService:
                     raise
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 last_error = e
-                wait_time = self.retry_delay * (2 ** attempt)
-                logger.warning(f"OpenFDA connection error, retry {attempt+1}/{self.max_retries}")
+                wait_time = self.retry_delay * (2**attempt)
+                logger.warning(
+                    f"OpenFDA connection error, retry {attempt+1}/{self.max_retries}"
+                )
                 await asyncio.sleep(wait_time)
 
         # All retries exhausted - record failure
         self._record_failure()
-        logger.error(f"OpenFDA request failed after {self.max_retries} retries: {last_error}")
+        logger.error(
+            f"OpenFDA request failed after {self.max_retries} retries: {last_error}"
+        )
         raise last_error if last_error else Exception("OpenFDA request failed")
 
-    async def get_adverse_events(self, drug_name: str, limit: int = 10) -> List[Dict[str, Any]]:
+    async def get_adverse_events(
+        self, drug_name: str, limit: int = 10
+    ) -> List[Dict[str, Any]]:
         """Busca eventos adversos relacionados ao medicamento."""
         params = {
             "search": f'patient.drug.medicinalproduct:"{drug_name}"',
@@ -212,4 +220,3 @@ class OpenFDAService:
 
     async def close(self):
         await self.session.aclose()
-

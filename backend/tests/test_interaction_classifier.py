@@ -8,7 +8,12 @@ SKILLS APLICADAS:
 """
 
 import pytest
-from backend.app.services.interaction_classifier import InteractionClassifierAgent, SeverityLevel, get_classifier_agent
+
+from backend.app.services.interaction_classifier import (
+    InteractionClassifierAgent,
+    SeverityLevel,
+    get_classifier_agent,
+)
 
 
 class TestInteractionClassifierAgent:
@@ -29,8 +34,12 @@ class TestInteractionClassifierAgent:
 
         Caso real do CSV: Warfarin + Gatifloxacin
         """
-        description = "Warfarin may increase the anticoagulant activities of Gatifloxacin."
-        result = classifier.classify_interaction(description, "Warfarin", "Gatifloxacin")
+        description = (
+            "Warfarin may increase the anticoagulant activities of Gatifloxacin."
+        )
+        result = classifier.classify_interaction(
+            description, "Warfarin", "Gatifloxacin"
+        )
 
         assert result.severity == SeverityLevel.CRITICAL
         assert result.confidence >= 0.90
@@ -89,8 +98,12 @@ class TestInteractionClassifierAgent:
 
         Caso real: Ibuprofen + Quinolone
         """
-        description = "Ibuprofen may increase the neuroexcitatory activities of Gatifloxacin."
-        result = classifier.classify_interaction(description, "Ibuprofen", "Gatifloxacin")
+        description = (
+            "Ibuprofen may increase the neuroexcitatory activities of Gatifloxacin."
+        )
+        result = classifier.classify_interaction(
+            description, "Ibuprofen", "Gatifloxacin"
+        )
 
         assert result.severity == SeverityLevel.HIGH
         assert "neuroexcitatory" in result.matched_patterns
@@ -109,7 +122,9 @@ class TestInteractionClassifierAgent:
         """
         Testar aumento de efeitos adversos como HIGH
         """
-        description = "The risk or severity of adverse effects can be increased when combined."
+        description = (
+            "The risk or severity of adverse effects can be increased when combined."
+        )
         result = classifier.classify_interaction(description, "Drug1", "Drug2")
 
         assert result.severity == SeverityLevel.HIGH
@@ -123,7 +138,9 @@ class TestInteractionClassifierAgent:
 
         Caso real: Metabolism interactions
         """
-        description = "The metabolism of Digoxin can be increased when combined with Rifampicin."
+        description = (
+            "The metabolism of Digoxin can be increased when combined with Rifampicin."
+        )
         result = classifier.classify_interaction(description, "Digoxin", "Rifampicin")
 
         assert result.severity == SeverityLevel.MEDIUM
@@ -133,8 +150,12 @@ class TestInteractionClassifierAgent:
         """
         Testar fotossensibilidade como MEDIUM
         """
-        description = "Trioxsalen may increase the photosensitizing activities of Verteporfin."
-        result = classifier.classify_interaction(description, "Trioxsalen", "Verteporfin")
+        description = (
+            "Trioxsalen may increase the photosensitizing activities of Verteporfin."
+        )
+        result = classifier.classify_interaction(
+            description, "Trioxsalen", "Verteporfin"
+        )
 
         assert result.severity == SeverityLevel.MEDIUM
         assert "photosensitizing" in result.matched_patterns
@@ -157,12 +178,18 @@ class TestInteractionClassifierAgent:
 
         Caso real: Muitas interações que REDUZEM toxicidade
         """
-        description = "Aminolevulinic acid may decrease the cardiotoxic activities of Digoxin."
-        result = classifier.classify_interaction(description, "Aminolevulinic acid", "Digoxin")
+        description = (
+            "Aminolevulinic acid may decrease the cardiotoxic activities of Digoxin."
+        )
+        result = classifier.classify_interaction(
+            description, "Aminolevulinic acid", "Digoxin"
+        )
 
         assert result.severity == SeverityLevel.LOW
         assert "decrease_toxicity" in result.matched_patterns
-        assert "benéf" in result.reasoning.lower() or "reduz" in result.reasoning.lower()
+        assert (
+            "benéf" in result.reasoning.lower() or "reduz" in result.reasoning.lower()
+        )
 
     def test_classify_unknown_interaction_as_low_with_low_confidence(self, classifier):
         """
@@ -208,12 +235,17 @@ class TestInteractionClassifierAgent:
             clinical_category="Cardiovascular",
         )
 
-        description = "May increase cardiotoxic activities but monitor closely to manage risk."
+        description = (
+            "May increase cardiotoxic activities but monitor closely to manage risk."
+        )
         validated = classifier.validate_critical_decision(result, description)
 
         # Deve ser rebaixado para HIGH devido a "monitor closely"
         assert validated.severity == SeverityLevel.HIGH
-        assert "rebaixado" in validated.reasoning.lower() or "mitiga" in validated.reasoning.lower()
+        assert (
+            "rebaixado" in validated.reasoning.lower()
+            or "mitiga" in validated.reasoning.lower()
+        )
 
     # === TESTES DE CATEGORIZAÇÃO ===
 
@@ -308,8 +340,12 @@ class TestInteractionClassifierIntegration:
         Caso real: Ibuprofen + Quinolone (neuroexcitatory)
         Esperado: HIGH
         """
-        description = "Ibuprofen may increase the neuroexcitatory activities of Levofloxacin."
-        result = classifier.classify_interaction(description, "Ibuprofen", "Levofloxacin")
+        description = (
+            "Ibuprofen may increase the neuroexcitatory activities of Levofloxacin."
+        )
+        result = classifier.classify_interaction(
+            description, "Ibuprofen", "Levofloxacin"
+        )
 
         assert result.severity == SeverityLevel.HIGH
         assert result.clinical_category == "Neurológica"
@@ -319,7 +355,9 @@ class TestInteractionClassifierIntegration:
         Caso real: Interação de metabolismo
         Esperado: MEDIUM
         """
-        description = "The metabolism of Digoxin can be increased when combined with Rifampicin."
+        description = (
+            "The metabolism of Digoxin can be increased when combined with Rifampicin."
+        )
         result = classifier.classify_interaction(description, "Digoxin", "Rifampicin")
 
         assert result.severity == SeverityLevel.MEDIUM
@@ -334,7 +372,9 @@ class TestInteractionClassifierIntegration:
         result = classifier.classify_interaction(description, "Prednisolone", "Digoxin")
 
         assert result.severity == SeverityLevel.LOW
-        assert "benéf" in result.reasoning.lower() or "reduz" in result.reasoning.lower()
+        assert (
+            "benéf" in result.reasoning.lower() or "reduz" in result.reasoning.lower()
+        )
 
 
 # === TESTES DE PERFORMANCE ===

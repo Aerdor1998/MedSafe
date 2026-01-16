@@ -7,13 +7,14 @@ SECURITY: Este módulo implementa validações de segurança críticas:
 - Validação de ambiente para compliance
 """
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
-from typing import Optional, List, Union
-import os
-import sys
-import re
 import math
+import os
+import re
+import sys
+from typing import List, Optional, Union
+
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _calculate_entropy(s: str) -> float:
@@ -41,7 +42,9 @@ def _calculate_entropy(s: str) -> float:
 class Settings(BaseSettings):
     """Configurações da aplicação MedSafe"""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
+    )
 
     @classmethod
     def settings_customise_sources(
@@ -106,11 +109,15 @@ class Settings(BaseSettings):
     rxnorm_base_url: str = "https://rxnav.nlm.nih.gov/REST"
 
     # Configurações de CORS
-    allowed_origins: Union[str, List[str]] = "http://localhost:9000"  # Será parseado para lista
+    allowed_origins: Union[str, List[str]] = (
+        "http://localhost:9000"  # Será parseado para lista
+    )
 
     # Configurações de hosts permitidos (TrustedHostMiddleware)
     # SECURITY FIX: Hosts específicos para produção, não usar wildcard
-    allowed_hosts: Union[str, List[str]] = "localhost,127.0.0.1"  # Será parseado para lista
+    allowed_hosts: Union[str, List[str]] = (
+        "localhost,127.0.0.1"  # Será parseado para lista
+    )
 
     # Configurações de segurança
     jwt_secret: str = "CHANGE_ME_MIN_32_CHARS__SET_JWT_SECRET_IN_ENV__"
@@ -130,7 +137,9 @@ class Settings(BaseSettings):
 
     # Configurações de upload
     max_upload_size: int = 10 * 1024 * 1024  # 10MB
-    allowed_extensions: Union[str, List[str]] = "jpg,jpeg,png,pdf"  # Será parseado para lista
+    allowed_extensions: Union[str, List[str]] = (
+        "jpg,jpeg,png,pdf"  # Será parseado para lista
+    )
 
     # Configurações de OCR
     tesseract_cmd: str = "/usr/bin/tesseract"
@@ -147,22 +156,22 @@ class Settings(BaseSettings):
     # ==========================================================================
     # DATA RETENTION & PRIVACY (LGPD Compliance)
     # ==========================================================================
-    
+
     # Habilitar redação automática de PHI/PII em logs (SEMPRE true em produção)
     enable_log_redaction: bool = True
-    
+
     # Retenção de dados em dias (padrões seguros para compliance médica)
-    retention_analysis_jobs_days: int = 365       # 1 ano
-    retention_triages_days: int = 365 * 5         # 5 anos (CFM Res. 1821/2007)
-    retention_reports_days: int = 365 * 5         # 5 anos
-    retention_hitl_reviews_days: int = 365 * 5    # 5 anos (auditoria médica)
-    retention_audit_logs_days: int = 365 * 5      # 5 anos (LGPD Art. 37)
-    retention_user_sessions_days: int = 90        # 90 dias após expiração
-    retention_ingest_jobs_days: int = 180         # 6 meses
-    
+    retention_analysis_jobs_days: int = 365  # 1 ano
+    retention_triages_days: int = 365 * 5  # 5 anos (CFM Res. 1821/2007)
+    retention_reports_days: int = 365 * 5  # 5 anos
+    retention_hitl_reviews_days: int = 365 * 5  # 5 anos (auditoria médica)
+    retention_audit_logs_days: int = 365 * 5  # 5 anos (LGPD Art. 37)
+    retention_user_sessions_days: int = 90  # 90 dias após expiração
+    retention_ingest_jobs_days: int = 180  # 6 meses
+
     # Criptografia de dados em repouso (configuração para volumes/DB)
     data_encryption_at_rest: bool = True
-    
+
     # ==========================================================================
     # FEATURE FLAGS
     # ==========================================================================
@@ -211,10 +220,18 @@ class Settings(BaseSettings):
         """Parse and validate JWT algorithms whitelist"""
         # Algoritmos considerados seguros (NIST/OWASP recomendados)
         SECURE_ALGORITHMS = {
-            "HS256", "HS384", "HS512",  # HMAC-SHA
-            "RS256", "RS384", "RS512",  # RSA-SHA
-            "ES256", "ES384", "ES512",  # ECDSA
-            "PS256", "PS384", "PS512",  # RSA-PSS
+            "HS256",
+            "HS384",
+            "HS512",  # HMAC-SHA
+            "RS256",
+            "RS384",
+            "RS512",  # RSA-SHA
+            "ES256",
+            "ES384",
+            "ES512",  # ECDSA
+            "PS256",
+            "PS384",
+            "PS512",  # RSA-PSS
         }
 
         if isinstance(v, str):
@@ -232,7 +249,9 @@ class Settings(BaseSettings):
 
         # Bloquear algoritmo 'none' explicitamente
         if "NONE" in [a.upper() for a in algorithms]:
-            raise ValueError("Algoritmo 'none' não é permitido por questões de segurança")
+            raise ValueError(
+                "Algoritmo 'none' não é permitido por questões de segurança"
+            )
 
         return algorithms
 
@@ -246,12 +265,18 @@ class Settings(BaseSettings):
         3. Validação de padrões inseguros conhecidos
         """
         is_pytest = bool(os.getenv("PYTEST_CURRENT_TEST")) or ("pytest" in sys.modules)
-        is_testing_env = os.getenv("TESTING", "").lower() in {"1", "true", "yes"} or bool(getattr(self, "testing", False))
+        is_testing_env = os.getenv("TESTING", "").lower() in {
+            "1",
+            "true",
+            "yes",
+        } or bool(getattr(self, "testing", False))
 
         # Determinar strictness baseado em ambiente e flags
         is_production = self.environment.lower() == "production"
         is_staging = self.environment.lower() == "staging"
-        is_strict_env = (is_production or is_staging) and (not is_testing_env) and (not is_pytest)
+        is_strict_env = (
+            (is_production or is_staging) and (not is_testing_env) and (not is_pytest)
+        )
         is_very_strict = is_production and (not is_testing_env) and (not is_pytest)
 
         # ==========================================================================
@@ -269,19 +294,31 @@ class Settings(BaseSettings):
         # ==========================================================================
         # Padrões conhecidos de valores inseguros
         dangerous_values = {
-            "change_me", "change_me_in_production", "secret", "password",
-            "123456", "admin", "test", "medsafe", "default", "unsafe",
-            "development", "staging", "production", "changeme", "qwerty",
+            "change_me",
+            "change_me_in_production",
+            "secret",
+            "password",
+            "123456",
+            "admin",
+            "test",
+            "medsafe",
+            "default",
+            "unsafe",
+            "development",
+            "staging",
+            "production",
+            "changeme",
+            "qwerty",
         }
 
         # Padrões regex de valores inseguros
         unsafe_patterns = [
-            r"^change.?me",          # change_me, changeme, change-me
-            r"^(secret|password)",   # secret*, password*
-            r"^(test|dev|demo)",     # test*, dev*, demo*
-            r"^[a-z]{1,8}$",         # palavras curtas simples
-            r"^[0-9]+$",             # apenas números
-            r"(.)\1{5,}",            # caracteres repetidos (aaaaaa)
+            r"^change.?me",  # change_me, changeme, change-me
+            r"^(secret|password)",  # secret*, password*
+            r"^(test|dev|demo)",  # test*, dev*, demo*
+            r"^[a-z]{1,8}$",  # palavras curtas simples
+            r"^[0-9]+$",  # apenas números
+            r"(.)\1{5,}",  # caracteres repetidos (aaaaaa)
         ]
 
         allow_test_prefix = is_pytest or is_testing_env

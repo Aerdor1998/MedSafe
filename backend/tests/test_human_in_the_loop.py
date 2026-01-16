@@ -5,4 +5,6 @@ Este teste é um placeholder para manter rastreabilidade.
 
 import pytest
 
-pytestmark = pytest.mark.skip(reason="Endpoints HITL v2 exigem JWT; cobrir em suíte autenticada.")
+pytestmark = pytest.mark.skip(
+    reason="Endpoints HITL v2 exigem JWT; cobrir em suíte autenticada."
+)

@@ -8,15 +8,16 @@ SECURITY FIX: Implementação real de verificação de roles no banco de dados
 FASE 1.2: Audit logging integration
 """
 
+import logging
 from enum import Enum
 from typing import List, Optional
-import logging
-from fastapi import Depends, HTTPException, status, Request
+
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from .jwt import get_current_user, verify_token
 from ..db.database import get_db
 from ..utils.audit_logger import audit_logger
+from .jwt import get_current_user, verify_token
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,12 @@ class UserRole(str, Enum):
 
 # Role hierarchy mapping (higher roles inherit lower role permissions)
 ROLE_HIERARCHY = {
-    UserRole.ADMIN: [UserRole.ADMIN, UserRole.PHYSICIAN, UserRole.PHARMACIST, UserRole.READONLY],
+    UserRole.ADMIN: [
+        UserRole.ADMIN,
+        UserRole.PHYSICIAN,
+        UserRole.PHARMACIST,
+        UserRole.READONLY,
+    ],
     UserRole.PHYSICIAN: [UserRole.PHYSICIAN, UserRole.PHARMACIST, UserRole.READONLY],
     UserRole.PHARMACIST: [UserRole.PHARMACIST, UserRole.READONLY],
     UserRole.READONLY: [UserRole.READONLY],
@@ -201,7 +207,7 @@ class RoleChecker:
     async def __call__(
         self,
         current_user: str = Depends(get_current_user),
-        db: Session = Depends(get_db)
+        db: Session = Depends(get_db),
     ) -> str:
         """
         Check if current user has required role
@@ -295,7 +301,7 @@ class PermissionChecker:
     async def __call__(
         self,
         current_user: str = Depends(get_current_user),
-        db: Session = Depends(get_db)
+        db: Session = Depends(get_db),
     ) -> str:
         """
         Check if current user has required permissions
@@ -371,10 +377,14 @@ require_admin = RoleChecker([UserRole.ADMIN])
 require_physician = RoleChecker([UserRole.ADMIN, UserRole.PHYSICIAN])
 
 # Pharmacist or above (pharmacist + physician + admin)
-require_pharmacist = RoleChecker([UserRole.ADMIN, UserRole.PHYSICIAN, UserRole.PHARMACIST])
+require_pharmacist = RoleChecker(
+    [UserRole.ADMIN, UserRole.PHYSICIAN, UserRole.PHARMACIST]
+)
 
 # Any authenticated user
-require_authenticated = RoleChecker([UserRole.ADMIN, UserRole.PHYSICIAN, UserRole.PHARMACIST, UserRole.READONLY])
+require_authenticated = RoleChecker(
+    [UserRole.ADMIN, UserRole.PHYSICIAN, UserRole.PHARMACIST, UserRole.READONLY]
+)
 
 
 # ============================================================================
@@ -386,7 +396,9 @@ can_create_analysis = PermissionChecker([Permission.ANALYSIS_CREATE])
 can_approve_analysis = PermissionChecker([Permission.ANALYSIS_APPROVE])
 
 # User management (admin only)
-can_manage_users = PermissionChecker([Permission.USER_CREATE, Permission.USER_UPDATE, Permission.USER_DELETE])
+can_manage_users = PermissionChecker(
+    [Permission.USER_CREATE, Permission.USER_UPDATE, Permission.USER_DELETE]
+)
 
 # System config (admin only)
 can_configure_system = PermissionChecker([Permission.CONFIG_UPDATE])

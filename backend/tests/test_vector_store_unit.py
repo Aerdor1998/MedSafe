@@ -14,7 +14,9 @@ def _required_env(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "test-secret-key-minimum-32-characters-long")
     monkeypatch.setenv("JWT_SECRET", "test-jwt-secret-minimum-32-characters-long")
     monkeypatch.setenv("POSTGRES_PASSWORD", "test_password")
-    monkeypatch.setenv("DATABASE_URL", "postgresql://medsafe:test_password@localhost:5432/medsafe")
+    monkeypatch.setenv(
+        "DATABASE_URL", "postgresql://medsafe:test_password@localhost:5432/medsafe"
+    )
 
 
 @dataclass
@@ -36,7 +38,9 @@ class _FakeVectorStore:
     def add_documents(self, docs):
         self.added.extend(docs)
 
-    def similarity_search_with_score(self, query: str, k: int, filter=None):  # noqa: A002
+    def similarity_search_with_score(
+        self, query: str, k: int, filter=None
+    ):  # noqa: A002
         self.search_calls.append((query, k, filter))
         return [(_Doc("c1", {"a": 1}), 0.7), (_Doc("c2", {"b": 2}), 0.1)]
 
@@ -83,7 +87,15 @@ def test_add_documents_chunks_and_calls_vector_store(monkeypatch):
     from backend.app.db import vector_store as mod
 
     store = _make_store(mod)
-    docs = [{"text": "abcdef", "metadata": {"x": 1}, "drug_name": "A", "source": "S", "section": "sec"}]
+    docs = [
+        {
+            "text": "abcdef",
+            "metadata": {"x": 1},
+            "drug_name": "A",
+            "source": "S",
+            "section": "sec",
+        }
+    ]
     chunks = store.add_documents(docs, batch_size=10)
     assert chunks == 2
     assert len(store.vector_store.added) == 2
@@ -110,7 +122,9 @@ def test_hybrid_search_uses_cache_and_rrf(monkeypatch):
     monkeypatch.setattr(
         store,
         "_keyword_search",
-        lambda query, k=5, filter_dict=None: [{"content": "c1", "metadata": {}, "score": 0.2, "relevance": "LOW"}],  # noqa: ARG002
+        lambda query, k=5, filter_dict=None: [
+            {"content": "c1", "metadata": {}, "score": 0.2, "relevance": "LOW"}
+        ],  # noqa: ARG002
         raising=True,
     )
 
@@ -127,7 +141,9 @@ def test_rrf_combines_and_updates_relevance(monkeypatch):
     store = _make_store(mod)
     semantic = [{"content": "a", "metadata": {}, "score": 0.9, "relevance": "HIGH"}]
     keyword = [{"content": "b", "metadata": {}, "score": 0.9, "relevance": "HIGH"}]
-    combined = store._reciprocal_rank_fusion(semantic, keyword, semantic_weight=0.5, k=60)
+    combined = store._reciprocal_rank_fusion(
+        semantic, keyword, semantic_weight=0.5, k=60
+    )
     assert len(combined) == 2
     assert all("relevance" in d for d in combined)
 
@@ -196,4 +212,3 @@ def test_get_vector_store_singleton(monkeypatch):
     a = mod.get_vector_store()
     b = mod.get_vector_store()
     assert a is b
-

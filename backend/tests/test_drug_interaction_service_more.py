@@ -35,7 +35,9 @@ class _Classifier:
     def classify_interaction(self, description: str, drug1: str, drug2: str):
         # minimal object with .severity.value + .confidence + .reasoning
         sev = type("S", (), {"value": "high"})()
-        return type("R", (), {"severity": sev, "confidence": 0.9, "reasoning": "stub"})()
+        return type(
+            "R", (), {"severity": sev, "confidence": 0.9, "reasoning": "stub"}
+        )()
 
     def validate_critical_decision(self, result, description: str):
         return result
@@ -103,4 +105,3 @@ def test_analyze_contraindications_allergy_and_condition(monkeypatch):
     # Allergy critical + condition high
     assert any(c["severity"] == "critical" for c in contraindications)
     assert any("Contraindicação" in c["type"] for c in contraindications)
-

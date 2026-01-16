@@ -41,7 +41,12 @@ class _FakeConn:
 
 
 class _FakeEngine:
-    def __init__(self, url: str, conn: _FakeConn | None = None, raise_on_connect: Exception | None = None):
+    def __init__(
+        self,
+        url: str,
+        conn: _FakeConn | None = None,
+        raise_on_connect: Exception | None = None,
+    ):
         self.url = url
         self._conn = conn or _FakeConn()
         self._raise = raise_on_connect
@@ -68,7 +73,9 @@ def _required_env(monkeypatch):
     monkeypatch.setenv("POSTGRES_PASSWORD", "test_password")
     # Use Postgres URL so SQLAlchemy engine creation in `db/database.py` doesn't
     # reject pool args (sqlite dialect is stricter about these kwargs).
-    monkeypatch.setenv("DATABASE_URL", "postgresql://medsafe:test_password@localhost:5432/medsafe")
+    monkeypatch.setenv(
+        "DATABASE_URL", "postgresql://medsafe:test_password@localhost:5432/medsafe"
+    )
 
 
 def test_init_db_sqlite_calls_create_all(monkeypatch):
@@ -80,8 +87,16 @@ def test_init_db_sqlite_calls_create_all(monkeypatch):
 
     called = {"create_all": 0, "create_indexes": 0}
 
-    monkeypatch.setattr(db.Base.metadata, "create_all", lambda bind=None: called.__setitem__("create_all", called["create_all"] + 1))
-    monkeypatch.setattr(db, "create_indexes", lambda: called.__setitem__("create_indexes", called["create_indexes"] + 1))
+    monkeypatch.setattr(
+        db.Base.metadata,
+        "create_all",
+        lambda bind=None: called.__setitem__("create_all", called["create_all"] + 1),
+    )
+    monkeypatch.setattr(
+        db,
+        "create_indexes",
+        lambda: called.__setitem__("create_indexes", called["create_indexes"] + 1),
+    )
 
     # Force flags
     monkeypatch.setattr(db.settings, "debug", False, raising=False)
@@ -103,10 +118,18 @@ def test_init_db_postgres_dev_creates_vector_extension_and_indexes(monkeypatch):
     monkeypatch.setattr(db, "engine", fake_engine, raising=True)
 
     called = {"create_all": 0, "create_indexes": 0}
-    monkeypatch.setattr(db.Base.metadata, "create_all", lambda bind=None: called.__setitem__("create_all", called["create_all"] + 1))
-    monkeypatch.setattr(db, "create_indexes", lambda: called.__setitem__("create_indexes", called["create_indexes"] + 1))
+    monkeypatch.setattr(
+        db.Base.metadata,
+        "create_all",
+        lambda bind=None: called.__setitem__("create_all", called["create_all"] + 1),
+    )
+    monkeypatch.setattr(
+        db,
+        "create_indexes",
+        lambda: called.__setitem__("create_indexes", called["create_indexes"] + 1),
+    )
 
-    monkeypatch.setattr(db.settings, "debug", True, raising=False)   # dev
+    monkeypatch.setattr(db.settings, "debug", True, raising=False)  # dev
     monkeypatch.setattr(db.settings, "testing", False, raising=False)
 
     db.init_db()
@@ -139,7 +162,9 @@ def test_check_db_health_true_and_false(monkeypatch):
     monkeypatch.setattr(db, "engine", ok_engine, raising=True)
     assert db.check_db_health() is True
 
-    bad_engine = _FakeEngine("sqlite:///:memory:", raise_on_connect=RuntimeError("nope"))
+    bad_engine = _FakeEngine(
+        "sqlite:///:memory:", raise_on_connect=RuntimeError("nope")
+    )
     monkeypatch.setattr(db, "engine", bad_engine, raising=True)
     assert db.check_db_health() is False
 
@@ -147,7 +172,8 @@ def test_check_db_health_true_and_false(monkeypatch):
 def test_get_db_stats_returns_empty_on_failure(monkeypatch):
     from backend.app.db import database as db
 
-    bad_engine = _FakeEngine("postgresql://example", raise_on_connect=RuntimeError("boom"))
+    bad_engine = _FakeEngine(
+        "postgresql://example", raise_on_connect=RuntimeError("boom")
+    )
     monkeypatch.setattr(db, "engine", bad_engine, raising=True)
     assert db.get_db_stats() == {}
-

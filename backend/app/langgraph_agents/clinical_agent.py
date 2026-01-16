@@ -12,21 +12,21 @@ RESPONSIBILITIES:
 5. Support iterative refinement via Reflection Pattern
 """
 
-from typing import Dict, Any, List
-from datetime import datetime
-import logging
 import asyncio
+import logging
+from datetime import datetime
+from typing import Any, Dict, List
 
+from ..db.vector_store import MedicalVectorStore, get_vector_store
+from ..services.clinical_rules import (
+    ClinicalRulesEngine,
+    PatientContext,
+    calculate_gfr_cockroft_gault,
+    get_rules_engine,
+)
+from ..services.drug_interactions import get_interaction_service, normalize_drug_name
 from .base_agent import BaseAgent
 from .state import MedSafeState, RiskLevel
-from ..services.drug_interactions import get_interaction_service, normalize_drug_name
-from ..services.clinical_rules import (
-    get_rules_engine,
-    PatientContext,
-    ClinicalRulesEngine,
-    calculate_gfr_cockroft_gault,
-)
-from ..db.vector_store import get_vector_store, MedicalVectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,11 @@ Seja minucioso, preciso e baseado em evidências.
         interactions = []
         contraindications = []
         risk_level = RiskLevel.LOW
-        recommendations = {"dosage_adjustments": [], "adverse_reactions": [], "recommendations_text": ""}
+        recommendations = {
+            "dosage_adjustments": [],
+            "adverse_reactions": [],
+            "recommendations_text": "",
+        }
         llm_failed = False
 
         # Analysis metadata for observability
@@ -125,7 +129,9 @@ Seja minucioso, preciso e baseado em evidências.
                     feedback_preview=feedback[:100] if feedback else "None",
                 )
             else:
-                self.agent_logger.start("Iniciando análise clínica", medication=state["medication_text"])
+                self.agent_logger.start(
+                    "Iniciando análise clínica", medication=state["medication_text"]
+                )
 
             # Extract patient info
             patient_data = state["patient_data"]
@@ -134,9 +140,13 @@ Seja minucioso, preciso e baseado em evidências.
             # Step 1: Analyze drug interactions (rule-based, doesn't need LLM)
             self.agent_logger.progress(
                 "Analisando interações medicamentosas",
-                current_medications_count=len(patient_data.get("current_medications", [])),
+                current_medications_count=len(
+                    patient_data.get("current_medications", [])
+                ),
             )
-            interactions, sources_used = self._analyze_interactions(medication_text, patient_data)
+            interactions, sources_used = self._analyze_interactions(
+                medication_text, patient_data
+            )
             analysis_metadata["sources_used"] = sources_used
 
             # Assess evidence quality for low-evidence marker
@@ -149,28 +159,38 @@ Seja minucioso, preciso e baseado em evidências.
                 conditions_count=len(patient_data.get("conditions", [])),
                 allergies_count=len(patient_data.get("allergies", [])),
             )
-            contraindications = self._analyze_contraindications(medication_text, patient_data)
+            contraindications = self._analyze_contraindications(
+                medication_text, patient_data
+            )
 
             # Step 3: Calculate overall risk (rule-based, doesn't need LLM)
             self.agent_logger.progress("Calculando nível de risco geral")
             risk_level = self._calculate_risk(interactions, contraindications)
 
             # Step 4: Build patient context for rules engine
-            self.agent_logger.progress("Construindo contexto do paciente para regras clinicas")
+            self.agent_logger.progress(
+                "Construindo contexto do paciente para regras clinicas"
+            )
             patient_ctx = self._build_patient_context(patient_data)
 
             # Step 5: Check if escalation to HITL is needed
             self.agent_logger.progress("Verificando necessidade de escalonamento HITL")
-            needs_escalation, escalation_reasons = self.rules_engine.check_escalation_needed(
+            (
+                needs_escalation,
+                escalation_reasons,
+            ) = self.rules_engine.check_escalation_needed(
                 severity=risk_level.value,
                 confidence=0.8,  # Will be calculated later
                 interactions=interactions,
                 patient_context=patient_ctx,
-                drug_name=medication_text
+                drug_name=medication_text,
             )
 
             # Add low-evidence escalation for high-risk patients
-            if evidence_quality in ["low", "insufficient"] and self._is_high_risk_patient(patient_data):
+            if evidence_quality in [
+                "low",
+                "insufficient",
+            ] and self._is_high_risk_patient(patient_data):
                 if not needs_escalation:
                     needs_escalation = True
                 escalation_reasons.append(
@@ -188,11 +208,13 @@ Seja minucioso, preciso e baseado em evidências.
                 category=self._get_primary_category(interactions, contraindications),
                 interactions=interactions,
                 contraindications=contraindications,
-                patient_context=patient_ctx
+                patient_context=patient_ctx,
             )
 
             # Step 7: Generate clinical recommendations with LLM (enriched)
-            self.agent_logger.progress("Gerando recomendacoes clinicas com LLM", risk_level=risk_level.value)
+            self.agent_logger.progress(
+                "Gerando recomendacoes clinicas com LLM", risk_level=risk_level.value
+            )
             try:
                 recommendations = self._generate_recommendations(
                     state, interactions, contraindications, risk_level, feedback
@@ -204,8 +226,12 @@ Seja minucioso, preciso e baseado em evidências.
             except Exception as llm_error:
                 llm_failed = True
                 analysis_metadata["fallback_triggered"] = True
-                self.agent_logger.error(f"LLM falhou ao gerar recomendacoes: {llm_error}")
-                logger.warning(f"LLM failed, using fallback recommendations: {llm_error}")
+                self.agent_logger.error(
+                    f"LLM falhou ao gerar recomendacoes: {llm_error}"
+                )
+                logger.warning(
+                    f"LLM failed, using fallback recommendations: {llm_error}"
+                )
                 # Generate fallback recommendations based on risk level
                 recommendations = self._generate_fallback_recommendations(
                     interactions, contraindications, risk_level
@@ -223,7 +249,9 @@ Seja minucioso, preciso e baseado em evidências.
         # Step 5: Calculate confidence score (doesn't need LLM)
         try:
             self.agent_logger.progress("Calculando score de confiança")
-            confidence = self._calculate_confidence(interactions, contraindications, state)
+            confidence = self._calculate_confidence(
+                interactions, contraindications, state
+            )
             # Reduce confidence if LLM failed
             if llm_failed:
                 confidence = max(0.3, confidence * 0.7)  # Reduce by 30% but min 0.3
@@ -237,7 +265,9 @@ Seja minucioso, preciso e baseado em evidências.
 
         # Finalize analysis metadata
         analysis_metadata["end_time"] = datetime.now().isoformat()
-        analysis_metadata["processing_time_ms"] = int((datetime.now() - start_time).total_seconds() * 1000)
+        analysis_metadata["processing_time_ms"] = int(
+            (datetime.now() - start_time).total_seconds() * 1000
+        )
 
         updates = {
             "interactions": interactions,
@@ -266,7 +296,8 @@ Seja minucioso, preciso e baseado em evidências.
 
         # Log results
         self.agent_logger.end(
-            "Análise clínica concluída" + (" (parcial - LLM falhou)" if llm_failed else ""),
+            "Análise clínica concluída"
+            + (" (parcial - LLM falhou)" if llm_failed else ""),
             success=not llm_failed,
             risk_level=risk_level.value,
             interactions_count=len(interactions),
@@ -276,7 +307,9 @@ Seja minucioso, preciso e baseado em evidências.
 
         return updates
 
-    def _assess_evidence_quality(self, interactions: List[Dict[str, Any]], sources_used: List[str]) -> str:
+    def _assess_evidence_quality(
+        self, interactions: List[Dict[str, Any]], sources_used: List[str]
+    ) -> str:
         """
         Assess quality of evidence for interactions.
 
@@ -345,13 +378,17 @@ Seja minucioso, preciso e baseado em evidências.
             return True
 
         # Multiple medications (interaction risk)
-        meds = patient_data.get("current_medications", []) or patient_data.get("meds_in_use", [])
+        meds = patient_data.get("current_medications", []) or patient_data.get(
+            "meds_in_use", []
+        )
         if len(meds) >= 5:
             return True
 
         return False
 
-    def _deduplicate_interactions(self, interactions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _deduplicate_interactions(
+        self, interactions: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         """
         Deduplicate interactions with canonical key and source merge.
 
@@ -387,7 +424,9 @@ Seja minucioso, preciso e baseado em evidências.
                 existing = seen[key]
 
                 # Merge: keep highest severity
-                existing_sev = SEVERITY_ORDER.get(existing.get("severity", "unknown"), 0)
+                existing_sev = SEVERITY_ORDER.get(
+                    existing.get("severity", "unknown"), 0
+                )
                 new_sev = SEVERITY_ORDER.get(item.get("severity", "unknown"), 0)
                 if new_sev > existing_sev:
                     existing["severity"] = item.get("severity")
@@ -400,7 +439,9 @@ Seja minucioso, preciso e baseado em evidências.
                     existing["sources"].append(new_source)
 
                 # Log merge
-                logger.debug(f"Merged duplicate: {drugs} (sources: {existing['sources']})")
+                logger.debug(
+                    f"Merged duplicate: {drugs} (sources: {existing['sources']})"
+                )
             else:
                 # Initialize sources list
                 item["sources"] = [item.get("source", "unknown")]
@@ -410,11 +451,15 @@ Seja minucioso, preciso e baseado em evidências.
         removed = len(interactions) - len(deduped)
 
         if removed > 0:
-            logger.info(f"Dedup removed {removed} duplicate interactions (merged sources)")
+            logger.info(
+                f"Dedup removed {removed} duplicate interactions (merged sources)"
+            )
 
         return deduped
 
-    def _analyze_interactions(self, medication_text: str, patient_data: Dict[str, Any]) -> tuple[List[Dict[str, Any]], List[str]]:
+    def _analyze_interactions(
+        self, medication_text: str, patient_data: Dict[str, Any]
+    ) -> tuple[List[Dict[str, Any]], List[str]]:
         """
         Analyze drug interactions using DrugInteractionService
 
@@ -424,7 +469,10 @@ Seja minucioso, preciso e baseado em evidências.
             Tuple of (interactions, sources_used)
         """
         # LGPD/PHI: avoid logging medication names in plaintext
-        logger.info("Analyzing interactions (medication_text_len=%d)", len(medication_text or ""))
+        logger.info(
+            "Analyzing interactions (medication_text_len=%d)",
+            len(medication_text or ""),
+        )
         sources_used = []
 
         current_medications = patient_data.get("current_medications", [])
@@ -434,7 +482,9 @@ Seja minucioso, preciso e baseado em evidências.
             return [], sources_used
 
         # Split medication_text if it's comma-separated (legacy format)
-        medications_to_check = [m.strip() for m in medication_text.split(",") if m.strip()]
+        medications_to_check = [
+            m.strip() for m in medication_text.split(",") if m.strip()
+        ]
         if len(medications_to_check) <= 1:
             medications_to_check = [medication_text]
 
@@ -486,7 +536,9 @@ Seja minucioso, preciso e baseado em evidências.
                     drug_name=medication_text, other_drugs=current_medications
                 )
                 if fallback_results:
-                    logger.info(f"Clinical rules found {len(fallback_results)} interactions")
+                    logger.info(
+                        f"Clinical rules found {len(fallback_results)} interactions"
+                    )
                     for i in fallback_results:
                         i["source"] = "clinical_rules"
                     interactions.extend(fallback_results)
@@ -498,11 +550,15 @@ Seja minucioso, preciso e baseado em evidências.
         # Deduplicar com canonical key e merge de fontes
         interactions = self._deduplicate_interactions(interactions)
 
-        logger.info(f"   Found {len(interactions)} interactions from sources: {sources_used}")
+        logger.info(
+            f"   Found {len(interactions)} interactions from sources: {sources_used}"
+        )
 
         return interactions, sources_used
 
-    def _run_openfda_sync(self, medication_text: str, current_medications: List[str]) -> List[Dict[str, Any]]:
+    def _run_openfda_sync(
+        self, medication_text: str, current_medications: List[str]
+    ) -> List[Dict[str, Any]]:
         """
         Run OpenFDA query synchronously from sync context.
 
@@ -515,14 +571,20 @@ Seja minucioso, preciso e baseado em evidências.
             async def _fetch():
                 service = OpenFDAService()
                 results = []
-                for other_drug in current_medications[:5]:  # Limit to 5 to avoid rate limits
+                for other_drug in current_medications[
+                    :5
+                ]:  # Limit to 5 to avoid rate limits
                     try:
-                        interaction = await service.check_interaction(medication_text, other_drug)
+                        interaction = await service.check_interaction(
+                            medication_text, other_drug
+                        )
                         if interaction:
                             results.append(interaction)
                     except Exception as e:
                         # Avoid logging PHI in plaintext; keep only error type
-                        logger.debug("OpenFDA check failed for drug pair: %s", type(e).__name__)
+                        logger.debug(
+                            "OpenFDA check failed for drug pair: %s", type(e).__name__
+                        )
                 return results
 
             # Run in new event loop (safe from sync context)
@@ -531,14 +593,18 @@ Seja minucioso, preciso e baseado em evidências.
             logger.warning(f"OpenFDA sync wrapper failed: {e}")
             return []
 
-    def _get_rag_evidence(self, drug_name: str, other_drugs: List[str]) -> List[Dict[str, Any]]:
+    def _get_rag_evidence(
+        self, drug_name: str, other_drugs: List[str]
+    ) -> List[Dict[str, Any]]:
         """Busca evidências no vector store e converte em interações"""
         if not self.vector_store:
             return []
 
         query = f"drug interaction between {drug_name} and {', '.join(other_drugs)}"
         try:
-            evidence_docs = self.vector_store.hybrid_search(query=query, k=5, semantic_weight=0.7)
+            evidence_docs = self.vector_store.hybrid_search(
+                query=query, k=5, semantic_weight=0.7
+            )
         except Exception as e:
             logger.warning(f"Falha ao buscar evidências RAG: {e}")
             return []
@@ -559,35 +625,48 @@ Seja minucioso, preciso e baseado em evidências.
 
         return interactions
 
-    def _analyze_contraindications(self, medication_text: str, patient_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _analyze_contraindications(
+        self, medication_text: str, patient_data: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         """
         Analyze contraindications based on patient conditions
 
         SKILL: @debugging-strategies - Comprehensive condition checking
         """
         # LGPD/PHI: avoid logging medication names in plaintext
-        logger.info("Analyzing contraindications (medication_text_len=%d)", len(medication_text or ""))
+        logger.info(
+            "Analyzing contraindications (medication_text_len=%d)",
+            len(medication_text or ""),
+        )
 
         conditions = patient_data.get("conditions", [])
         allergies = patient_data.get("allergies", [])
 
         # Use existing DrugInteractionService
         contraindications = self.interaction_service.analyze_contraindications(
-            drug_name=medication_text, patient_conditions=conditions, allergies=allergies
+            drug_name=medication_text,
+            patient_conditions=conditions,
+            allergies=allergies,
         )
 
         logger.info(f"   Found {len(contraindications)} contraindications")
 
         return contraindications
 
-    def _calculate_risk(self, interactions: List[Dict[str, Any]], contraindications: List[Dict[str, Any]]) -> RiskLevel:
+    def _calculate_risk(
+        self,
+        interactions: List[Dict[str, Any]],
+        contraindications: List[Dict[str, Any]],
+    ) -> RiskLevel:
         """
         Calculate overall risk level
 
         SKILL: @ultrathink - Delegating to existing service logic
         """
         # Use existing DrugInteractionService logic
-        risk_str = self.interaction_service.calculate_overall_risk(interactions, contraindications)
+        risk_str = self.interaction_service.calculate_overall_risk(
+            interactions, contraindications
+        )
 
         # Convert string to RiskLevel enum
         risk_map = {
@@ -627,7 +706,12 @@ Seja minucioso, preciso e baseado em evidências.
         }
 
         # Summarize interactions - with Portuguese severity labels
-        severity_pt = {"critical": "CRÍTICO", "high": "ALTO", "medium": "MÉDIO", "low": "BAIXO"}
+        severity_pt = {
+            "critical": "CRÍTICO",
+            "high": "ALTO",
+            "medium": "MÉDIO",
+            "low": "BAIXO",
+        }
         interactions_summary = (
             "\n".join(
                 [
@@ -696,7 +780,9 @@ Seja específico, prático e acionável para clínicos."""
 
         # Parse recommendations (simple parsing for now)
         return {
-            "dosage_adjustments": self._extract_dosage_adjustments(recommendations_text),
+            "dosage_adjustments": self._extract_dosage_adjustments(
+                recommendations_text
+            ),
             "adverse_reactions": self._extract_adverse_reactions(recommendations_text),
             "recommendations_text": recommendations_text,
         }
@@ -722,18 +808,22 @@ Seja específico, prático e acionável para clínicos."""
             recommendations_parts.append(
                 "RISCO CRITICO IDENTIFICADO - Revisao medica obrigatoria antes de administrar."
             )
-            dosage_adjustments.append({
-                "recommendation": "NAO ADMINISTRAR sem avaliacao medica especializada",
-                "source": "ClinicalAgent-Fallback"
-            })
+            dosage_adjustments.append(
+                {
+                    "recommendation": "NAO ADMINISTRAR sem avaliacao medica especializada",
+                    "source": "ClinicalAgent-Fallback",
+                }
+            )
         elif risk_level == RiskLevel.HIGH:
             recommendations_parts.append(
                 "Risco alto detectado - Considerar alternativas terapeuticas."
             )
-            dosage_adjustments.append({
-                "recommendation": "Avaliar redução de dose ou alternativa terapêutica",
-                "source": "ClinicalAgent-Fallback"
-            })
+            dosage_adjustments.append(
+                {
+                    "recommendation": "Avaliar redução de dose ou alternativa terapêutica",
+                    "source": "ClinicalAgent-Fallback",
+                }
+            )
 
         # Generate recommendations from interactions
         for interaction in interactions[:5]:  # Top 5
@@ -742,10 +832,12 @@ Seja específico, prático e acionável para clínicos."""
             drug2 = interaction.get("drug2", "?")
             description = interaction.get("description", "")[:200]
 
-            adverse_reactions.append({
-                "description": f"Interação {severity}: {drug1} + {drug2} - {description}",
-                "source": "ClinicalAgent-Fallback"
-            })
+            adverse_reactions.append(
+                {
+                    "description": f"Interação {severity}: {drug1} + {drug2} - {description}",
+                    "source": "ClinicalAgent-Fallback",
+                }
+            )
 
             if severity in ["CRITICAL", "MAJOR", "SEVERE"]:
                 recommendations_parts.append(
@@ -756,7 +848,9 @@ Seja específico, prático e acionável para clínicos."""
         for contraind in contraindications[:3]:  # Top 3
             c_type = contraind.get("type", "")
             c_desc = contraind.get("description", "")[:150]
-            recommendations_parts.append(f"[ATENCAO] Contraindicacao ({c_type}): {c_desc}")
+            recommendations_parts.append(
+                f"[ATENCAO] Contraindicacao ({c_type}): {c_desc}"
+            )
 
         # Default message if no specific findings
         if not recommendations_parts:
@@ -782,9 +876,20 @@ Seja específico, prático e acionável para clínicos."""
 
         # Keywords in Portuguese and English
         dosage_keywords = [
-            "dose", "dosage", "reduce", "increase", "adjust",
-            "dosagem", "reduzir", "aumentar", "ajustar", "mg", "ml",
-            "intervalo", "administração", "posologia"
+            "dose",
+            "dosage",
+            "reduce",
+            "increase",
+            "adjust",
+            "dosagem",
+            "reduzir",
+            "aumentar",
+            "ajustar",
+            "mg",
+            "ml",
+            "intervalo",
+            "administração",
+            "posologia",
         ]
 
         for line in text.split("\n"):
@@ -792,7 +897,12 @@ Seja específico, prático e acionável para clínicos."""
             if any(keyword in line_lower for keyword in dosage_keywords):
                 cleaned = line.strip().lstrip("-•*")
                 if cleaned and len(cleaned) > 10:
-                    adjustments.append({"recommendation": cleaned.strip(), "source": "ClinicalAgent-LLM"})
+                    adjustments.append(
+                        {
+                            "recommendation": cleaned.strip(),
+                            "source": "ClinicalAgent-LLM",
+                        }
+                    )
 
         return adjustments[:5]  # Top 5
 
@@ -802,9 +912,20 @@ Seja específico, prático e acionável para clínicos."""
 
         # Keywords in Portuguese and English
         reaction_keywords = [
-            "monitor", "watch", "side effect", "adverse", "reaction",
-            "monitorar", "vigilar", "efeito", "reação", "sintoma",
-            "alerta", "observar", "atenção", "risco"
+            "monitor",
+            "watch",
+            "side effect",
+            "adverse",
+            "reaction",
+            "monitorar",
+            "vigilar",
+            "efeito",
+            "reação",
+            "sintoma",
+            "alerta",
+            "observar",
+            "atenção",
+            "risco",
         ]
 
         for line in text.split("\n"):
@@ -812,7 +933,9 @@ Seja específico, prático e acionável para clínicos."""
             if any(keyword in line_lower for keyword in reaction_keywords):
                 cleaned = line.strip().lstrip("-•*")
                 if cleaned and len(cleaned) > 10:
-                    reactions.append({"description": cleaned.strip(), "source": "ClinicalAgent-LLM"})
+                    reactions.append(
+                        {"description": cleaned.strip(), "source": "ClinicalAgent-LLM"}
+                    )
 
         return reactions[:7]  # Top 7
 
@@ -850,7 +973,7 @@ Seja específico, prático e acionável para clínicos."""
     def _get_primary_category(
         self,
         interactions: List[Dict[str, Any]],
-        contraindications: List[Dict[str, Any]]
+        contraindications: List[Dict[str, Any]],
     ) -> str:
         """
         Determine primary clinical category from findings
@@ -889,7 +1012,10 @@ Seja específico, prático e acionável para clínicos."""
         return "Farmacologica"
 
     def _calculate_confidence(
-        self, interactions: List[Dict[str, Any]], contraindications: List[Dict[str, Any]], state: MedSafeState
+        self,
+        interactions: List[Dict[str, Any]],
+        contraindications: List[Dict[str, Any]],
+        state: MedSafeState,
     ) -> float:
         """
         Calculate confidence score for the analysis
@@ -905,11 +1031,15 @@ Seja específico, prático e acionável para clínicos."""
         has_conditions = bool(patient_data.get("conditions"))
         has_medications = bool(patient_data.get("current_medications"))
 
-        data_completeness = sum([has_age, has_weight, has_conditions, has_medications]) / 4
+        data_completeness = (
+            sum([has_age, has_weight, has_conditions, has_medications]) / 4
+        )
         confidence_factors.append(data_completeness * 0.3)  # 30% weight
 
         # Factor 2: Evidence availability
-        evidence_score = min(len(state.get("evidence", [])) / 3, 1.0)  # 3+ evidence = full score
+        evidence_score = min(
+            len(state.get("evidence", [])) / 3, 1.0
+        )  # 3+ evidence = full score
         confidence_factors.append(evidence_score * 0.2)  # 20% weight
 
         # Factor 3: Interaction clarity

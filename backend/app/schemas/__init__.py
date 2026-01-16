@@ -3,11 +3,11 @@ Schemas Pydantic para o MedSafe
 """
 
 from .base import BaseSchema
-from .triage import TriageCreate, TriageResponse, TriageReport
-from .vision import VisionRequest, VisionResponse
-from .reports import ReportCreate, ReportResponse
-from .medications import MedicationSearch, MedicationInfo, MedicationSearchResult
 from .ingest import IngestRequest, IngestResponse
+from .medications import MedicationInfo, MedicationSearch, MedicationSearchResult
+from .reports import ReportCreate, ReportResponse
+from .triage import TriageCreate, TriageReport, TriageResponse
+from .vision import VisionRequest, VisionResponse
 
 __all__ = [
     "BaseSchema",

@@ -8,21 +8,20 @@ de segurança, compliance LGPD e monitoramento de atividades.
 import json
 import logging
 from contextlib import contextmanager
-from datetime import datetime
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
 from fastapi import Request
 
-
 logger = logging.getLogger("medsafe.audit")
 
 
 class AuditEventType(str, Enum):
     """Tipos de eventos de auditoria."""
-    
+
     # Autenticação
     LOGIN_SUCCESS = "login_success"
     LOGIN_FAILURE = "login_failure"
@@ -36,34 +35,34 @@ class AuditEventType(str, Enum):
     # Backwards-compatible aliases expected by some tests/legacy code
     AUTH_LOGIN_SUCCESS = LOGIN_SUCCESS
     AUTH_LOGIN_FAILED = LOGIN_FAILURE
-    
+
     # Autorização
     ACCESS_GRANTED = "access_granted"
     ACCESS_DENIED = "access_denied"
     PERMISSION_CHECK = "permission_check"
-    
+
     # Operações de dados
     DATA_CREATE = "data_create"
     DATA_READ = "data_read"
     DATA_UPDATE = "data_update"
     DATA_DELETE = "data_delete"
     DATA_EXPORT = "data_export"
-    
+
     # Análises médicas
     ANALYSIS_START = "analysis_start"
     ANALYSIS_COMPLETE = "analysis_complete"
     ANALYSIS_ERROR = "analysis_error"
-    
+
     # HITL
     HITL_REQUIRED = "hitl_required"
     HITL_APPROVE = "hitl_approve"
     HITL_REJECT = "hitl_reject"
-    
+
     # Sistema
     CONFIG_CHANGE = "config_change"
     SECURITY_ALERT = "security_alert"
     RATE_LIMIT_EXCEEDED = "rate_limit_exceeded"
-    
+
     # LGPD
     CONSENT_GRANTED = "consent_granted"
     CONSENT_REVOKED = "consent_revoked"
@@ -73,7 +72,7 @@ class AuditEventType(str, Enum):
 
 class AuditCategory(str, Enum):
     """Categorias de eventos para agrupamento."""
-    
+
     AUTHENTICATION = "authentication"
     AUTHORIZATION = "authorization"
     DATA_ACCESS = "data_access"
@@ -86,7 +85,7 @@ class AuditCategory(str, Enum):
 
 class AuditSeverity(str, Enum):
     """Níveis de severidade de eventos."""
-    
+
     DEBUG = "DEBUG"
     INFO = "INFO"
     WARNING = "WARNING"
@@ -97,19 +96,19 @@ class AuditSeverity(str, Enum):
 class AuditLogger:
     """
     Logger de auditoria centralizado.
-    
+
     Fornece métodos para registrar eventos de segurança e compliance,
     com suporte a persistência em banco de dados e logging estruturado.
     """
-    
+
     def __init__(self):
         self._db_enabled = True
         self._request_context: Optional[Request] = None
-        
+
     def set_db_enabled(self, enabled: bool) -> None:
         """Habilita/desabilita persistência no banco."""
         self._db_enabled = enabled
-    
+
     @contextmanager
     def request_context(self, request: Request):
         """Context manager para associar logs a uma requisição."""
@@ -118,7 +117,7 @@ class AuditLogger:
             yield
         finally:
             self._request_context = None
-    
+
     def _get_request_info(self) -> Dict[str, Any]:
         """Extrai informações da requisição atual."""
         info = {
@@ -128,40 +127,44 @@ class AuditLogger:
             "endpoint": None,
             "http_method": None,
         }
-        
+
         if self._request_context:
-            info["request_id"] = getattr(self._request_context.state, "request_id", None)
+            info["request_id"] = getattr(
+                self._request_context.state, "request_id", None
+            )
             info["ip_address"] = self._get_client_ip(self._request_context)
-            info["user_agent"] = self._request_context.headers.get("user-agent", "")[:500]
+            info["user_agent"] = self._request_context.headers.get("user-agent", "")[
+                :500
+            ]
             info["endpoint"] = str(self._request_context.url.path)
             info["http_method"] = self._request_context.method
-            
+
         return info
-    
+
     def _get_client_ip(self, request: Request) -> str:
         """Extrai IP do cliente, considerando proxies."""
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
             return forwarded.split(",")[0].strip()
-        
+
         real_ip = request.headers.get("x-real-ip")
         if real_ip:
             return real_ip
-            
+
         return request.client.host if request.client else "unknown"
-    
+
     def _serialize_details(self, details: Any) -> Optional[str]:
         """Serializa detalhes para JSON."""
         if details is None:
             return None
-        
+
         try:
             if isinstance(details, str):
                 return details[:2000]
             return json.dumps(details, default=str)[:2000]
         except Exception:
             return str(details)[:2000]
-    
+
     async def log(
         self,
         event_type: AuditEventType,
@@ -181,7 +184,7 @@ class AuditLogger:
     ) -> str:
         """
         Registra um evento de auditoria.
-        
+
         Args:
             event_type: Tipo do evento (AuditEventType)
             action: Ação específica executada
@@ -196,20 +199,20 @@ class AuditLogger:
             success: Se a operação foi bem-sucedida
             error_message: Mensagem de erro (se houver)
             persist: Se deve persistir no banco de dados
-            
+
         Returns:
             ID único do evento de auditoria
         """
         event_id = str(uuid4())
         timestamp = datetime.utcnow().isoformat()
-        
+
         # Inferir categoria se não fornecida
         if category is None:
             category = self._infer_category(event_type)
-        
+
         # Obter informações da requisição
         request_info = self._get_request_info()
-        
+
         # Estrutura do log
         log_entry = {
             "event_id": event_id,
@@ -228,31 +231,39 @@ class AuditLogger:
             **request_info,
             "details": self._serialize_details(details),
         }
-        
+
         # Log estruturado
         log_level = getattr(logging, severity.value)
         logger.log(
             log_level,
             f"[AUDIT] {event_type.value}:{action}",
-            extra={"audit_data": log_entry}
+            extra={"audit_data": log_entry},
         )
-        
+
         # Persistir no banco se habilitado
         if persist and self._db_enabled:
             await self._persist_to_db(log_entry)
-        
+
         return event_id
 
     def _format_event(self, event: "AuditEvent") -> Dict[str, Any]:
         """Format an AuditEvent into a dict (compat helper for tests)."""
         return {
-            "event_type": event.event_type.value if isinstance(event.event_type, AuditEventType) else str(event.event_type),
-            "severity": event.severity.value if isinstance(event.severity, AuditSeverity) else str(event.severity),
+            "event_type": (
+                event.event_type.value
+                if isinstance(event.event_type, AuditEventType)
+                else str(event.event_type)
+            ),
+            "severity": (
+                event.severity.value
+                if isinstance(event.severity, AuditSeverity)
+                else str(event.severity)
+            ),
             "timestamp": event.timestamp,
             "user_id": event.user_id,
             "details": event.details,
         }
-    
+
     def _infer_category(self, event_type: AuditEventType) -> AuditCategory:
         """Infere a categoria baseado no tipo de evento."""
         category_map = {
@@ -264,43 +275,37 @@ class AuditLogger:
             AuditEventType.TOKEN_CREATED: AuditCategory.AUTHENTICATION,
             AuditEventType.PASSWORD_CHANGE: AuditCategory.AUTHENTICATION,
             AuditEventType.PASSWORD_RESET: AuditCategory.AUTHENTICATION,
-            
             AuditEventType.ACCESS_GRANTED: AuditCategory.AUTHORIZATION,
             AuditEventType.ACCESS_DENIED: AuditCategory.AUTHORIZATION,
             AuditEventType.PERMISSION_CHECK: AuditCategory.AUTHORIZATION,
-            
             AuditEventType.DATA_CREATE: AuditCategory.DATA_ACCESS,
             AuditEventType.DATA_READ: AuditCategory.DATA_ACCESS,
             AuditEventType.DATA_UPDATE: AuditCategory.DATA_ACCESS,
             AuditEventType.DATA_DELETE: AuditCategory.DATA_ACCESS,
             AuditEventType.DATA_EXPORT: AuditCategory.DATA_ACCESS,
-            
             AuditEventType.ANALYSIS_START: AuditCategory.MEDICAL_ANALYSIS,
             AuditEventType.ANALYSIS_COMPLETE: AuditCategory.MEDICAL_ANALYSIS,
             AuditEventType.ANALYSIS_ERROR: AuditCategory.MEDICAL_ANALYSIS,
-            
             AuditEventType.HITL_REQUIRED: AuditCategory.HITL,
             AuditEventType.HITL_APPROVE: AuditCategory.HITL,
             AuditEventType.HITL_REJECT: AuditCategory.HITL,
-            
             AuditEventType.CONFIG_CHANGE: AuditCategory.SYSTEM,
             AuditEventType.SECURITY_ALERT: AuditCategory.SECURITY,
             AuditEventType.RATE_LIMIT_EXCEEDED: AuditCategory.SECURITY,
-            
             AuditEventType.CONSENT_GRANTED: AuditCategory.LGPD,
             AuditEventType.CONSENT_REVOKED: AuditCategory.LGPD,
             AuditEventType.DATA_ANONYMIZED: AuditCategory.LGPD,
             AuditEventType.DATA_DELETION_REQUEST: AuditCategory.LGPD,
         }
-        
+
         return category_map.get(event_type, AuditCategory.SYSTEM)
-    
+
     async def _persist_to_db(self, log_entry: Dict[str, Any]) -> None:
         """Persiste o log de auditoria no banco de dados."""
         try:
             from ..db.database import get_db_context
             from ..db.user_models import AuditLog
-            
+
             with get_db_context() as db:
                 audit_log = AuditLog(
                     event_type=log_entry["event_type"],
@@ -323,13 +328,13 @@ class AuditLogger:
                 )
                 db.add(audit_log)
                 db.commit()
-                
+
         except Exception as e:
             # Não falhar silenciosamente, mas também não quebrar a aplicação
             logger.error(f"Falha ao persistir audit log: {e}")
-    
+
     # Métodos de conveniência para eventos comuns
-    
+
     async def log_login_success(
         self,
         user_id: str,
@@ -346,7 +351,7 @@ class AuditLogger:
             user_role=user_role,
             details=details or {"method": "password"},
         )
-    
+
     async def log_login_failure(
         self,
         email: str,
@@ -363,7 +368,7 @@ class AuditLogger:
             error_message=reason,
             details=details,
         )
-    
+
     async def log_access_denied(
         self,
         user_id: Optional[str],
@@ -382,7 +387,7 @@ class AuditLogger:
             success=False,
             error_message=reason,
         )
-    
+
     async def log_analysis_start(
         self,
         user_id: str,
@@ -398,7 +403,7 @@ class AuditLogger:
             resource_id=session_id,
             details={"patient_data_provided": bool(patient_data)},
         )
-    
+
     async def log_analysis_complete(
         self,
         user_id: str,
@@ -418,7 +423,7 @@ class AuditLogger:
                 "interactions_found": interactions_found,
             },
         )
-    
+
     async def log_hitl_decision(
         self,
         user_id: str,
@@ -429,22 +434,24 @@ class AuditLogger:
     ) -> str:
         """Registra decisão HITL."""
         event_type = (
-            AuditEventType.HITL_APPROVE 
-            if decision == "approved" 
+            AuditEventType.HITL_APPROVE
+            if decision == "approved"
             else AuditEventType.HITL_REJECT
         )
-        
+
         return await self.log(
             event_type,
             f"hitl_{decision}",
-            severity=AuditSeverity.INFO if decision == "approved" else AuditSeverity.WARNING,
+            severity=(
+                AuditSeverity.INFO if decision == "approved" else AuditSeverity.WARNING
+            ),
             user_id=user_id,
             user_email=user_email,
             resource_type="analysis",
             resource_id=session_id,
             details={"reason": reason} if reason else None,
         )
-    
+
     async def log_security_alert(
         self,
         alert_type: str,
@@ -462,7 +469,7 @@ class AuditLogger:
             error_message=description,
             details=details,
         )
-    
+
     async def log_rate_limit_exceeded(
         self,
         ip_address: str,
@@ -480,7 +487,7 @@ class AuditLogger:
                 "endpoint": endpoint,
             },
         )
-    
+
     async def log_data_deletion_request(
         self,
         user_id: str,
@@ -496,22 +503,17 @@ class AuditLogger:
             user_email=user_email,
             details={"reason": reason},
         )
-    
+
     # Versões síncronas para uso em contextos não-async
-    
-    def log_sync(
-        self,
-        event_type: AuditEventType,
-        action: str,
-        **kwargs
-    ) -> str:
+
+    def log_sync(self, event_type: AuditEventType, action: str, **kwargs) -> str:
         """
         Versão síncrona do log (para uso em contextos não-async).
-        
+
         Apenas faz log estruturado, sem persistência no banco.
         """
         import asyncio
-        
+
         # Tentar executar em event loop existente
         try:
             loop = asyncio.get_running_loop()
@@ -522,7 +524,7 @@ class AuditLogger:
             # Não há event loop, fazer log apenas
             event_id = str(uuid4())
             timestamp = datetime.utcnow().isoformat()
-            
+
             log_entry = {
                 "event_id": event_id,
                 "timestamp": timestamp,
@@ -530,16 +532,19 @@ class AuditLogger:
                 "action": action,
                 **kwargs,
             }
-            
+
             severity = kwargs.get("severity", AuditSeverity.INFO)
-            log_level = getattr(logging, severity.value if isinstance(severity, AuditSeverity) else severity)
-            
+            log_level = getattr(
+                logging,
+                severity.value if isinstance(severity, AuditSeverity) else severity,
+            )
+
             logger.log(
                 log_level,
                 f"[AUDIT-SYNC] {event_type.value}:{action}",
-                extra={"audit_data": log_entry}
+                extra={"audit_data": log_entry},
             )
-            
+
             return event_id
 
     # ------------------------------------------------------------------
@@ -674,7 +679,7 @@ __all__ = [
     "AuditLogger",
     "AuditEvent",
     "AuditEventType",
-    "AuditCategory", 
+    "AuditCategory",
     "AuditSeverity",
     "log_auth_success",
     "log_auth_failure",
@@ -700,11 +705,15 @@ class AuditEvent:
 # Module-level helper functions (compat with older code/tests)
 # ---------------------------------------------------------------------------
 def log_auth_success(*, user_id: str, username: str, client_ip: str) -> str:
-    return audit_logger.auth_login_success(user_id=user_id, username=username, client_ip=client_ip)
+    return audit_logger.auth_login_success(
+        user_id=user_id, username=username, client_ip=client_ip
+    )
 
 
 def log_auth_failure(*, username: str, client_ip: str, reason: str) -> str:
-    return audit_logger.auth_login_failed(username=username, client_ip=client_ip, reason=reason)
+    return audit_logger.auth_login_failed(
+        username=username, client_ip=client_ip, reason=reason
+    )
 
 
 def log_access_denied(*, user_id: str, endpoint: str) -> str:

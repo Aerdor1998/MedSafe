@@ -9,7 +9,7 @@ import logging
 from datetime import datetime
 from typing import Callable
 
-from fastapi import Request, HTTPException
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -48,7 +48,9 @@ class DeprecationMiddleware(BaseHTTPMiddleware):
 
         # Check if this is a deprecated endpoint
         is_excluded = any(path.startswith(prefix) for prefix in self.EXCLUDED_PREFIXES)
-        is_deprecated = (not is_excluded) and any(path.startswith(prefix) for prefix in self.DEPRECATED_PREFIXES)
+        is_deprecated = (not is_excluded) and any(
+            path.startswith(prefix) for prefix in self.DEPRECATED_PREFIXES
+        )
 
         if is_deprecated:
             # Log deprecated usage if enabled

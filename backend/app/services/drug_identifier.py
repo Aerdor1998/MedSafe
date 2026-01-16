@@ -12,19 +12,20 @@ SKILLS APLICADAS:
 - CODE-REVIEW-EXCELLENCE: Documentação clara
 """
 
-import re
 import logging
-from typing import Optional, Tuple, List, Dict, Any
+import re
 from dataclasses import dataclass
-from enum import Enum
 from difflib import SequenceMatcher
+from enum import Enum
 from functools import lru_cache
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 
 class IdentificationMethod(Enum):
     """Método usado para identificar o medicamento"""
+
     EXACT_MATCH = "exact_match"
     REGEX_PATTERN = "regex_pattern"
     FUZZY_MATCH = "fuzzy_match"
@@ -35,12 +36,13 @@ class IdentificationMethod(Enum):
 @dataclass
 class DrugIdentification:
     """Resultado da identificação de um medicamento"""
+
     original_name: str
     canonical_name: str
     method: IdentificationMethod
     confidence: float
     alternatives: List[str] = None
-    
+
     def __post_init__(self):
         if self.alternatives is None:
             self.alternatives = []
@@ -49,14 +51,14 @@ class DrugIdentification:
 class HybridDrugIdentifier:
     """
     Identificador híbrido de medicamentos usando múltiplas estratégias
-    
+
     Ordem de prioridade:
     1. Exact match no dicionário de sinônimos
     2. Regex patterns para variações comuns
     3. Fuzzy matching para erros de digitação
     4. LLM inference para casos complexos
     """
-    
+
     # Mapeamento completo de sinônimos (português → inglês científico)
     DRUG_SYNONYMS = {
         # ===== DIURÉTICOS =====
@@ -67,7 +69,6 @@ class HybridDrugIdentifier:
         "hctz": "hydrochlorothiazide",
         "furosemida": "furosemide",
         "lasix": "furosemide",
-        
         # ===== ANTI-HIPERTENSIVOS (BRA/IECA) =====
         "losartana": "losartan",
         "losartan": "losartan",
@@ -81,14 +82,12 @@ class HybridDrugIdentifier:
         "lisinopril": "lisinopril",
         "zestril": "lisinopril",
         "ramipril": "ramipril",
-        
         # ===== BETA-BLOQUEADORES =====
         "atenolol": "atenolol",
         "propranolol": "propranolol",
         "metoprolol": "metoprolol",
         "carvedilol": "carvedilol",
         "bisoprolol": "bisoprolol",
-        
         # ===== ESTATINAS =====
         "sinvastatina": "simvastatin",
         "simvastatina": "simvastatin",
@@ -97,7 +96,6 @@ class HybridDrugIdentifier:
         "lipitor": "atorvastatin",
         "rosuvastatina": "rosuvastatin",
         "crestor": "rosuvastatin",
-        
         # ===== ANTICOAGULANTES =====
         "warfarina": "warfarin",
         "varfarina": "warfarin",
@@ -108,14 +106,12 @@ class HybridDrugIdentifier:
         "apixabana": "apixaban",
         "eliquis": "apixaban",
         "heparina": "heparin",
-        
         # ===== ANTIPLAQUETÁRIOS =====
         "aspirina": "acetylsalicylic acid",
         "aas": "acetylsalicylic acid",
         "ácido acetilsalicílico": "acetylsalicylic acid",
         "clopidogrel": "clopidogrel",
         "plavix": "clopidogrel",
-        
         # ===== ANALGÉSICOS =====
         "paracetamol": "acetaminophen",
         "tylenol": "acetaminophen",
@@ -131,7 +127,6 @@ class HybridDrugIdentifier:
         "codeina": "codeine",
         "codeína": "codeine",
         "morfina": "morphine",
-        
         # ===== ANTIDEPRESSIVOS =====
         "sertralina": "sertraline",
         "zoloft": "sertraline",
@@ -149,7 +144,6 @@ class HybridDrugIdentifier:
         "tryptanol": "amitriptyline",
         "bupropiona": "bupropion",
         "wellbutrin": "bupropion",
-        
         # ===== ANSIOLÍTICOS/BENZODIAZEPÍNICOS =====
         "diazepam": "diazepam",
         "valium": "diazepam",
@@ -160,7 +154,6 @@ class HybridDrugIdentifier:
         "xanax": "alprazolam",
         "lorazepam": "lorazepam",
         "lorax": "lorazepam",
-        
         # ===== ANTIDIABÉTICOS =====
         "metformina": "metformin",
         "glifage": "metformin",
@@ -170,7 +163,6 @@ class HybridDrugIdentifier:
         "insulina": "insulin",
         "sitagliptina": "sitagliptin",
         "januvia": "sitagliptin",
-        
         # ===== ANTIBIÓTICOS =====
         "amoxicilina": "amoxicillin",
         "azitromicina": "azithromycin",
@@ -182,7 +174,6 @@ class HybridDrugIdentifier:
         "clindamicina": "clindamycin",
         "metronidazol": "metronidazole",
         "flagyl": "metronidazole",
-        
         # ===== GASTROPROTETORES =====
         "omeprazol": "omeprazole",
         "losec": "omeprazole",
@@ -190,7 +181,6 @@ class HybridDrugIdentifier:
         "esomeprazol": "esomeprazole",
         "nexium": "esomeprazole",
         "ranitidina": "ranitidine",
-        
         # ===== ANTIPSICÓTICOS =====
         "haloperidol": "haloperidol",
         "haldol": "haloperidol",
@@ -200,21 +190,18 @@ class HybridDrugIdentifier:
         "seroquel": "quetiapine",
         "olanzapina": "olanzapine",
         "zyprexa": "olanzapine",
-        
         # ===== IMAOs (Alto Risco) =====
         "fenelzina": "phenelzine",
         "nardil": "phenelzine",
         "tranilcipromina": "tranylcypromine",
         "parnate": "tranylcypromine",
         "selegilina": "selegiline",
-        
         # ===== ESTIMULANTES =====
         "metilfenidato": "methylphenidate",
         "ritalina": "methylphenidate",
         "concerta": "methylphenidate",
         "lisdexanfetamina": "lisdexamfetamine",
         "venvanse": "lisdexamfetamine",
-        
         # ===== ANTICONVULSIVANTES =====
         "carbamazepina": "carbamazepine",
         "tegretol": "carbamazepine",
@@ -229,18 +216,15 @@ class HybridDrugIdentifier:
         "gabapentina": "gabapentin",
         "pregabalina": "pregabalin",
         "lyrica": "pregabalin",
-        
         # ===== CORTICOSTEROIDES =====
         "prednisona": "prednisone",
         "prednisolona": "prednisolone",
         "dexametasona": "dexamethasone",
         "hidrocortisona": "hydrocortisone",
-        
         # ===== IMUNOSSUPRESSORES =====
         "metotrexato": "methotrexate",
         "ciclosporina": "cyclosporine",
         "azatioprina": "azathioprine",
-        
         # ===== OUTROS =====
         "alopurinol": "allopurinol",
         "colchicina": "colchicine",
@@ -249,7 +233,7 @@ class HybridDrugIdentifier:
         "sildenafil": "sildenafil",
         "viagra": "sildenafil",
     }
-    
+
     # Padrões regex para identificação de variações
     DRUG_PATTERNS = {
         # Padrão: nome base + variações de sufixo/prefixo
@@ -284,11 +268,11 @@ class HybridDrugIdentifier:
         r"glibenclamid[ae]?": "glyburide",
         r"glimepirid[ae]?": "glimepiride",
     }
-    
+
     def __init__(self, llm_client=None):
         """
         Inicializa o identificador híbrido
-        
+
         Args:
             llm_client: Cliente LLM opcional para fallback (ChatOllama ou similar)
         """
@@ -297,8 +281,10 @@ class HybridDrugIdentifier:
         logger.info(f"HybridDrugIdentifier inicializado")
         logger.info(f"   - {len(self.DRUG_SYNONYMS)} sinônimos mapeados")
         logger.info(f"   - {len(self.DRUG_PATTERNS)} padrões regex")
-        logger.info(f"   - LLM fallback: {'habilitado' if llm_client else 'desabilitado'}")
-    
+        logger.info(
+            f"   - LLM fallback: {'habilitado' if llm_client else 'desabilitado'}"
+        )
+
     def _compile_patterns(self) -> List[Tuple[re.Pattern, str]]:
         """Compila padrões regex para busca eficiente"""
         compiled = []
@@ -308,7 +294,7 @@ class HybridDrugIdentifier:
             except re.error as e:
                 logger.warning(f"Padrão regex inválido '{pattern}': {e}")
         return compiled
-    
+
     def _preprocess_name(self, name: str) -> str:
         """
         Pré-processa o nome do medicamento para normalização
@@ -316,39 +302,41 @@ class HybridDrugIdentifier:
         """
         if not name:
             return ""
-        
+
         # Lowercase e strip
         normalized = name.lower().strip()
-        
+
         # Remover dosagens (50mg, 100 mg, 500UI, etc.)
-        normalized = re.sub(r'\s*\d+(?:[.,]\d+)?\s*(mg|ml|g|ui|mcg|%|mg/ml)\s*', ' ', normalized)
-        
+        normalized = re.sub(
+            r"\s*\d+(?:[.,]\d+)?\s*(mg|ml|g|ui|mcg|%|mg/ml)\s*", " ", normalized
+        )
+
         # Remover formas farmacêuticas
-        forms = r'\b(comprimido|comprimidos|cápsula|capsula|cápsulas|capsulas|'
-        forms += r'gotas|xarope|pomada|creme|gel|injetável|injetavel|'
-        forms += r'solução|solucao|suspensão|suspensao|spray|adesivo|'
-        forms += r'liberação prolongada|lp|xr|sr|cr|retard)\b'
-        normalized = re.sub(forms, ' ', normalized, flags=re.IGNORECASE)
-        
+        forms = r"\b(comprimido|comprimidos|cápsula|capsula|cápsulas|capsulas|"
+        forms += r"gotas|xarope|pomada|creme|gel|injetável|injetavel|"
+        forms += r"solução|solucao|suspensão|suspensao|spray|adesivo|"
+        forms += r"liberação prolongada|lp|xr|sr|cr|retard)\b"
+        normalized = re.sub(forms, " ", normalized, flags=re.IGNORECASE)
+
         # Remover múltiplos espaços
-        normalized = re.sub(r'\s+', ' ', normalized).strip()
-        
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+
         return normalized
-    
+
     @lru_cache(maxsize=1000)
     def identify(self, drug_name: str) -> DrugIdentification:
         """
         Identifica um medicamento usando abordagem híbrida
-        
+
         Estratégias (em ordem de prioridade):
         1. Exact match no dicionário
         2. Regex patterns
         3. Fuzzy matching
         4. LLM inference (se disponível)
-        
+
         Args:
             drug_name: Nome do medicamento (pode ser comercial ou genérico)
-            
+
         Returns:
             DrugIdentification com nome canônico e método usado
         """
@@ -357,12 +345,12 @@ class HybridDrugIdentifier:
                 original_name="",
                 canonical_name="",
                 method=IdentificationMethod.NOT_FOUND,
-                confidence=0.0
+                confidence=0.0,
             )
-        
+
         # Pré-processar
         processed = self._preprocess_name(drug_name)
-        
+
         # 1. Exact match
         result = self._try_exact_match(processed)
         if result:
@@ -371,9 +359,9 @@ class HybridDrugIdentifier:
                 original_name=drug_name,
                 canonical_name=result,
                 method=IdentificationMethod.EXACT_MATCH,
-                confidence=1.0
+                confidence=1.0,
             )
-        
+
         # 2. Regex patterns
         result = self._try_regex_match(processed)
         if result:
@@ -382,9 +370,9 @@ class HybridDrugIdentifier:
                 original_name=drug_name,
                 canonical_name=result,
                 method=IdentificationMethod.REGEX_PATTERN,
-                confidence=0.95
+                confidence=0.95,
             )
-        
+
         # 3. Fuzzy matching
         result, confidence, alternatives = self._try_fuzzy_match(processed)
         if result and confidence >= 0.85:
@@ -394,9 +382,9 @@ class HybridDrugIdentifier:
                 canonical_name=result,
                 method=IdentificationMethod.FUZZY_MATCH,
                 confidence=confidence,
-                alternatives=alternatives
+                alternatives=alternatives,
             )
-        
+
         # 4. LLM fallback (se disponível)
         if self.llm_client:
             result = self._try_llm_inference(drug_name, processed)
@@ -406,9 +394,9 @@ class HybridDrugIdentifier:
                     original_name=drug_name,
                     canonical_name=result,
                     method=IdentificationMethod.LLM_INFERENCE,
-                    confidence=0.8
+                    confidence=0.8,
                 )
-        
+
         # Não encontrado - retornar nome processado como fallback
         logger.warning(f"Medicamento não identificado: '{drug_name}'")
         return DrugIdentification(
@@ -416,20 +404,20 @@ class HybridDrugIdentifier:
             canonical_name=processed,  # Usar nome processado
             method=IdentificationMethod.NOT_FOUND,
             confidence=0.5,
-            alternatives=alternatives if result else []
+            alternatives=alternatives if result else [],
         )
-    
+
     def _try_exact_match(self, name: str) -> Optional[str]:
         """Busca exata no dicionário de sinônimos"""
         return self.DRUG_SYNONYMS.get(name)
-    
+
     def _try_regex_match(self, name: str) -> Optional[str]:
         """Busca usando padrões regex"""
         for pattern, canonical in self._compiled_patterns:
             if pattern.fullmatch(name):
                 return canonical
         return None
-    
+
     def _try_fuzzy_match(self, name: str) -> Tuple[Optional[str], float, List[str]]:
         """
         Busca aproximada usando SequenceMatcher
@@ -438,10 +426,10 @@ class HybridDrugIdentifier:
         best_match = None
         best_ratio = 0.0
         alternatives = []
-        
+
         for synonym, canonical in self.DRUG_SYNONYMS.items():
             ratio = SequenceMatcher(None, name, synonym).ratio()
-            
+
             if ratio > best_ratio:
                 # Mover match anterior para alternativas
                 if best_match and best_ratio >= 0.7:
@@ -450,19 +438,19 @@ class HybridDrugIdentifier:
                 best_match = canonical
             elif ratio >= 0.7 and canonical != best_match:
                 alternatives.append(canonical)
-        
+
         # Limitar alternativas
         alternatives = list(set(alternatives))[:3]
-        
+
         return best_match, best_ratio, alternatives
-    
+
     def _try_llm_inference(self, original: str, processed: str) -> Optional[str]:
         """
         Usa LLM para identificar medicamentos não reconhecidos
         """
         if not self.llm_client:
             return None
-        
+
         try:
             prompt = f"""Identify the canonical English scientific name for this medication.
             
@@ -477,26 +465,27 @@ Rules:
 Response (single word or compound name only):"""
 
             from langchain_core.messages import HumanMessage
+
             response = self.llm_client.invoke([HumanMessage(content=prompt)])
-            
+
             result = response.content.strip().lower()
-            
+
             # Validar resposta
             if result and result != "unknown" and len(result) < 50:
                 return result
-            
+
         except Exception as e:
             logger.warning(f"LLM inference falhou: {e}")
-        
+
         return None
-    
+
     def identify_multiple(self, drug_names: List[str]) -> Dict[str, DrugIdentification]:
         """
         Identifica múltiplos medicamentos de uma vez
-        
+
         Args:
             drug_names: Lista de nomes de medicamentos
-            
+
         Returns:
             Dicionário {nome_original: DrugIdentification}
         """
@@ -505,14 +494,14 @@ Response (single word or compound name only):"""
             if name and name.strip():
                 results[name] = self.identify(name)
         return results
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """Retorna estatísticas do identificador"""
         return {
             "synonyms_count": len(self.DRUG_SYNONYMS),
             "patterns_count": len(self.DRUG_PATTERNS),
             "llm_enabled": self.llm_client is not None,
-            "cache_info": self.identify.cache_info()._asdict()
+            "cache_info": self.identify.cache_info()._asdict(),
         }
 
 
@@ -532,4 +521,3 @@ def reset_identifier():
     """Reset do identificador (para testes)"""
     global _identifier
     _identifier = None
-

@@ -5,13 +5,14 @@ PHASE 1: Comprehensive auth tests
 SKILLS: @debugging-strategies
 """
 
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
-from datetime import datetime, timedelta
-import uuid
-import sys
 import os
+import sys
 import time
+import uuid
+from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 class TestJWTTokens:
@@ -100,8 +101,9 @@ class TestJWTTokens:
 
     def test_verify_token_rejects_refresh_as_access(self, mock_settings):
         """Test that verify_token rejects refresh tokens"""
-        from backend.app.auth.jwt import create_refresh_token, verify_token
         from fastapi import HTTPException
+
+        from backend.app.auth.jwt import create_refresh_token, verify_token
 
         data = {"sub": "test-user-id"}
         token, _ = create_refresh_token(data)
@@ -114,8 +116,9 @@ class TestJWTTokens:
 
     def test_verify_refresh_token_rejects_access(self, mock_settings):
         """Test that verify_refresh_token rejects access tokens"""
-        from backend.app.auth.jwt import create_access_token, verify_refresh_token
         from fastapi import HTTPException
+
+        from backend.app.auth.jwt import create_access_token, verify_refresh_token
 
         data = {"sub": "test-user-id"}
         token, _ = create_access_token(data)
@@ -148,7 +151,9 @@ class TestJWTRevocation:
         mock_redis = AsyncMock()
         mock_redis.setex = AsyncMock(return_value=True)
 
-        with patch.object(jwt_mod, "_get_redis_client", AsyncMock(return_value=mock_redis)):
+        with patch.object(
+            jwt_mod, "_get_redis_client", AsyncMock(return_value=mock_redis)
+        ):
             exp = datetime.utcnow() + timedelta(minutes=5)
             ok = await jwt_mod.revoke_token("jti-123", exp)
 
@@ -162,7 +167,9 @@ class TestJWTRevocation:
         mock_redis = AsyncMock()
         mock_redis.exists = AsyncMock(return_value=1)
 
-        with patch.object(jwt_mod, "_get_redis_client", AsyncMock(return_value=mock_redis)):
+        with patch.object(
+            jwt_mod, "_get_redis_client", AsyncMock(return_value=mock_redis)
+        ):
             revoked = await jwt_mod.is_token_revoked("jti-xyz")
 
         assert revoked is True
@@ -210,7 +217,7 @@ class TestRBAC:
 
     def test_permission_check(self):
         """Test permission checking for roles"""
-        from backend.app.auth.rbac import UserRole, Permission, check_permission
+        from backend.app.auth.rbac import Permission, UserRole, check_permission
 
         # Admin has all permissions
         assert check_permission(UserRole.ADMIN, Permission.USER_CREATE) is True
@@ -221,7 +228,9 @@ class TestRBAC:
         assert check_permission(UserRole.PHYSICIAN, Permission.USER_CREATE) is False
 
         # Pharmacist cannot approve
-        assert check_permission(UserRole.PHARMACIST, Permission.ANALYSIS_APPROVE) is False
+        assert (
+            check_permission(UserRole.PHARMACIST, Permission.ANALYSIS_APPROVE) is False
+        )
         assert check_permission(UserRole.PHARMACIST, Permission.TRIAGE_CREATE) is True
 
         # Readonly can only read
@@ -286,8 +295,9 @@ class TestUserModel:
 
     def test_is_locked_expires(self):
         """Test that lock expires after timeout"""
-        from backend.app.db.user_models import User
         from datetime import datetime, timedelta
+
+        from backend.app.db.user_models import User
 
         user = User(
             email="test@example.com",
@@ -306,6 +316,7 @@ class TestUserSessionModel:
     def test_is_expired(self):
         """Test session expiration check"""
         from datetime import datetime, timedelta
+
         from backend.app.db.user_models import UserSession
 
         # Not expired
@@ -327,6 +338,7 @@ class TestUserSessionModel:
     def test_revoke(self):
         """Test session revocation"""
         from datetime import datetime, timedelta
+
         from backend.app.db.user_models import UserSession
 
         token = UserSession(

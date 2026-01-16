@@ -20,16 +20,16 @@ CRITICAL: For medical systems, evidence MUST be real and verifiable.
 No LLM synthesis without explicit warning to downstream agents.
 """
 
-from typing import Dict, Any, List, Optional
-from datetime import datetime
-import logging
-from pathlib import Path
 import json
+import logging
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
+from ..db.vector_store import MedicalVectorStore, get_vector_store
+from ..services.drug_interactions import normalize_drug_name
 from .base_agent import BaseAgent
 from .state import MedSafeState
-from ..db.vector_store import get_vector_store, MedicalVectorStore
-from ..services.drug_interactions import normalize_drug_name
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,9 @@ class DocumentAgent(BaseAgent):
         # Retrieval configuration
         # NOTE: Lowered min_relevance_score from 0.3 to 0.15 for better recall
         # Medical RAG should prioritize recall over precision - ClinicalAgent will filter
-        self.top_k_semantic = 15  # Retrieve top 15 from semantic search (increased from 10)
+        self.top_k_semantic = (
+            15  # Retrieve top 15 from semantic search (increased from 10)
+        )
         self.top_k_final = 8  # Return top 8 after reranking (increased from 5)
         self.min_relevance_score = 0.15  # Minimum cosine similarity (lowered from 0.3)
 
@@ -149,10 +151,14 @@ Precisão médica é fundamental - em caso de dúvida, sinalize para revisão hu
 
             for idx, medication in enumerate(medications, start=1):
                 # LGPD/PHI: avoid logging medication names in plaintext
-                logger.info("Searching evidence for medication %d/%d", idx, len(medications))
+                logger.info(
+                    "Searching evidence for medication %d/%d", idx, len(medications)
+                )
 
                 # Hybrid search (semantic + keyword)
-                evidence_docs = self._retrieve_evidence_for_drug(medication, patient_data)
+                evidence_docs = self._retrieve_evidence_for_drug(
+                    medication, patient_data
+                )
 
                 # Update stats
                 retrieval_stats["total_documents_retrieved"] += len(evidence_docs)
@@ -235,7 +241,8 @@ Precisão médica é fundamental - em caso de dúvida, sinalize para revisão hu
 
             self.log_step(
                 state,
-                f"Evidence retrieval completed: {len(unique_evidence)} docs, " f"quality={evidence_quality['status']}",
+                f"Evidence retrieval completed: {len(unique_evidence)} docs, "
+                f"quality={evidence_quality['status']}",
             )
 
             return updates
@@ -243,7 +250,9 @@ Precisão médica é fundamental - em caso de dúvida, sinalize para revisão hu
         except Exception as e:
             return self.handle_error(state, e, "Failed to retrieve evidence")
 
-    def _extract_medications(self, medication_text: str, patient_data: Dict[str, Any]) -> List[str]:
+    def _extract_medications(
+        self, medication_text: str, patient_data: Dict[str, Any]
+    ) -> List[str]:
         """
         Extract individual medication names from text and patient data
 
@@ -277,7 +286,9 @@ Precisão médica é fundamental - em caso de dúvida, sinalize para revisão hu
 
         return normalized
 
-    def _retrieve_evidence_for_drug(self, drug_name: str, patient_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _retrieve_evidence_for_drug(
+        self, drug_name: str, patient_data: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         """
         Retrieve evidence for a specific drug using hybrid search
 
@@ -304,7 +315,11 @@ Precisão médica é fundamental - em caso de dúvida, sinalize para revisão hu
             )
 
             # Filter by minimum relevance
-            filtered_evidence = [doc for doc in evidence if doc.get("score", 0.0) >= self.min_relevance_score]
+            filtered_evidence = [
+                doc
+                for doc in evidence
+                if doc.get("score", 0.0) >= self.min_relevance_score
+            ]
 
             # FALLBACK: If nothing passes threshold but we have results, return top docs with warning
             if not filtered_evidence and evidence:
@@ -333,7 +348,9 @@ Precisão médica é fundamental - em caso de dúvida, sinalize para revisão hu
                     query=query,
                     k=self.top_k_final,
                 )
-                logger.warning(f" Fallback to semantic-only search: {len(evidence)} docs")
+                logger.warning(
+                    f" Fallback to semantic-only search: {len(evidence)} docs"
+                )
                 return evidence
 
             except Exception as e2:
@@ -366,7 +383,9 @@ Precisão médica é fundamental - em caso de dúvida, sinalize para revisão hu
 
         return query
 
-    def _deduplicate_evidence(self, evidence: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _deduplicate_evidence(
+        self, evidence: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         """
         Deduplicate evidence by content hash and rank by relevance
 
@@ -376,7 +395,9 @@ Precisão médica é fundamental - em caso de dúvida, sinalize para revisão hu
         unique = []
 
         # Sort by score first (highest to lowest)
-        sorted_evidence = sorted(evidence, key=lambda x: x.get("score", 0.0), reverse=True)
+        sorted_evidence = sorted(
+            evidence, key=lambda x: x.get("score", 0.0), reverse=True
+        )
 
         for doc in sorted_evidence:
             # Create content hash (first 200 chars)
@@ -393,7 +414,9 @@ Precisão médica é fundamental - em caso de dúvida, sinalize para revisão hu
 
         return unique
 
-    def _assess_evidence_quality(self, evidence: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _assess_evidence_quality(
+        self, evidence: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         """
         Assess quality and sufficiency of retrieved evidence
 
@@ -402,12 +425,16 @@ Precisão médica é fundamental - em caso de dúvida, sinalize para revisão hu
         total_docs = len(evidence)
 
         # Count by relevance
-        high_relevance = sum(1 for doc in evidence if doc.get("relevance") in ["HIGH", "VERY_HIGH"])
+        high_relevance = sum(
+            1 for doc in evidence if doc.get("relevance") in ["HIGH", "VERY_HIGH"]
+        )
 
         # Count authoritative sources
         authoritative_sources = {"FDA", "ANVISA", "PubMed", "DrugBank"}
         authoritative_count = sum(
-            1 for doc in evidence if doc.get("metadata", {}).get("source") in authoritative_sources
+            1
+            for doc in evidence
+            if doc.get("metadata", {}).get("source") in authoritative_sources
         )
 
         # Determine status
@@ -419,7 +446,9 @@ Precisão médica é fundamental - em caso de dúvida, sinalize para revisão hu
             message = f"{high_relevance} high-relevance docs from authoritative sources"
         elif high_relevance >= 1 and total_docs >= 3:
             status = "GOOD"
-            message = f"{total_docs} documents retrieved with {high_relevance} high-relevance"
+            message = (
+                f"{total_docs} documents retrieved with {high_relevance} high-relevance"
+            )
         elif total_docs >= 2:
             status = "MODERATE"
             message = f"{total_docs} documents but low relevance scores"
@@ -435,7 +464,9 @@ Precisão médica é fundamental - em caso de dúvida, sinalize para revisão hu
             "authoritative_count": authoritative_count,
         }
 
-    def _summarize_evidence(self, evidence: List[Dict[str, Any]], medications: List[str]) -> str:
+    def _summarize_evidence(
+        self, evidence: List[Dict[str, Any]], medications: List[str]
+    ) -> str:
         """
         Use LLM to summarize retrieved evidence
 

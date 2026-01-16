@@ -26,7 +26,9 @@ def test_v2_health_model(client):
 
 def test_analyze_legacy_accepts_request(client):
     """Endpoint legado /api/analyze deve responder (200 ou 500 em caso de model indisponível)."""
-    pytest.skip("Endpoint /api/analyze pode demorar (LLM); cobrir em suíte e2e com timeouts maiores.")
+    pytest.skip(
+        "Endpoint /api/analyze pode demorar (LLM); cobrir em suíte e2e com timeouts maiores."
+    )
 
 
 @pytest.mark.skip(reason="Rotas legacy de upload/busca removidas na versão atual.")

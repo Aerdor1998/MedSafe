@@ -9,15 +9,15 @@ Contains:
 """
 
 import logging
-from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..data import (
-    get_population_alerts,
-    get_critical_combinations,
-    get_recommendation_templates,
     get_category_recommendations,
+    get_critical_combinations,
+    get_population_alerts,
+    get_recommendation_templates,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,18 +30,20 @@ logger = logging.getLogger(__name__)
 
 class PopulationRisk(str, Enum):
     """Categorias de população de risco"""
-    PEDIATRIC = "pediatric"          # < 12 anos
-    ADOLESCENT = "adolescent"        # 12-17 anos
-    ADULT = "adult"                  # 18-64 anos
-    GERIATRIC = "geriatric"          # >= 65 anos
-    PREGNANCY = "pregnancy"          # Gestante
-    LACTATION = "lactation"          # Amamentando
+
+    PEDIATRIC = "pediatric"  # < 12 anos
+    ADOLESCENT = "adolescent"  # 12-17 anos
+    ADULT = "adult"  # 18-64 anos
+    GERIATRIC = "geriatric"  # >= 65 anos
+    PREGNANCY = "pregnancy"  # Gestante
+    LACTATION = "lactation"  # Amamentando
     RENAL_IMPAIRED = "renal_impaired"
     HEPATIC_IMPAIRED = "hepatic_impaired"
 
 
 class RenalStage(str, Enum):
     """Estágios de função renal (CKD-EPI)"""
+
     G1 = "G1"  # GFR >= 90: Normal ou alto
     G2 = "G2"  # GFR 60-89: Levemente diminuído
     G3A = "G3a"  # GFR 45-59: Leve a moderadamente diminuído
@@ -52,6 +54,7 @@ class RenalStage(str, Enum):
 
 class HepaticStage(str, Enum):
     """Classificação Child-Pugh para função hepática"""
+
     A = "A"  # 5-6 pontos: Bem compensado
     B = "B"  # 7-9 pontos: Comprometimento significativo
     C = "C"  # 10-15 pontos: Descompensado
@@ -64,6 +67,7 @@ class PatientContext:
 
     SKILL: @api-design-principles - Estrutura type-safe
     """
+
     age: Optional[int] = None
     weight: Optional[float] = None
     height: Optional[float] = None
@@ -113,7 +117,12 @@ class PatientContext:
         # Função renal
         if self.gfr is not None and self.gfr < 60:
             risks.append(PopulationRisk.RENAL_IMPAIRED)
-        elif self.renal_stage in [RenalStage.G3A, RenalStage.G3B, RenalStage.G4, RenalStage.G5]:
+        elif self.renal_stage in [
+            RenalStage.G3A,
+            RenalStage.G3B,
+            RenalStage.G4,
+            RenalStage.G5,
+        ]:
             risks.append(PopulationRisk.RENAL_IMPAIRED)
 
         # Função hepática
@@ -134,6 +143,7 @@ class PatientContext:
 @dataclass
 class SeverityModification:
     """Modificação de severidade baseada em contexto"""
+
     original_severity: str
     modified_severity: str
     reason: str
@@ -151,22 +161,38 @@ POPULATION_DRUG_ALERTS = {
     PopulationRisk.PREGNANCY: {
         # Categoria X FDA (teratogênicos absolutos)
         "contraindicated": [
-            "warfarin", "isotretinoin", "methotrexate", "valproic acid",
-            "thalidomide", "leflunomide", "misoprostol", "finasteride",
-            "dutasteride", "ribavirin", "bosentan",
+            "warfarin",
+            "isotretinoin",
+            "methotrexate",
+            "valproic acid",
+            "thalidomide",
+            "leflunomide",
+            "misoprostol",
+            "finasteride",
+            "dutasteride",
+            "ribavirin",
+            "bosentan",
         ],
         # Categoria D (risco demonstrado mas pode ser necessário)
         "high_risk": [
-            "phenytoin", "carbamazepine", "lithium", "atenolol",
-            "tetracycline", "doxycycline", "ciprofloxacin",
+            "phenytoin",
+            "carbamazepine",
+            "lithium",
+            "atenolol",
+            "tetracycline",
+            "doxycycline",
+            "ciprofloxacin",
         ],
         "severity_increase": 2,  # Sempre aumentar 2 níveis para teratogênicos
     },
     PopulationRisk.PEDIATRIC: {
         "contraindicated": [
             "aspirin",  # Síndrome de Reye
-            "tetracycline", "doxycycline",  # Manchas dentárias
-            "fluoroquinolone", "ciprofloxacin", "levofloxacin",  # Artropatia
+            "tetracycline",
+            "doxycycline",  # Manchas dentárias
+            "fluoroquinolone",
+            "ciprofloxacin",
+            "levofloxacin",  # Artropatia
         ],
         "high_risk": [
             "codeine",  # Metabolizadores ultrarrápidos
@@ -178,9 +204,14 @@ POPULATION_DRUG_ALERTS = {
     PopulationRisk.GERIATRIC: {
         # Lista de Beers (medicamentos potencialmente inapropriados)
         "high_risk": [
-            "diazepam", "alprazolam", "lorazepam", "clonazepam",  # BZD longa ação
-            "diphenhydramine", "chlorpheniramine",  # Anti-histamínicos
-            "amitriptyline", "imipramine",  # Antidepressivos tricíclicos
+            "diazepam",
+            "alprazolam",
+            "lorazepam",
+            "clonazepam",  # BZD longa ação
+            "diphenhydramine",
+            "chlorpheniramine",  # Anti-histamínicos
+            "amitriptyline",
+            "imipramine",  # Antidepressivos tricíclicos
             "meperidine",  # Opioide
             "indomethacin",  # AINE
             "nifedipine",  # Liberação imediata
@@ -193,11 +224,17 @@ POPULATION_DRUG_ALERTS = {
             "lithium",  # Alto risco de toxicidade
         ],
         "high_risk": [
-            "nsaid", "ibuprofen", "naproxen", "diclofenac",  # AINEs
-            "gentamicin", "amikacin", "tobramycin",  # Aminoglicosídeos
+            "nsaid",
+            "ibuprofen",
+            "naproxen",
+            "diclofenac",  # AINEs
+            "gentamicin",
+            "amikacin",
+            "tobramycin",  # Aminoglicosídeos
             "vancomycin",
             "digoxin",
-            "gabapentin", "pregabalin",
+            "gabapentin",
+            "pregabalin",
             "allopurinol",
         ],
         "severity_increase": 1,
@@ -207,8 +244,11 @@ POPULATION_DRUG_ALERTS = {
             "methotrexate",
         ],
         "high_risk": [
-            "acetaminophen", "paracetamol",  # Hepatotóxico em dose alta
-            "statins", "atorvastatin", "simvastatin",
+            "acetaminophen",
+            "paracetamol",  # Hepatotóxico em dose alta
+            "statins",
+            "atorvastatin",
+            "simvastatin",
             "isoniazid",
             "valproic acid",
             "ketoconazole",
@@ -284,6 +324,7 @@ CRITICAL_INTERACTIONS = {
 @dataclass
 class EscalationRule:
     """Regra de escalonamento para HITL"""
+
     name: str
     condition: str
     priority: str  # critical, high, medium
@@ -295,43 +336,43 @@ AUTO_ESCALATION_RULES = [
         name="critical_interaction",
         condition="severity == 'critical'",
         priority="critical",
-        reason_template="Interação CRÍTICA identificada: {details}"
+        reason_template="Interação CRÍTICA identificada: {details}",
     ),
     EscalationRule(
         name="pregnancy_teratogen",
         condition="pregnant and drug in teratogens",
         priority="critical",
-        reason_template="Medicamento teratogênico em gestante: {drug}"
+        reason_template="Medicamento teratogênico em gestante: {drug}",
     ),
     EscalationRule(
         name="pediatric_contraindication",
         condition="age < 12 and drug in pediatric_contraindicated",
         priority="critical",
-        reason_template="Medicamento contraindicado em pediatria: {drug}"
+        reason_template="Medicamento contraindicado em pediatria: {drug}",
     ),
     EscalationRule(
         name="multiple_high_interactions",
         condition="count(high_interactions) >= 2",
         priority="high",
-        reason_template="Múltiplas interações de alto risco ({count}): {drugs}"
+        reason_template="Múltiplas interações de alto risco ({count}): {drugs}",
     ),
     EscalationRule(
         name="geriatric_polypharmacy",
         condition="age >= 65 and medication_count >= 5",
         priority="high",
-        reason_template="Polifarmácia em paciente idoso ({count} medicamentos)"
+        reason_template="Polifarmácia em paciente idoso ({count} medicamentos)",
     ),
     EscalationRule(
         name="renal_nephrotoxic",
         condition="gfr < 30 and drug in nephrotoxic",
         priority="high",
-        reason_template="Droga nefrotóxica em paciente com GFR < 30: {drug}"
+        reason_template="Droga nefrotóxica em paciente com GFR < 30: {drug}",
     ),
     EscalationRule(
         name="low_confidence_high_risk",
         condition="confidence < 0.7 and severity in ['high', 'critical']",
         priority="high",
-        reason_template="Baixa confiança ({confidence:.0%}) com risco {severity}"
+        reason_template="Baixa confiança ({confidence:.0%}) com risco {severity}",
     ),
 ]
 
@@ -425,10 +466,7 @@ CATEGORY_RECOMMENDATIONS = {
 
 
 def calculate_gfr_cockroft_gault(
-    age: int,
-    weight: float,
-    creatinine: float,
-    sex: str
+    age: int, weight: float, creatinine: float, sex: str
 ) -> float:
     """
     Calcular GFR usando fórmula de Cockroft-Gault
@@ -449,7 +487,7 @@ def calculate_gfr_cockroft_gault(
 
     gfr = ((140 - age) * weight) / (72 * creatinine)
 
-    if sex.upper() == 'F':
+    if sex.upper() == "F":
         gfr *= 0.85
 
     return round(gfr, 1)
@@ -469,7 +507,7 @@ def calculate_bmi(weight: float, height: float) -> float:
     if height <= 0:
         return 0.0
 
-    return round(weight / (height ** 2), 1)
+    return round(weight / (height**2), 1)
 
 
 def get_renal_stage(gfr: float) -> RenalStage:
@@ -504,10 +542,7 @@ class ClinicalRulesEngine:
         logger.info("ClinicalRulesEngine inicializado")
 
     def adjust_severity_for_patient(
-        self,
-        base_severity: str,
-        drug_name: str,
-        patient_context: PatientContext
+        self, base_severity: str, drug_name: str, patient_context: PatientContext
     ) -> SeverityModification:
         """
         Ajustar severidade baseado no contexto do paciente
@@ -520,7 +555,7 @@ class ClinicalRulesEngine:
         Returns:
             SeverityModification com ajuste e justificativa
         """
-        severity_order = ['low', 'medium', 'high', 'critical']
+        severity_order = ["low", "medium", "high", "critical"]
         current_idx = severity_order.index(base_severity)
         max_increase = 0
         risk_factors = []
@@ -539,7 +574,9 @@ class ClinicalRulesEngine:
             if "contraindicated" in alerts:
                 for contraindicated in alerts["contraindicated"]:
                     if contraindicated in drug_lower:
-                        max_increase = max(max_increase, alerts.get("severity_increase", 2))
+                        max_increase = max(
+                            max_increase, alerts.get("severity_increase", 2)
+                        )
                         risk_factors.append(f"{risk.value}_contraindicated")
                         reasons.append(
                             f"{drug_name} contraindicado em {risk.value}: "
@@ -551,7 +588,9 @@ class ClinicalRulesEngine:
             if "high_risk" in alerts:
                 for high_risk in alerts["high_risk"]:
                     if high_risk in drug_lower:
-                        max_increase = max(max_increase, alerts.get("severity_increase", 1))
+                        max_increase = max(
+                            max_increase, alerts.get("severity_increase", 1)
+                        )
                         risk_factors.append(f"{risk.value}_high_risk")
                         reasons.append(
                             f"{drug_name} requer cautela em {risk.value}: "
@@ -580,7 +619,7 @@ class ClinicalRulesEngine:
         confidence: float,
         interactions: List[Dict[str, Any]],
         patient_context: PatientContext,
-        drug_name: str
+        drug_name: str,
     ) -> Tuple[bool, List[str]]:
         """
         Verificar se escalonamento para HITL é necessário
@@ -598,20 +637,30 @@ class ClinicalRulesEngine:
 
         # Regra 2: Gestante com teratogênico
         if patient_context.pregnant:
-            teratogens = POPULATION_DRUG_ALERTS[PopulationRisk.PREGNANCY].get("contraindicated", [])
+            teratogens = POPULATION_DRUG_ALERTS[PopulationRisk.PREGNANCY].get(
+                "contraindicated", []
+            )
             if any(t in drug_name.lower() for t in teratogens):
                 needs_escalation = True
-                escalation_reasons.append(f"Medicamento teratogenico em gestante: {drug_name}")
+                escalation_reasons.append(
+                    f"Medicamento teratogenico em gestante: {drug_name}"
+                )
 
         # Regra 3: Pediatria com contraindicação
         if patient_context.age and patient_context.age < 12:
-            pediatric_contra = POPULATION_DRUG_ALERTS[PopulationRisk.PEDIATRIC].get("contraindicated", [])
+            pediatric_contra = POPULATION_DRUG_ALERTS[PopulationRisk.PEDIATRIC].get(
+                "contraindicated", []
+            )
             if any(c in drug_name.lower() for c in pediatric_contra):
                 needs_escalation = True
-                escalation_reasons.append(f"Medicamento contraindicado em pediatria: {drug_name}")
+                escalation_reasons.append(
+                    f"Medicamento contraindicado em pediatria: {drug_name}"
+                )
 
         # Regra 4: Múltiplas interações de alto risco
-        high_interactions = [i for i in interactions if i.get("severity") in ["high", "critical"]]
+        high_interactions = [
+            i for i in interactions if i.get("severity") in ["high", "critical"]
+        ]
         if len(high_interactions) >= 2:
             needs_escalation = True
             escalation_reasons.append(
@@ -627,7 +676,9 @@ class ClinicalRulesEngine:
 
         # Regra 6: Insuficiência renal + droga nefrotóxica
         if PopulationRisk.RENAL_IMPAIRED in patient_context.get_population_risks():
-            nephrotoxic = POPULATION_DRUG_ALERTS[PopulationRisk.RENAL_IMPAIRED].get("high_risk", [])
+            nephrotoxic = POPULATION_DRUG_ALERTS[PopulationRisk.RENAL_IMPAIRED].get(
+                "high_risk", []
+            )
             if any(n in drug_name.lower() for n in nephrotoxic):
                 needs_escalation = True
                 escalation_reasons.append(
@@ -649,7 +700,7 @@ class ClinicalRulesEngine:
         category: str,
         interactions: List[Dict[str, Any]],
         contraindications: List[Dict[str, Any]],
-        patient_context: PatientContext
+        patient_context: PatientContext,
     ) -> Dict[str, Any]:
         """
         Gerar recomendações estruturadas baseadas na análise
@@ -657,7 +708,9 @@ class ClinicalRulesEngine:
         Returns:
             Dict com recomendações organizadas por tipo
         """
-        base_template = RECOMMENDATION_TEMPLATES.get(severity, RECOMMENDATION_TEMPLATES["medium"])
+        base_template = RECOMMENDATION_TEMPLATES.get(
+            severity, RECOMMENDATION_TEMPLATES["medium"]
+        )
         category_specific = CATEGORY_RECOMMENDATIONS.get(category, {})
 
         recommendations = {
@@ -673,7 +726,9 @@ class ClinicalRulesEngine:
 
         # Adicionar monitoramento específico da categoria
         if category_specific.get("monitoring"):
-            recommendations["monitoring_required"].extend(category_specific["monitoring"])
+            recommendations["monitoring_required"].extend(
+                category_specific["monitoring"]
+            )
 
         # Ajustes por população
         if patient_context.pregnant:

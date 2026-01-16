@@ -75,8 +75,8 @@ Inicia todos os serviços do MedSafe (PostgreSQL, Ollama, API).
 - ✅ Exibe URLs de acesso
 
 **Portas:**
-- Frontend: http://localhost:9000
-- API Docs: http://localhost:9000/docs
+- Frontend: http://localhost:9001
+- API Docs: http://localhost:9001/docs
 - Ollama: http://localhost:11434
 
 ---
@@ -106,7 +106,7 @@ Verifica status de todos os serviços.
 ```
 ✅ PostgreSQL: Running (healthy)
 ✅ Ollama: Running
-✅ API: Running on port 9000
+✅ API: Running on port 9001
 📊 Database: 1,234 triages, 567 reports
 💾 Memory: 2.3GB used
 ```
@@ -385,9 +385,9 @@ Os seguintes scripts foram removidos por serem duplicados ou obsoletos:
 - [Docker Compose Documentation](../docker-compose.yml)
 - [Alembic Migrations](../alembic/)
 - [Database Schema](../backend/app/db/models.py)
-- [API Documentation](http://localhost:9000/docs)
+- [API Documentation](http://localhost:9001/docs)
 
 ---
 
-**Última atualização:** 01/12/2025
+**Última atualização:** 15/01/2026
 **Mantido por:** Equipe MedSafe

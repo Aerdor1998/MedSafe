@@ -4,8 +4,9 @@ Unit tests for additional middleware modules
 Tests prometheus, metrics, and other middleware components.
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 from fastapi import Request
 from starlette.responses import Response
 
@@ -16,7 +17,7 @@ class TestPrometheusMiddleware:
     def test_prometheus_middleware_import(self):
         """Test PrometheusMiddleware can be imported"""
         from backend.app.middleware.prometheus import PrometheusMiddleware
-        
+
         assert PrometheusMiddleware is not None
 
 
@@ -26,7 +27,7 @@ class TestMetricsMiddleware:
     def test_metrics_middleware_import(self):
         """Test MetricsMiddleware can be imported"""
         from backend.app.middleware.metrics import MetricsMiddleware
-        
+
         assert MetricsMiddleware is not None
 
 
@@ -36,7 +37,7 @@ class TestDBQueryCountMiddleware:
     def test_db_query_count_import(self):
         """Test DBQueryCountMiddleware can be imported"""
         from backend.app.middleware.db_query_count import DBQueryCountMiddleware
-        
+
         assert DBQueryCountMiddleware is not None
 
 
@@ -46,7 +47,7 @@ class TestRequestIdMiddleware:
     def test_request_id_middleware_import(self):
         """Test RequestIdMiddleware can be imported"""
         from backend.app.middleware.request_id import RequestIdMiddleware
-        
+
         assert RequestIdMiddleware is not None
 
 
@@ -59,6 +60,6 @@ class TestMiddlewareInit:
             DeprecationMiddleware,
             SecurityHeadersMiddleware,
         )
-        
+
         assert DeprecationMiddleware is not None
         assert SecurityHeadersMiddleware is not None

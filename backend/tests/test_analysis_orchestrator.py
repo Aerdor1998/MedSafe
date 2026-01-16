@@ -79,19 +79,31 @@ def _db_ctx(db: _FakeDB):
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_run_analysis_builds_initial_state_and_calls_graph(monkeypatch):
+async def test_orchestrator_run_analysis_builds_initial_state_and_calls_graph(
+    monkeypatch,
+):
     captured = {}
 
     class _Graph:
         async def ainvoke(self, initial_state, config):
             captured["initial_state"] = initial_state
             captured["config"] = config
-            return {"risk_level": "low", "interactions": [], "contraindications": [], "session_id": initial_state["session_id"]}
+            return {
+                "risk_level": "low",
+                "interactions": [],
+                "contraindications": [],
+                "session_id": initial_state["session_id"],
+            }
 
     monkeypatch.setattr(ao, "get_graph", lambda: _Graph())
 
     orch = ao.AnalysisOrchestrator()
-    result = await orch.run_analysis({"age": 10, "cid_codes": ["x"], "meds_in_use": ["a"]}, "ibuprofen", session_id="sess-123", triage_id="t-1")
+    result = await orch.run_analysis(
+        {"age": 10, "cid_codes": ["x"], "meds_in_use": ["a"]},
+        "ibuprofen",
+        session_id="sess-123",
+        triage_id="t-1",
+    )
     assert result["risk_level"] == "low"
     assert captured["initial_state"]["patient_data"]["conditions"] == ["x"]
     assert captured["initial_state"]["patient_data"]["current_medications"] == ["a"]
@@ -106,7 +118,9 @@ async def test_orchestrator_job_lifecycle_update(monkeypatch):
     monkeypatch.setattr(ao, "AnalysisJob", _DummyJob)
 
     orch = ao.AnalysisOrchestrator()
-    await orch.update_job(job_id="job-42", status="running", state={"a": 1}, increment_retries=True)
+    await orch.update_job(
+        job_id="job-42", status="running", state={"a": 1}, increment_retries=True
+    )
     assert job.status == "running"
     assert job.state == {"a": 1}
     assert job.retries == 1
@@ -146,7 +160,9 @@ def test_orchestrator_format_responses(monkeypatch):
         "risk_level": "high",
         "confidence_score": 0.8,
         "structured_recommendations": {"header": "H", "immediate_actions": ["A"]},
-        "interactions": [{"drug1": "a", "drug2": "b", "severity": "high", "description": "x"}],
+        "interactions": [
+            {"drug1": "a", "drug2": "b", "severity": "high", "description": "x"}
+        ],
         "contraindications": [{"type": "t", "severity": "high", "description": "y"}],
         "status": "completed",
     }
@@ -155,7 +171,10 @@ def test_orchestrator_format_responses(monkeypatch):
     assert v2["session_id"] == "sess"
     assert v2["structured_recommendations"]["header"] == "H"
 
-    legacy = orch.format_legacy_response(state, patient_info={"age": 40, "sex": "F", "current_medications": []}, model_used=None)
+    legacy = orch.format_legacy_response(
+        state,
+        patient_info={"age": 40, "sex": "F", "current_medications": []},
+        model_used=None,
+    )
     assert legacy["model_used"] == "model-x"
     assert "analysis_notes" in legacy and legacy["analysis_notes"]
-
