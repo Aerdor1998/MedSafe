@@ -11,8 +11,8 @@ env:
   POSTGRES_USER: medsafe
   POSTGRES_PASSWORD: test_password_ci
   POSTGRES_DB: medsafe_test
-  SECRET_KEY: "ci-test-secret-key-minimum-32-chars"
-  JWT_SECRET: "ci-test-jwt-secret-minimum-32-chars"
+  SECRET_KEY: "test-ci-secret-key-minimum-32-chars"
+  JWT_SECRET: "test-ci-jwt-secret-minimum-32-chars"
 
 jobs:
   # =================================================================
@@ -42,7 +42,7 @@ jobs:
         continue-on-error: false
       
       - name: 📝 Check import sorting with isort
-        run: isort --check-only --diff backend/
+        run: isort --check-only --diff --profile black backend/
         continue-on-error: false
       
       - name: 🔍 Run Flake8 linting

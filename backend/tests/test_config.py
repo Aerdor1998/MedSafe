@@ -5,9 +5,10 @@ PHASE 1: Test configuration validation
 SKILLS: @debugging-strategies
 """
 
-import pytest
-from unittest.mock import patch
 import os
+from unittest.mock import patch
+
+import pytest
 
 
 class TestSettings:
@@ -30,7 +31,10 @@ class TestSettings:
             clear=True,
         ):
             s = Settings()
-            assert s.allowed_origins == ["http://localhost:3000", "http://localhost:9000"]
+            assert s.allowed_origins == [
+                "http://localhost:3000",
+                "http://localhost:9000",
+            ]
 
     def test_parse_allowed_hosts_string(self):
         """Test parsing comma-separated hosts"""
@@ -113,6 +117,7 @@ class TestFeatureFlags:
         sunset_date = "2025-03-01"
 
         from datetime import datetime
+
         parsed = datetime.strptime(sunset_date, "%Y-%m-%d")
 
         assert parsed.year == 2025
@@ -142,7 +147,10 @@ class TestDatabaseURL:
             clear=True,
         ):
             s = Settings()
-            assert s.database_url_safe == "postgresql://medsafe:test_password@localhost:5432/medsafe_db"
+            assert (
+                s.database_url_safe
+                == "postgresql://medsafe:test_password@localhost:5432/medsafe_db"
+            )
 
     def test_database_url_uses_env_override(self):
         """Test that DATABASE_URL env var takes precedence"""

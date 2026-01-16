@@ -11,17 +11,18 @@ All specialized agents inherit from this base to ensure:
 - Prompt engineering best practices
 """
 
-from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List
-from datetime import datetime
 import logging
-from langchain_ollama import ChatOllama
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-from langchain_core.prompts import ChatPromptTemplate
+from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_ollama import ChatOllama
+
+from ..utils.logging_config import get_agent_logger
 from .config import get_settings
 from .state import MedSafeState
-from ..utils.logging_config import get_agent_logger
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ class BaseAgent(ABC):
                 "model": self.settings.effective_model_name,
                 "temperature": self.settings.ollama_temperature,
                 "num_predict": self.settings.ollama_max_tokens,
-                "headers": {"Authorization": f"Bearer {self.settings.ollama_api_key}"}
+                "headers": {"Authorization": f"Bearer {self.settings.ollama_api_key}"},
             }
             logger.info(
                 f"🌐 Primary: cloud model {self.settings.effective_model_name} "
@@ -135,7 +136,10 @@ class BaseAgent(ABC):
         pass
 
     def invoke_llm(
-        self, user_message: str, context: Optional[Dict[str, Any]] = None, system_prompt: Optional[str] = None
+        self,
+        user_message: str,
+        context: Optional[Dict[str, Any]] = None,
+        system_prompt: Optional[str] = None,
     ) -> str:
         """
         Invoke Ollama LLM with proper prompt structure
@@ -165,11 +169,16 @@ class BaseAgent(ABC):
 
             # Log LLM call
             self.agent_logger.llm_call(
-                user_message, model=self.settings.effective_model_name, temperature=self.settings.ollama_temperature
+                user_message,
+                model=self.settings.effective_model_name,
+                temperature=self.settings.ollama_temperature,
             )
 
             # Construct messages
-            messages = [SystemMessage(content=system_prompt), HumanMessage(content=f"{context_str}\n\n{user_message}")]
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=f"{context_str}\n\n{user_message}"),
+            ]
 
             # Invoke LLM with fallback support
             start_time = datetime.now()
@@ -178,9 +187,15 @@ class BaseAgent(ABC):
             except Exception as cloud_error:
                 # Check if this is a cloud limit/auth error and we have fallback
                 error_msg = str(cloud_error).lower()
-                if self.use_cloud and hasattr(self, 'fallback_llm') and (
-                    "403" in error_msg or "401" in error_msg or 
-                    "limit" in error_msg or "unauthorized" in error_msg
+                if (
+                    self.use_cloud
+                    and hasattr(self, "fallback_llm")
+                    and (
+                        "403" in error_msg
+                        or "401" in error_msg
+                        or "limit" in error_msg
+                        or "unauthorized" in error_msg
+                    )
                 ):
                     if not self.cloud_failed:
                         logger.warning(
@@ -199,7 +214,9 @@ class BaseAgent(ABC):
                 result = str(response)
 
             # Log LLM response
-            self.agent_logger.llm_response(result, duration, tokens=len(result.split()), chars=len(result))
+            self.agent_logger.llm_response(
+                result, duration, tokens=len(result.split()), chars=len(result)
+            )
 
             # Warning if slow
             if duration > self.settings.warning_execution_time:
@@ -234,7 +251,9 @@ class BaseAgent(ABC):
         if "agent_steps" in state:
             state["agent_steps"].append(step_entry)
 
-    def handle_error(self, state: MedSafeState, error: Exception, context: str = "") -> Dict[str, Any]:
+    def handle_error(
+        self, state: MedSafeState, error: Exception, context: str = ""
+    ) -> Dict[str, Any]:
         """
         Centralized error handling for agents
 
@@ -258,7 +277,9 @@ class BaseAgent(ABC):
         return {
             "error": error_message,
             "status": "error",
-            "agent_steps": [f"[{datetime.now().isoformat()}] ERROR in {self.agent_name}: {error}"],
+            "agent_steps": [
+                f"[{datetime.now().isoformat()}] ERROR in {self.agent_name}: {error}"
+            ],
         }
 
     def validate_state(self, state: MedSafeState, required_fields: List[str]) -> bool:
@@ -278,7 +299,10 @@ class BaseAgent(ABC):
         missing_fields = [field for field in required_fields if field not in state]
 
         if missing_fields:
-            logger.error(f"{self.agent_name} validation failed: " f"missing fields {missing_fields}")
+            logger.error(
+                f"{self.agent_name} validation failed: "
+                f"missing fields {missing_fields}"
+            )
             return False
 
         return True

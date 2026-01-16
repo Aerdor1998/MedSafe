@@ -4,9 +4,10 @@ Unit tests for BaseAgent
 Tests the abstract base class functionality for all MedSafe agents.
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
 from datetime import datetime
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from backend.app.langgraph_agents.base_agent import BaseAgent
 from backend.app.langgraph_agents.state import MedSafeState
@@ -14,10 +15,10 @@ from backend.app.langgraph_agents.state import MedSafeState
 
 class ConcreteAgent(BaseAgent):
     """Concrete implementation of BaseAgent for testing"""
-    
+
     def get_system_prompt(self) -> str:
         return "Test system prompt for ConcreteAgent"
-    
+
     def process(self, state: MedSafeState) -> dict:
         return {"processed": True}
 
@@ -43,7 +44,7 @@ class TestBaseAgentInit:
         mock_ollama.return_value = MagicMock()
 
         agent = ConcreteAgent("TestAgent")
-        
+
         assert agent.agent_name == "TestAgent"
         assert agent.use_cloud is False
         mock_ollama.assert_called()
@@ -67,7 +68,7 @@ class TestBaseAgentInit:
         mock_ollama.return_value = MagicMock()
 
         agent = ConcreteAgent("TestAgent")
-        
+
         assert agent.agent_name == "TestAgent"
         # use_cloud is True when is_cloud_model AND ollama_api_key are truthy
         # The agent stores the api key string in use_cloud, so just check it's truthy
@@ -97,7 +98,7 @@ class TestBaseAgentAbstractMethods:
 
         agent = ConcreteAgent("TestAgent")
         prompt = agent.get_system_prompt()
-        
+
         assert "Test system prompt" in prompt
 
     @patch("backend.app.langgraph_agents.base_agent.ChatOllama")
@@ -120,7 +121,7 @@ class TestBaseAgentAbstractMethods:
         agent = ConcreteAgent("TestAgent")
         state = {"medication_text": "aspirin", "patient_data": {}}
         result = agent.process(state)
-        
+
         assert result == {"processed": True}
 
 
@@ -142,10 +143,10 @@ class TestInvokeLLM:
         settings.effective_model_name = "qwen3:8b"
         settings.warning_execution_time = 30
         mock_settings.return_value = settings
-        
+
         mock_agent_logger = MagicMock()
         mock_logger.return_value = mock_agent_logger
-        
+
         mock_llm = MagicMock()
         mock_response = MagicMock()
         mock_response.content = "Test response from LLM"
@@ -154,7 +155,7 @@ class TestInvokeLLM:
 
         agent = ConcreteAgent("TestAgent")
         result = agent.invoke_llm("Test message")
-        
+
         assert result == "Test response from LLM"
         mock_agent_logger.llm_call.assert_called()
         mock_agent_logger.llm_response.assert_called()
@@ -175,7 +176,7 @@ class TestInvokeLLM:
         settings.warning_execution_time = 30
         mock_settings.return_value = settings
         mock_logger.return_value = MagicMock()
-        
+
         mock_llm = MagicMock()
         mock_response = MagicMock()
         mock_response.content = "Response with context"
@@ -185,7 +186,7 @@ class TestInvokeLLM:
         agent = ConcreteAgent("TestAgent")
         context = {"patient_age": 65, "medication": "aspirin"}
         result = agent.invoke_llm("Analyze this patient", context=context)
-        
+
         assert result == "Response with context"
 
     @patch("backend.app.langgraph_agents.base_agent.ChatOllama")
@@ -205,29 +206,33 @@ class TestInvokeLLM:
         settings.warning_execution_time = 30
         mock_settings.return_value = settings
         mock_logger.return_value = MagicMock()
-        
+
         # Cloud LLM fails with 403
         mock_cloud_llm = MagicMock()
-        mock_cloud_llm.invoke.side_effect = Exception("403 Forbidden - rate limit exceeded")
-        
+        mock_cloud_llm.invoke.side_effect = Exception(
+            "403 Forbidden - rate limit exceeded"
+        )
+
         # Fallback LLM succeeds
         mock_fallback_llm = MagicMock()
         mock_fallback_response = MagicMock()
         mock_fallback_response.content = "Fallback response"
         mock_fallback_llm.invoke.return_value = mock_fallback_response
-        
+
         mock_ollama.side_effect = [mock_cloud_llm, mock_fallback_llm]
 
         agent = ConcreteAgent("TestAgent")
         result = agent.invoke_llm("Test message")
-        
+
         assert result == "Fallback response"
         assert agent.cloud_failed is True
 
     @patch("backend.app.langgraph_agents.base_agent.ChatOllama")
     @patch("backend.app.langgraph_agents.base_agent.get_settings")
     @patch("backend.app.langgraph_agents.base_agent.get_agent_logger")
-    def test_invoke_llm_error_propagation(self, mock_logger, mock_settings, mock_ollama):
+    def test_invoke_llm_error_propagation(
+        self, mock_logger, mock_settings, mock_ollama
+    ):
         """Test LLM error is propagated when not a fallback case"""
         settings = MagicMock()
         settings.is_cloud_model = False
@@ -240,13 +245,13 @@ class TestInvokeLLM:
         settings.warning_execution_time = 30
         mock_settings.return_value = settings
         mock_logger.return_value = MagicMock()
-        
+
         mock_llm = MagicMock()
         mock_llm.invoke.side_effect = Exception("Connection error")
         mock_ollama.return_value = mock_llm
 
         agent = ConcreteAgent("TestAgent")
-        
+
         with pytest.raises(Exception, match="Connection error"):
             agent.invoke_llm("Test message")
 
@@ -273,9 +278,9 @@ class TestLogStep:
 
         agent = ConcreteAgent("TestAgent")
         state = {"agent_steps": []}
-        
+
         agent.log_step(state, "Processing started")
-        
+
         assert len(state["agent_steps"]) == 1
         assert "TestAgent" in state["agent_steps"][0]
         assert "Processing started" in state["agent_steps"][0]
@@ -287,7 +292,9 @@ class TestHandleError:
     @patch("backend.app.langgraph_agents.base_agent.ChatOllama")
     @patch("backend.app.langgraph_agents.base_agent.get_settings")
     @patch("backend.app.langgraph_agents.base_agent.get_agent_logger")
-    def test_handle_error_returns_error_state(self, mock_logger, mock_settings, mock_ollama):
+    def test_handle_error_returns_error_state(
+        self, mock_logger, mock_settings, mock_ollama
+    ):
         """Test handle_error returns proper error state"""
         settings = MagicMock()
         settings.is_cloud_model = False
@@ -304,9 +311,9 @@ class TestHandleError:
         agent = ConcreteAgent("TestAgent")
         state = {}
         error = Exception("Test error")
-        
+
         result = agent.handle_error(state, error, "During processing")
-        
+
         assert "error" in result
         assert "TestAgent" in result["error"]
         assert "Test error" in result["error"]
@@ -315,7 +322,9 @@ class TestHandleError:
     @patch("backend.app.langgraph_agents.base_agent.ChatOllama")
     @patch("backend.app.langgraph_agents.base_agent.get_settings")
     @patch("backend.app.langgraph_agents.base_agent.get_agent_logger")
-    def test_handle_error_includes_context(self, mock_logger, mock_settings, mock_ollama):
+    def test_handle_error_includes_context(
+        self, mock_logger, mock_settings, mock_ollama
+    ):
         """Test handle_error includes context in message"""
         settings = MagicMock()
         settings.is_cloud_model = False
@@ -332,9 +341,9 @@ class TestHandleError:
         agent = ConcreteAgent("TestAgent")
         state = {}
         error = Exception("Test error")
-        
+
         result = agent.handle_error(state, error, "Drug interaction check")
-        
+
         assert "Drug interaction check" in result["error"]
 
 
@@ -360,9 +369,9 @@ class TestValidateState:
 
         agent = ConcreteAgent("TestAgent")
         state = {"medication_text": "aspirin", "patient_data": {}}
-        
+
         result = agent.validate_state(state, ["medication_text", "patient_data"])
-        
+
         assert result is True
 
     @patch("backend.app.langgraph_agents.base_agent.ChatOllama")
@@ -384,9 +393,9 @@ class TestValidateState:
 
         agent = ConcreteAgent("TestAgent")
         state = {"medication_text": "aspirin"}
-        
+
         result = agent.validate_state(state, ["medication_text", "patient_data"])
-        
+
         assert result is False
 
 
@@ -411,8 +420,8 @@ class TestRepr:
         mock_ollama.return_value = MagicMock()
 
         agent = ConcreteAgent("TestAgent")
-        
+
         repr_str = repr(agent)
-        
+
         assert "TestAgent" in repr_str
         assert "qwen3:8b" in repr_str

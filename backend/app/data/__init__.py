@@ -2,10 +2,11 @@
 Drug data loader - Consolidated drug information from YAML
 """
 
-import yaml
-from pathlib import Path
-from typing import Dict, Any, List, Optional
 from functools import lru_cache
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import yaml
 
 DATA_DIR = Path(__file__).parent
 

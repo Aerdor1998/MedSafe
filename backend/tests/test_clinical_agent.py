@@ -5,11 +5,15 @@ Tests clinical analysis, drug interactions, risk calculation, and recommendation
 without requiring actual LLM or database connections.
 """
 
-import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from backend.app.langgraph_agents.clinical_agent import ClinicalAgent, create_clinical_agent
+import pytest
+
+from backend.app.langgraph_agents.clinical_agent import (
+    ClinicalAgent,
+    create_clinical_agent,
+)
 from backend.app.langgraph_agents.state import RiskLevel
 
 
@@ -21,9 +25,7 @@ class TestClinicalAgentInit:
     @patch("backend.app.langgraph_agents.clinical_agent.get_vector_store")
     # Removed: optimization mock
     @patch("backend.app.langgraph_agents.base_agent.ChatOllama")
-    def test_init_success(
-        self, mock_ollama, mock_vs, mock_rules, mock_interaction
-    ):
+    def test_init_success(self, mock_ollama, mock_vs, mock_rules, mock_interaction):
         """Test successful initialization"""
         mock_interaction.return_value = MagicMock()
         mock_rules.return_value = MagicMock()
@@ -32,7 +34,7 @@ class TestClinicalAgentInit:
         mock_ollama.return_value = MagicMock()
 
         agent = ClinicalAgent()
-        
+
         assert agent.agent_name == "ClinicalAgent"
         assert agent.interaction_service is not None
         assert agent.rules_engine is not None
@@ -53,7 +55,7 @@ class TestClinicalAgentInit:
         mock_ollama.return_value = MagicMock()
 
         agent = ClinicalAgent()
-        
+
         assert agent.vector_store is None
 
 
@@ -104,7 +106,7 @@ class TestEvidenceQualityAssessment:
 
         agent = ClinicalAgent()
         quality = agent._assess_evidence_quality([], [])
-        
+
         assert quality == "insufficient"
 
     @patch("backend.app.langgraph_agents.clinical_agent.get_interaction_service")
@@ -125,7 +127,7 @@ class TestEvidenceQualityAssessment:
         agent = ClinicalAgent()
         interactions = [{"drug1": "A", "drug2": "B"}]
         quality = agent._assess_evidence_quality(interactions, ["csv"])
-        
+
         assert quality == "sufficient"
 
     @patch("backend.app.langgraph_agents.clinical_agent.get_interaction_service")
@@ -146,7 +148,7 @@ class TestEvidenceQualityAssessment:
         agent = ClinicalAgent()
         interactions = [{"drug1": "A", "drug2": "B"}]
         quality = agent._assess_evidence_quality(interactions, ["csv", "rag"])
-        
+
         assert quality == "sufficient"
 
     @patch("backend.app.langgraph_agents.clinical_agent.get_interaction_service")
@@ -167,7 +169,7 @@ class TestEvidenceQualityAssessment:
         agent = ClinicalAgent()
         interactions = [{"drug1": "A", "drug2": "B"}]
         quality = agent._assess_evidence_quality(interactions, ["clinical_rules"])
-        
+
         assert quality == "rules_only"
 
 
@@ -190,7 +192,7 @@ class TestHighRiskPatient:
         mock_ollama.return_value = MagicMock()
 
         agent = ClinicalAgent()
-        
+
         assert agent._is_high_risk_patient({"age": 80}) is True
         assert agent._is_high_risk_patient({"age": 50}) is False
 
@@ -210,7 +212,7 @@ class TestHighRiskPatient:
         mock_ollama.return_value = MagicMock()
 
         agent = ClinicalAgent()
-        
+
         assert agent._is_high_risk_patient({"age": 1}) is True
         assert agent._is_high_risk_patient({"age": 5}) is False
 
@@ -230,7 +232,7 @@ class TestHighRiskPatient:
         mock_ollama.return_value = MagicMock()
 
         agent = ClinicalAgent()
-        
+
         # Note: age=0 (default when missing) is <= 2, so it's high risk
         # We need to provide a valid age to test pregnancy only
         assert agent._is_high_risk_patient({"age": 30, "pregnant": True}) is True
@@ -252,11 +254,18 @@ class TestHighRiskPatient:
         mock_ollama.return_value = MagicMock()
 
         agent = ClinicalAgent()
-        
+
         # Provide valid age to avoid age-based risk
-        assert agent._is_high_risk_patient({"age": 40, "renal_function": "severe"}) is True
-        assert agent._is_high_risk_patient({"age": 40, "renal_function": "dialysis"}) is True
-        assert agent._is_high_risk_patient({"age": 40, "renal_function": "mild"}) is False
+        assert (
+            agent._is_high_risk_patient({"age": 40, "renal_function": "severe"}) is True
+        )
+        assert (
+            agent._is_high_risk_patient({"age": 40, "renal_function": "dialysis"})
+            is True
+        )
+        assert (
+            agent._is_high_risk_patient({"age": 40, "renal_function": "mild"}) is False
+        )
 
     @patch("backend.app.langgraph_agents.clinical_agent.get_interaction_service")
     @patch("backend.app.langgraph_agents.clinical_agent.get_rules_engine")
@@ -274,11 +283,11 @@ class TestHighRiskPatient:
         mock_ollama.return_value = MagicMock()
 
         agent = ClinicalAgent()
-        
+
         # Provide valid age to avoid age-based risk
         many_meds = {"age": 40, "current_medications": ["A", "B", "C", "D", "E"]}
         few_meds = {"age": 40, "current_medications": ["A", "B"]}
-        
+
         assert agent._is_high_risk_patient(many_meds) is True
         assert agent._is_high_risk_patient(few_meds) is False
 
@@ -303,7 +312,7 @@ class TestDeduplicateInteractions:
 
         agent = ClinicalAgent()
         result = agent._deduplicate_interactions([])
-        
+
         assert result == []
 
     @patch("backend.app.langgraph_agents.clinical_agent.get_interaction_service")
@@ -323,12 +332,24 @@ class TestDeduplicateInteractions:
 
         agent = ClinicalAgent()
         interactions = [
-            {"drug1": "Aspirin", "drug2": "Warfarin", "severity": "high", "source": "csv", "description": "Bleeding risk"},
-            {"drug1": "Warfarin", "drug2": "Aspirin", "severity": "medium", "source": "openfda", "description": "Bleeding risk"},
+            {
+                "drug1": "Aspirin",
+                "drug2": "Warfarin",
+                "severity": "high",
+                "source": "csv",
+                "description": "Bleeding risk",
+            },
+            {
+                "drug1": "Warfarin",
+                "drug2": "Aspirin",
+                "severity": "medium",
+                "source": "openfda",
+                "description": "Bleeding risk",
+            },
         ]
-        
+
         result = agent._deduplicate_interactions(interactions)
-        
+
         assert len(result) == 1
         assert "csv" in result[0]["sources"]
         assert "openfda" in result[0]["sources"]
@@ -352,12 +373,24 @@ class TestDeduplicateInteractions:
 
         agent = ClinicalAgent()
         interactions = [
-            {"drug1": "Aspirin", "drug2": "Warfarin", "severity": "high", "source": "csv", "description": "Bleeding"},
-            {"drug1": "Ibuprofen", "drug2": "Methotrexate", "severity": "critical", "source": "csv", "description": "Toxicity"},
+            {
+                "drug1": "Aspirin",
+                "drug2": "Warfarin",
+                "severity": "high",
+                "source": "csv",
+                "description": "Bleeding",
+            },
+            {
+                "drug1": "Ibuprofen",
+                "drug2": "Methotrexate",
+                "severity": "critical",
+                "source": "csv",
+                "description": "Toxicity",
+            },
         ]
-        
+
         result = agent._deduplicate_interactions(interactions)
-        
+
         assert len(result) == 2
 
 
@@ -422,9 +455,16 @@ class TestFallbackRecommendations:
 
         agent = ClinicalAgent()
         interactions = [
-            {"drug1": "Aspirin", "drug2": "Warfarin", "severity": "critical", "description": "Increased bleeding risk"}
+            {
+                "drug1": "Aspirin",
+                "drug2": "Warfarin",
+                "severity": "critical",
+                "description": "Increased bleeding risk",
+            }
         ]
-        result = agent._generate_fallback_recommendations(interactions, [], RiskLevel.HIGH)
+        result = agent._generate_fallback_recommendations(
+            interactions, [], RiskLevel.HIGH
+        )
 
         assert len(result["adverse_reactions"]) > 0
         assert "Aspirin" in str(result["adverse_reactions"])
@@ -454,11 +494,15 @@ class TestExtractDosageAdjustments:
         - Ajustar intervalo de administração para 12h
         - Monitorar níveis séricos
         """
-        
+
         result = agent._extract_dosage_adjustments(text)
-        
+
         assert len(result) >= 2
-        assert any("dosagem" in r["recommendation"].lower() or "mg" in r["recommendation"].lower() for r in result)
+        assert any(
+            "dosagem" in r["recommendation"].lower()
+            or "mg" in r["recommendation"].lower()
+            for r in result
+        )
 
 
 class TestExtractAdverseReactions:
@@ -485,9 +529,9 @@ class TestExtractAdverseReactions:
         - Observar reação alérgica cutânea
         - Verificar função renal semanalmente
         """
-        
+
         result = agent._extract_adverse_reactions(text)
-        
+
         assert len(result) >= 2
         assert any("monitorar" in r["description"].lower() for r in result)
 
@@ -512,9 +556,9 @@ class TestPrimaryCategory:
 
         agent = ClinicalAgent()
         interactions = [{"category": "Cardiovascular"}]
-        
+
         result = agent._get_primary_category(interactions, [])
-        
+
         assert result == "Cardiovascular"
 
     @patch("backend.app.langgraph_agents.clinical_agent.get_interaction_service")
@@ -533,9 +577,9 @@ class TestPrimaryCategory:
         mock_ollama.return_value = MagicMock()
 
         agent = ClinicalAgent()
-        
+
         result = agent._get_primary_category([], [])
-        
+
         assert result == "Farmacologica"
 
 
@@ -558,5 +602,5 @@ class TestFactoryFunction:
         mock_ollama.return_value = MagicMock()
 
         agent = create_clinical_agent()
-        
+
         assert isinstance(agent, ClinicalAgent)

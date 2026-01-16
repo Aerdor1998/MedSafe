@@ -17,14 +17,14 @@ BENEFITS:
 - Cost savings (fewer LLM calls)
 """
 
-from functools import lru_cache, wraps
-from typing import Any, Callable, Optional, Dict
-from datetime import datetime, timedelta
 import hashlib
 import json
 import logging
-from threading import Lock
 import os
+from datetime import datetime, timedelta
+from functools import lru_cache, wraps
+from threading import Lock
+from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,9 @@ class TTLCache:
         self.cache: Dict[str, tuple[Any, datetime]] = {}
         self.lock = Lock()
 
-        logger.info(f"🗄️  TTLCache initialized: " f"ttl={ttl_seconds}s, max_size={max_size}")
+        logger.info(
+            f"🗄️  TTLCache initialized: " f"ttl={ttl_seconds}s, max_size={max_size}"
+        )
 
     def get(self, key: str) -> Optional[Any]:
         """
@@ -134,7 +136,9 @@ class RedisTTLCache:
         if self._client is None:
             raise RuntimeError("RedisTTLCache requires a working REDIS_URL")
 
-        logger.info(f"🗄️  RedisTTLCache initialized: prefix={self.key_prefix} ttl={ttl_seconds}s")
+        logger.info(
+            f"🗄️  RedisTTLCache initialized: prefix={self.key_prefix} ttl={ttl_seconds}s"
+        )
 
     def _k(self, key: str) -> str:
         return f"{self.key_prefix}{key}"
@@ -216,7 +220,9 @@ def _cache_backend(ttl_seconds: int, max_size: int, prefix: str):
 
 # Global caches for different data types (Redis when available)
 embedding_cache = _cache_backend(3600, 500, "medsafe:cache:embedding")  # 1 hour
-drug_interaction_cache = _cache_backend(86400, 1000, "medsafe:cache:drug_interaction")  # 24h
+drug_interaction_cache = _cache_backend(
+    86400, 1000, "medsafe:cache:drug_interaction"
+)  # 24h
 llm_response_cache = _cache_backend(1800, 200, "medsafe:cache:llm")  # 30min
 rag_search_cache = _cache_backend(1800, 300, "medsafe:cache:rag")  # 30min
 openfda_cache = _cache_backend(3600, 500, "medsafe:cache:openfda")  # 1h
@@ -307,7 +313,10 @@ def cache_llm_response(func: Callable) -> Callable:
     @wraps(func)
     def wrapper(prompt: str, *args, **kwargs):
         # Create cache key from prompt + kwargs hash
-        cache_input = json.dumps({"prompt": prompt, "kwargs": {k: str(v) for k, v in kwargs.items()}}, sort_keys=True)
+        cache_input = json.dumps(
+            {"prompt": prompt, "kwargs": {k: str(v) for k, v in kwargs.items()}},
+            sort_keys=True,
+        )
         cache_key = hashlib.md5(cache_input.encode()).hexdigest()
 
         # Try cache first
@@ -412,7 +421,9 @@ def get_cached_interaction_pair(drug1: str, drug2: str) -> Optional[Dict[str, An
     return interaction_pair_cache.get(key)
 
 
-def set_cached_interaction_pair(drug1: str, drug2: str, interaction: Dict[str, Any]) -> None:
+def set_cached_interaction_pair(
+    drug1: str, drug2: str, interaction: Dict[str, Any]
+) -> None:
     """Cache interaction for drug pair."""
     key = get_interaction_pair_cache_key(drug1, drug2)
     interaction_pair_cache.set(key, interaction)

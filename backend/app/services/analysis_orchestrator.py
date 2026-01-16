@@ -11,14 +11,14 @@ Responsibilities:
 - Format responses for different API versions
 """
 
-import uuid
-import logging
 import json
-from datetime import datetime, date
-from types import MappingProxyType
-from typing import Optional, Dict, Any
-from uuid import UUID
+import logging
+import uuid
+from datetime import date, datetime
 from enum import Enum
+from types import MappingProxyType
+from typing import Any, Dict, Optional
+from uuid import UUID
 
 from ..config import settings
 
@@ -26,7 +26,7 @@ from ..config import settings
 def _json_serialize_state(obj: Any) -> Any:
     """
     Recursively convert non-JSON-serializable objects to JSON-compatible types.
-    
+
     Handles:
     - datetime/date objects -> ISO format strings
     - UUID objects -> string representation
@@ -34,7 +34,7 @@ def _json_serialize_state(obj: Any) -> Any:
     - MappingProxyType (read-only dicts) -> regular dicts
     - Objects with __dict__ -> recursively serialized dicts
     - Other non-serializable objects -> string representation
-    
+
     This fixes errors like:
     - 'Object of type datetime is not JSON serializable'
     - 'Object of type mappingproxy is not JSON serializable'
@@ -43,63 +43,65 @@ def _json_serialize_state(obj: Any) -> Any:
     # Handle None early
     if obj is None:
         return None
-    
+
     # Handle basic JSON-serializable types (fast path)
     if isinstance(obj, (str, int, float, bool)):
         return obj
-    
+
     # Handle datetime/date
     if isinstance(obj, (datetime, date)):
         return obj.isoformat()
-    
+
     # Handle UUID
     if isinstance(obj, UUID):
         return str(obj)
-    
+
     # Handle Enum (like RiskLevel, CritiqueLevel, etc.)
     if isinstance(obj, Enum):
         return obj.value
-    
+
     # Handle MappingProxyType (read-only dict view used by Python internals)
     if isinstance(obj, MappingProxyType):
         return {k: _json_serialize_state(v) for k, v in obj.items()}
-    
+
     # Handle dict
     if isinstance(obj, dict):
         return {str(k): _json_serialize_state(v) for k, v in obj.items()}
-    
+
     # Handle list/tuple
     if isinstance(obj, (list, tuple)):
         return [_json_serialize_state(item) for item in obj]
-    
+
     # Handle set/frozenset
     if isinstance(obj, (set, frozenset)):
         return [_json_serialize_state(item) for item in obj]
-    
+
     # Handle bytes
     if isinstance(obj, bytes):
-        return obj.decode('utf-8', errors='replace')
-    
+        return obj.decode("utf-8", errors="replace")
+
     # Handle objects with __dict__ (dataclasses, custom objects)
-    if hasattr(obj, '__dict__') and not isinstance(obj, type):
+    if hasattr(obj, "__dict__") and not isinstance(obj, type):
         try:
             return _json_serialize_state(vars(obj))
         except Exception:
             pass
-    
+
     # Fallback: convert to string
     try:
         return str(obj)
     except Exception:
         return f"<non-serializable: {type(obj).__name__}>"
+
+
 from ..db.database import get_db_context
-from ..db.models import Triage, Report, AnalysisJob
+from ..db.models import AnalysisJob, Report, Triage
 from ..langgraph_agents import get_graph
 from ..langgraph_agents.config import get_settings as get_langgraph_settings
 from .response_formatter import (
-    normalize_str,
     build_recommendations_from_state,
     compute_accuracy,
+    normalize_str,
 )
 
 logger = logging.getLogger(__name__)
@@ -138,8 +140,12 @@ class AnalysisOrchestrator:
 
         with get_db_context() as db:
             # Extract patient data with compatibility for different field names
-            meds_in_use = patient_data.get("current_medications", patient_data.get("meds_in_use", []))
-            conditions = patient_data.get("conditions", patient_data.get("cid_codes", []))
+            meds_in_use = patient_data.get(
+                "current_medications", patient_data.get("meds_in_use", [])
+            )
+            conditions = patient_data.get(
+                "conditions", patient_data.get("cid_codes", [])
+            )
 
             triage = Triage(
                 user_id=user_id,
@@ -147,7 +153,8 @@ class AnalysisOrchestrator:
                 weight=patient_data.get("weight"),
                 pregnant=patient_data.get("pregnant", False),
                 cid_codes=conditions,
-                meds_in_use=[medication] + (meds_in_use if isinstance(meds_in_use, list) else []),
+                meds_in_use=[medication]
+                + (meds_in_use if isinstance(meds_in_use, list) else []),
                 allergies=patient_data.get("allergies", []),
                 renal_function=patient_data.get("renal_function"),
                 hepatic_function=patient_data.get("hepatic_function"),
@@ -178,7 +185,7 @@ class AnalysisOrchestrator:
 
         The job stores a snapshot of the request (payload) and will be updated
         with the latest workflow state (state) during/after execution.
-        
+
         Args:
             idempotency_key: Optional key for deduplication (stored in payload)
         """
@@ -246,7 +253,11 @@ class AnalysisOrchestrator:
     async def get_job_by_session(self, session_id: str) -> Optional[AnalysisJob]:
         """Fetch job by session_id."""
         with get_db_context() as db:
-            return db.query(AnalysisJob).filter(AnalysisJob.session_id == session_id).first()
+            return (
+                db.query(AnalysisJob)
+                .filter(AnalysisJob.session_id == session_id)
+                .first()
+            )
 
     async def run_analysis(
         self,
@@ -273,7 +284,9 @@ class AnalysisOrchestrator:
             session_id = str(uuid.uuid4())
 
         # Normalize patient data field names
-        current_meds = patient_data.get("current_medications", patient_data.get("meds_in_use", []))
+        current_meds = patient_data.get(
+            "current_medications", patient_data.get("meds_in_use", [])
+        )
         conditions = patient_data.get("conditions", patient_data.get("cid_codes", []))
 
         # Create initial state for LangGraph
@@ -350,7 +363,11 @@ class AnalysisOrchestrator:
             # Update triage status
             db_triage = db.query(Triage).filter(Triage.id == triage_id).first()
             if db_triage:
-                db_triage.status = "completed" if not result.get("requires_human_review") else "awaiting_review"
+                db_triage.status = (
+                    "completed"
+                    if not result.get("requires_human_review")
+                    else "awaiting_review"
+                )
 
             db.commit()
             db.refresh(report)
@@ -369,7 +386,13 @@ class AnalysisOrchestrator:
                 db_triage.status = status
                 db.commit()
 
-    def format_v2_response(self, result: Dict[str, Any], session_id: str, triage_id: Optional[str] = None, report_id: Optional[str] = None) -> Dict[str, Any]:
+    def format_v2_response(
+        self,
+        result: Dict[str, Any],
+        session_id: str,
+        triage_id: Optional[str] = None,
+        report_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Format analysis result for v2 API response.
 
@@ -420,7 +443,12 @@ class AnalysisOrchestrator:
             "created_at": datetime.now().isoformat(),
         }
 
-    def format_legacy_response(self, result: Dict[str, Any], patient_info: Dict[str, Any], model_used: Optional[str] = None) -> Dict[str, Any]:
+    def format_legacy_response(
+        self,
+        result: Dict[str, Any],
+        patient_info: Dict[str, Any],
+        model_used: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Format analysis result for legacy API response.
 
@@ -441,7 +469,9 @@ class AnalysisOrchestrator:
         accuracy_score, accuracy_factors = compute_accuracy(result, patient_info)
 
         # Build analysis notes summary
-        current_meds = patient_info.get("current_medications", patient_info.get("meds_in_use", []))
+        current_meds = patient_info.get(
+            "current_medications", patient_info.get("meds_in_use", [])
+        )
         conditions = patient_info.get("conditions", patient_info.get("cid_codes", []))
 
         sex_display = patient_info.get("sex") or patient_info.get("gender") or "N/A"
@@ -455,7 +485,7 @@ class AnalysisOrchestrator:
         contraindications_list = result.get("contraindications", []) or []
         highlights: list[str] = []
 
-        for it in (interactions_list[:2] if isinstance(interactions_list, list) else []):
+        for it in interactions_list[:2] if isinstance(interactions_list, list) else []:
             if isinstance(it, dict):
                 highlights.append(
                     f"Interaction {(normalize_str(it.get('severity')) or '').upper()}: "
@@ -463,7 +493,11 @@ class AnalysisOrchestrator:
                     f"{normalize_str(it.get('description'))[:140]}"
                 )
 
-        for ct in (contraindications_list[:2] if isinstance(contraindications_list, list) else []):
+        for ct in (
+            contraindications_list[:2]
+            if isinstance(contraindications_list, list)
+            else []
+        ):
             if isinstance(ct, dict):
                 highlights.append(
                     f"Contraindication {(normalize_str(ct.get('severity')) or '').upper()}: "
@@ -478,8 +512,20 @@ class AnalysisOrchestrator:
             f"- Overall risk: {normalize_str(result.get('risk_level'))}\n"
             f"- Findings: interactions={len(interactions_list) if isinstance(interactions_list, list) else 0}, "
             f"contraindications={len(contraindications_list) if isinstance(contraindications_list, list) else 0}\n"
-            + (("- Highlights:\n  - " + "\n  - ".join(highlights) + "\n") if highlights else "")
-            + (("- Recommendations (top):\n  - " + "\n  - ".join(recommendations_for_ui[:6]) + "\n") if recommendations_for_ui else "")
+            + (
+                ("- Highlights:\n  - " + "\n  - ".join(highlights) + "\n")
+                if highlights
+                else ""
+            )
+            + (
+                (
+                    "- Recommendations (top):\n  - "
+                    + "\n  - ".join(recommendations_for_ui[:6])
+                    + "\n"
+                )
+                if recommendations_for_ui
+                else ""
+            )
             + f"- Estimated accuracy (calibrated): {accuracy_score:.0%}\n"
         ).strip()
 
@@ -505,7 +551,8 @@ class AnalysisOrchestrator:
             "status": result.get("status", "completed"),
             "requires_human_review": result.get("requires_human_review", False),
             "escalation_reasons": result.get("escalation_reasons", []),
-            "model_used": model_used or result.get("model_used", lang_settings.effective_model_name),
+            "model_used": model_used
+            or result.get("model_used", lang_settings.effective_model_name),
         }
 
 

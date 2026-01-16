@@ -14,23 +14,23 @@ This service ingests medical literature from multiple sources:
 REFERENCE: Antonio Gulli "RAG Implementation" Chapter 14, pg 281-310
 """
 
-from typing import List, Dict, Any, Optional, Callable
-import logging
-from datetime import datetime
-from pathlib import Path
-import json
-import re
-from dataclasses import dataclass, asdict
-from enum import Enum
 import hashlib
+import json
+import logging
+import re
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 
 import httpx
 from bs4 import BeautifulSoup
 
-from ..db.vector_store import get_vector_store
+from ..config import settings
 from ..db.database import get_db_context
 from ..db.models import Document, IngestJob
-from ..config import settings
+from ..db.vector_store import get_vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +116,11 @@ class LiteratureIngestionService:
         logger.info("LiteratureIngestionService initialized")
 
     def ingest_from_source(
-        self, source: DataSource, query: Optional[str] = None, max_results: int = 100, **kwargs
+        self,
+        source: DataSource,
+        query: Optional[str] = None,
+        max_results: int = 100,
+        **kwargs,
     ) -> Dict[str, Any]:
         """
         Ingest documents from a specific source
@@ -162,7 +166,9 @@ class LiteratureIngestionService:
 
             # Add to vector store
             if unique_documents:
-                chunks_created = self.vector_store.add_documents([doc.to_dict() for doc in unique_documents])
+                chunks_created = self.vector_store.add_documents(
+                    [doc.to_dict() for doc in unique_documents]
+                )
             else:
                 chunks_created = 0
 
@@ -182,7 +188,8 @@ class LiteratureIngestionService:
             self._update_ingest_job(job, result)
 
             logger.info(
-                f"Ingestion completed: {len(unique_documents)} docs, " f"{chunks_created} chunks in {duration:.2f}s"
+                f"Ingestion completed: {len(unique_documents)} docs, "
+                f"{chunks_created} chunks in {duration:.2f}s"
             )
 
             return result
@@ -274,12 +281,18 @@ class LiteratureIngestionService:
                     "warnings": result.get("warnings", []),
                     "drug_interactions": result.get("drug_interactions", []),
                     "adverse_reactions": result.get("adverse_reactions", []),
-                    "dosage_and_administration": result.get("dosage_and_administration", []),
+                    "dosage_and_administration": result.get(
+                        "dosage_and_administration", []
+                    ),
                 }
 
                 for section_name, section_content in sections_map.items():
                     if section_content:
-                        text = "\n".join(section_content) if isinstance(section_content, list) else section_content
+                        text = (
+                            "\n".join(section_content)
+                            if isinstance(section_content, list)
+                            else section_content
+                        )
 
                         if text.strip():
                             doc = MedicalDocument(
@@ -396,7 +409,10 @@ class LiteratureIngestionService:
 
         REFERENCE: https://docs.drugbank.com/
         """
-        logger.warning(" DrugBank ingestion requires API key. " "Sign up at https://go.drugbank.com/releases/latest")
+        logger.warning(
+            " DrugBank ingestion requires API key. "
+            "Sign up at https://go.drugbank.com/releases/latest"
+        )
         return []
 
     def _ingest_local_file(self, file_path: str) -> List[MedicalDocument]:
@@ -565,7 +581,9 @@ class LiteratureIngestionService:
 
         return unique_docs
 
-    def _create_ingest_job(self, source: DataSource, query: Optional[str], max_results: int) -> IngestJob:
+    def _create_ingest_job(
+        self, source: DataSource, query: Optional[str], max_results: int
+    ) -> IngestJob:
         """Create ingestion job record in database"""
         with get_db_context() as db:
             job = IngestJob(
@@ -593,7 +611,10 @@ class LiteratureIngestionService:
             db.commit()
 
     def bulk_ingest_drugs(
-        self, drug_names: List[str], sources: List[DataSource], max_results_per_drug: int = 10
+        self,
+        drug_names: List[str],
+        sources: List[DataSource],
+        max_results_per_drug: int = 10,
     ) -> Dict[str, Any]:
         """
         Bulk ingest multiple drugs from multiple sources
@@ -608,7 +629,9 @@ class LiteratureIngestionService:
         Returns:
             Aggregated results
         """
-        logger.info(f"📥 Bulk ingestion: {len(drug_names)} drugs × {len(sources)} sources")
+        logger.info(
+            f"📥 Bulk ingestion: {len(drug_names)} drugs × {len(sources)} sources"
+        )
 
         results = {
             "total_drugs": len(drug_names),
@@ -628,19 +651,27 @@ class LiteratureIngestionService:
 
             for source in sources:
                 try:
-                    result = self.ingest_from_source(source=source, query=drug_name, max_results=max_results_per_drug)
+                    result = self.ingest_from_source(
+                        source=source, query=drug_name, max_results=max_results_per_drug
+                    )
                     drug_results.append(result)
 
                     # Aggregate
-                    results["aggregated"]["total_documents"] += result.get("unique_documents", 0)
-                    results["aggregated"]["total_chunks"] += result.get("chunks_created", 0)
+                    results["aggregated"]["total_documents"] += result.get(
+                        "unique_documents", 0
+                    )
+                    results["aggregated"]["total_chunks"] += result.get(
+                        "chunks_created", 0
+                    )
 
                 except Exception as e:
                     logger.error(f"Failed to ingest {drug_name} from {source}: {e}")
 
             results["per_drug_results"][drug_name] = drug_results
 
-        results["aggregated"]["duration_seconds"] = (datetime.now() - start_time).total_seconds()
+        results["aggregated"]["duration_seconds"] = (
+            datetime.now() - start_time
+        ).total_seconds()
 
         logger.info(
             f"Bulk ingestion completed: "

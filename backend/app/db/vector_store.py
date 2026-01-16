@@ -13,24 +13,24 @@ This module provides:
 REFERENCE: Antonio Gulli "Agentic Design Patterns" Chapter 14 (RAG)
 """
 
-from typing import List, Dict, Any, Optional, Tuple
+import hashlib
+import json
 import logging
 from datetime import datetime
-import json
-import hashlib
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import select, func, text
-from ..utils.cache import rag_search_cache
-from sqlalchemy.orm import Session
+from langchain_core.documents import Document as LangChainDocument
 from langchain_ollama import OllamaEmbeddings
 from langchain_postgres.vectorstores import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.documents import Document as LangChainDocument
+from sqlalchemy import func, select, text
+from sqlalchemy.orm import Session
 
-from .database import get_db_context, engine
-from .models import Document, Embedding
 from ..config import settings
+from ..utils.cache import rag_search_cache
+from .database import engine, get_db_context
+from .models import Document, Embedding
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ class MedicalVectorStore:
 
         # Initialize embeddings model from settings
         # qwen3-embedding:0.6b produces 1024-dim embeddings
-        embedding_model = getattr(settings, 'embedding_model', 'qwen3-embedding:0.6b')
+        embedding_model = getattr(settings, "embedding_model", "qwen3-embedding:0.6b")
         self.embeddings = OllamaEmbeddings(
             base_url=settings.ollama_host,
             model=embedding_model,
@@ -64,7 +64,9 @@ class MedicalVectorStore:
         # Format: postgresql+psycopg:// for psycopg3 compatibility
         base_url = settings.database_url_safe
         if base_url.startswith("postgresql://"):
-            self.connection_string = base_url.replace("postgresql://", "postgresql+psycopg://", 1)
+            self.connection_string = base_url.replace(
+                "postgresql://", "postgresql+psycopg://", 1
+            )
         else:
             self.connection_string = base_url
 
@@ -82,7 +84,9 @@ class MedicalVectorStore:
             length_function=len,
         )
 
-        logger.info(f"MedicalVectorStore initialized: collection={self.collection_name}")
+        logger.info(
+            f"MedicalVectorStore initialized: collection={self.collection_name}"
+        )
 
     def _init_vector_store(self):
         """Initialize PGVector store with LangChain"""
@@ -109,7 +113,9 @@ class MedicalVectorStore:
             logger.error(f"Failed to initialize PGVector: {e}")
             raise
 
-    def add_documents(self, documents: List[Dict[str, Any]], batch_size: int = 100) -> int:
+    def add_documents(
+        self, documents: List[Dict[str, Any]], batch_size: int = 100
+    ) -> int:
         """
         Add documents to vector store with embeddings
 
@@ -147,14 +153,18 @@ class MedicalVectorStore:
                             "section": doc.get("section", ""),
                         }
 
-                        langchain_docs.append(LangChainDocument(page_content=chunk, metadata=metadata))
+                        langchain_docs.append(
+                            LangChainDocument(page_content=chunk, metadata=metadata)
+                        )
 
                 # Add batch to vector store (embeddings created automatically)
                 if langchain_docs:
                     self.vector_store.add_documents(langchain_docs)
                     total_chunks += len(langchain_docs)
 
-                    logger.info(f"   Added batch {i//batch_size + 1}: {len(langchain_docs)} chunks")
+                    logger.info(
+                        f"   Added batch {i//batch_size + 1}: {len(langchain_docs)} chunks"
+                    )
 
             logger.info(f"Added {total_chunks} chunks from {len(documents)} documents")
             return total_chunks
@@ -184,7 +194,9 @@ class MedicalVectorStore:
             logger.info(f"Semantic search: '{query}' (k={k})")
 
             # Perform similarity search
-            results = self.vector_store.similarity_search_with_score(query=query, k=k, filter=filter_dict)
+            results = self.vector_store.similarity_search_with_score(
+                query=query, k=k, filter=filter_dict
+            )
 
             # Format results
             formatted_results = []
@@ -206,7 +218,11 @@ class MedicalVectorStore:
             return []
 
     def hybrid_search(
-        self, query: str, k: int = 5, semantic_weight: float = 0.7, filter_dict: Optional[Dict[str, Any]] = None
+        self,
+        query: str,
+        k: int = 5,
+        semantic_weight: float = 0.7,
+        filter_dict: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Hybrid search combining semantic + keyword (BM25-like)
@@ -227,22 +243,30 @@ class MedicalVectorStore:
         """
         # Generate cache key from query + params
         filter_str = json.dumps(filter_dict, sort_keys=True) if filter_dict else ""
-        cache_key = hashlib.md5(f"{query.lower().strip()}|k={k}|sw={semantic_weight}|f={filter_str}".encode()).hexdigest()
+        cache_key = hashlib.md5(
+            f"{query.lower().strip()}|k={k}|sw={semantic_weight}|f={filter_str}".encode()
+        ).hexdigest()
 
         # Check cache first
         cached = rag_search_cache.get(cache_key)
         if cached is not None:
-            logger.info(f"RAG cache hit: '{query[:50]}...' (saved embedding computation)")
+            logger.info(
+                f"RAG cache hit: '{query[:50]}...' (saved embedding computation)"
+            )
             return cached
 
         try:
             logger.info(f"Hybrid search: '{query}' (semantic_weight={semantic_weight})")
 
             # 1. Semantic search
-            semantic_results = self.semantic_search(query, k=k * 2, filter_dict=filter_dict)
+            semantic_results = self.semantic_search(
+                query, k=k * 2, filter_dict=filter_dict
+            )
 
             # 2. Keyword search (PostgreSQL full-text search)
-            keyword_results = self._keyword_search(query, k=k * 2, filter_dict=filter_dict)
+            keyword_results = self._keyword_search(
+                query, k=k * 2, filter_dict=filter_dict
+            )
 
             # Se a busca semântica falhar, usar apenas keyword
             if not semantic_results and keyword_results:
@@ -252,7 +276,9 @@ class MedicalVectorStore:
                 return results
 
             # 3. Combine scores (Reciprocal Rank Fusion)
-            combined = self._reciprocal_rank_fusion(semantic_results, keyword_results, semantic_weight=semantic_weight)
+            combined = self._reciprocal_rank_fusion(
+                semantic_results, keyword_results, semantic_weight=semantic_weight
+            )
 
             # 4. Return top k
             top_k = combined[:k]
@@ -316,7 +342,9 @@ class MedicalVectorStore:
                         params[k_param] = str(raw_key)
                         params[v_param] = str(raw_value)
 
-                where_clause = (" AND " + " AND ".join(where_clauses)) if where_clauses else ""
+                where_clause = (
+                    (" AND " + " AND ".join(where_clauses)) if where_clauses else ""
+                )
 
                 # Full-text search query
                 query_sql = f"""
@@ -395,7 +423,11 @@ class MedicalVectorStore:
 
         # Return documents with updated scores
         return [
-            {**item["doc"], "score": item["score"], "relevance": self._score_to_relevance(item["score"])}
+            {
+                **item["doc"],
+                "score": item["score"],
+                "relevance": self._score_to_relevance(item["score"]),
+            }
             for item in combined
         ]
 
@@ -419,7 +451,9 @@ class MedicalVectorStore:
         else:
             return "VERY_LOW"
 
-    def search_by_drug(self, drug_name: str, section: Optional[str] = None, k: int = 5) -> List[Dict[str, Any]]:
+    def search_by_drug(
+        self, drug_name: str, section: Optional[str] = None, k: int = 5
+    ) -> List[Dict[str, Any]]:
         """
         Search for drug-specific information
 
@@ -467,11 +501,15 @@ class MedicalVectorStore:
                 """
                 )
 
-                result = db.execute(count_query, {"collection_name": self.collection_name})
+                result = db.execute(
+                    count_query, {"collection_name": self.collection_name}
+                )
                 row = result.fetchone()
 
                 if row:
-                    embedding_model = getattr(settings, 'embedding_model', 'qwen3-embedding:0.6b')
+                    embedding_model = getattr(
+                        settings, "embedding_model", "qwen3-embedding:0.6b"
+                    )
                     return {
                         "collection_name": self.collection_name,
                         "total_embeddings": row[0],

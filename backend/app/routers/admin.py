@@ -11,13 +11,13 @@ This is intended for internal/admin use on a single VM deployment.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..auth.rbac import require_admin
 from ..db.database import get_db_context
 from ..db.models import AnalysisJob, HITLReview
-
 
 router = APIRouter(prefix="/api/v2/admin", tags=["admin"])
 
@@ -130,5 +130,3 @@ async def list_hitl_reviews(
                 for r in rows
             ],
         }
-
-

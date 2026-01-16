@@ -5,4 +5,6 @@ Placeholder (exige arquivo real + backend configurado).
 
 import pytest
 
-pytestmark = pytest.mark.skip(reason="Teste OCR exige fixture de imagem/PDF e backend pronto; cobrir em e2e.")
+pytestmark = pytest.mark.skip(
+    reason="Teste OCR exige fixture de imagem/PDF e backend pronto; cobrir em e2e."
+)

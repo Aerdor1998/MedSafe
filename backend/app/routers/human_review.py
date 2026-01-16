@@ -19,21 +19,23 @@ warnings.warn(
     stacklevel=2,
 )
 
-from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
 from datetime import datetime
+
+# Placeholder enums for backwards compatibility
+from enum import Enum
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
 # DEPRECATED: These imports will fail - module no longer exists
 # from ..agents.human_in_the_loop import get_hitl_agent, HumanReviewRequest, ReviewStatus, ReviewPriority
 from ..auth.jwt import get_current_user
 
-# Placeholder enums for backwards compatibility
-from enum import Enum
-
 
 class ReviewStatus(str, Enum):
     """Deprecated - use HITL status in langgraph router instead."""
+
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
@@ -41,6 +43,7 @@ class ReviewStatus(str, Enum):
 
 class ReviewPriority(str, Enum):
     """Deprecated - priorities are now determined by SafetyAgent."""
+
     EMERGENCY = "emergency"
     URGENT = "urgent"
     ROUTINE = "routine"
@@ -68,8 +71,12 @@ class SubmitReviewRequest(BaseModel):
     reviewer_id: str = Field(..., description="ID do revisor")
     decision: ReviewStatus = Field(..., description="Decisão da revisão")
     notes: str = Field(..., description="Notas do revisor")
-    modified_analysis: Optional[Dict[str, Any]] = Field(None, description="Análise modificada")
-    feedback: Optional[Dict[str, Any]] = Field(None, description="Feedback para o sistema")
+    modified_analysis: Optional[Dict[str, Any]] = Field(
+        None, description="Análise modificada"
+    )
+    feedback: Optional[Dict[str, Any]] = Field(
+        None, description="Feedback para o sistema"
+    )
 
 
 class ReviewDetailResponse(BaseModel):
@@ -85,7 +92,9 @@ class ReviewDetailResponse(BaseModel):
 
 @router.get("/pending", response_model=ReviewListResponse)
 async def get_pending_reviews(
-    priority: Optional[ReviewPriority] = Query(None, description="Filtrar por prioridade"),
+    priority: Optional[ReviewPriority] = Query(
+        None, description="Filtrar por prioridade"
+    ),
     overdue_only: bool = Query(False, description="Apenas revisões atrasadas"),
     current_user: str = Depends(get_current_user),
 ):
@@ -97,7 +106,9 @@ async def get_pending_reviews(
     """
     hitl_agent = get_hitl_agent()
 
-    reviews = await hitl_agent.get_pending_reviews(priority=priority, overdue_only=overdue_only)
+    reviews = await hitl_agent.get_pending_reviews(
+        priority=priority, overdue_only=overdue_only
+    )
 
     # Calcular estatísticas
     total = len(reviews)
@@ -110,11 +121,15 @@ async def get_pending_reviews(
     # Serializar reviews
     reviews_data = [_serialize_review_request(r) for r in reviews]
 
-    return ReviewListResponse(reviews=reviews_data, total=total, pending=pending, overdue=overdue)
+    return ReviewListResponse(
+        reviews=reviews_data, total=total, pending=pending, overdue=overdue
+    )
 
 
 @router.get("/{review_id}", response_model=ReviewDetailResponse)
-async def get_review_details(review_id: str, current_user: str = Depends(get_current_user)):
+async def get_review_details(
+    review_id: str, current_user: str = Depends(get_current_user)
+):
     """
     Obter detalhes completos de uma revisão
 
@@ -146,13 +161,17 @@ async def get_review_details(review_id: str, current_user: str = Depends(get_cur
     }
 
     return ReviewDetailResponse(
-        review=_serialize_review_request(review), triage_summary=triage_summary, analysis_summary=analysis_summary
+        review=_serialize_review_request(review),
+        triage_summary=triage_summary,
+        analysis_summary=analysis_summary,
     )
 
 
 @router.post("/{review_id}/submit")
 async def submit_review(
-    review_id: str, review_data: SubmitReviewRequest, current_user: str = Depends(get_current_user)
+    review_id: str,
+    review_data: SubmitReviewRequest,
+    current_user: str = Depends(get_current_user),
 ):
     """
     Submeter revisão humana de uma análise
@@ -188,7 +207,9 @@ async def submit_review(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao submeter revisão: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Erro ao submeter revisão: {str(e)}"
+        )
 
 
 @router.get("/dashboard/stats")
@@ -209,16 +230,32 @@ async def get_dashboard_stats(current_user: str = Depends(get_current_user)):
     stats = {
         "total_reviews": len(all_reviews),
         "by_status": {
-            "pending": len([r for r in all_reviews if r.status == ReviewStatus.PENDING]),
-            "in_review": len([r for r in all_reviews if r.status == ReviewStatus.IN_REVIEW]),
-            "approved": len([r for r in all_reviews if r.status == ReviewStatus.APPROVED]),
-            "rejected": len([r for r in all_reviews if r.status == ReviewStatus.REJECTED]),
-            "modified": len([r for r in all_reviews if r.status == ReviewStatus.MODIFIED]),
+            "pending": len(
+                [r for r in all_reviews if r.status == ReviewStatus.PENDING]
+            ),
+            "in_review": len(
+                [r for r in all_reviews if r.status == ReviewStatus.IN_REVIEW]
+            ),
+            "approved": len(
+                [r for r in all_reviews if r.status == ReviewStatus.APPROVED]
+            ),
+            "rejected": len(
+                [r for r in all_reviews if r.status == ReviewStatus.REJECTED]
+            ),
+            "modified": len(
+                [r for r in all_reviews if r.status == ReviewStatus.MODIFIED]
+            ),
         },
         "by_priority": {
-            "emergency": len([r for r in all_reviews if r.priority == ReviewPriority.EMERGENCY]),
-            "urgent": len([r for r in all_reviews if r.priority == ReviewPriority.URGENT]),
-            "routine": len([r for r in all_reviews if r.priority == ReviewPriority.ROUTINE]),
+            "emergency": len(
+                [r for r in all_reviews if r.priority == ReviewPriority.EMERGENCY]
+            ),
+            "urgent": len(
+                [r for r in all_reviews if r.priority == ReviewPriority.URGENT]
+            ),
+            "routine": len(
+                [r for r in all_reviews if r.priority == ReviewPriority.ROUTINE]
+            ),
         },
         "overdue_count": len(
             [
@@ -262,7 +299,9 @@ async def escalate_review(
     if review.priority != ReviewPriority.EMERGENCY:
         original_priority = review.priority
         review.priority = (
-            ReviewPriority.URGENT if review.priority == ReviewPriority.ROUTINE else ReviewPriority.EMERGENCY
+            ReviewPriority.URGENT
+            if review.priority == ReviewPriority.ROUTINE
+            else ReviewPriority.EMERGENCY
         )
 
     # Notificar especialistas
@@ -308,7 +347,9 @@ def _calculate_avg_confidence(reviews: List[HumanReviewRequest]) -> float:
     return total / len(reviews)
 
 
-def _calculate_escalation_breakdown(reviews: List[HumanReviewRequest]) -> Dict[str, int]:
+def _calculate_escalation_breakdown(
+    reviews: List[HumanReviewRequest],
+) -> Dict[str, int]:
     """Calcular breakdown de razões de escalação"""
     from collections import Counter
 

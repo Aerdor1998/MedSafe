@@ -4,12 +4,13 @@ Monitoring & Metrics API Router (Simplified)
 Basic monitoring endpoints. Use Prometheus /metrics for detailed metrics.
 """
 
-from fastapi import APIRouter
-from typing import Dict, Any
 import logging
 from datetime import datetime
+from typing import Any, Dict
 
-from ..utils.cache import get_cache_stats, clear_all_caches
+from fastapi import APIRouter
+
+from ..utils.cache import clear_all_caches, get_cache_stats
 
 logger = logging.getLogger(__name__)
 

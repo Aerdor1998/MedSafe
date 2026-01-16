@@ -13,20 +13,21 @@ PATTERN: RESTful API for agent orchestration + persistence
 SKILLS: @fastapi-templates, @api-design-principles, @ultrathink
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request, Header
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
-from typing import Dict, Any, List, Optional
-from datetime import datetime
+import hashlib
 import logging
 import uuid
-import hashlib
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-from ..langgraph_agents import get_graph, get_settings
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+
 from ..auth.jwt import get_current_user, get_optional_current_user
 from ..config import settings as app_settings
 from ..db.database import get_db_context
-from ..db.models import Triage, Report, AnalysisJob, HITLReview
+from ..db.models import AnalysisJob, HITLReview, Report, Triage
+from ..langgraph_agents import get_graph, get_settings
 from ..middleware.rate_limit import limiter
 from ..services.analysis_orchestrator import get_orchestrator
 from ..services.response_formatter import compute_accuracy
@@ -44,13 +45,17 @@ router = APIRouter(prefix="/api/v2", tags=["LangGraph Multi-Agent v2"])
 
 class ProblemDetail(BaseModel):
     """RFC 7807 Problem Details for HTTP APIs"""
-    
-    type: str = Field(default="about:blank", description="URI identifying the problem type")
+
+    type: str = Field(
+        default="about:blank", description="URI identifying the problem type"
+    )
     title: str = Field(..., description="Short, human-readable summary")
     status: int = Field(..., description="HTTP status code")
     detail: Optional[str] = Field(None, description="Human-readable explanation")
-    instance: Optional[str] = Field(None, description="URI identifying the specific occurrence")
-    
+    instance: Optional[str] = Field(
+        None, description="URI identifying the specific occurrence"
+    )
+
     # Extended fields for MedSafe
     code: Optional[str] = Field(None, description="Machine-readable error code")
     request_id: Optional[str] = Field(None, description="Request ID for tracing")
@@ -87,7 +92,9 @@ def _compute_payload_hash(medication: str, patient_data: Dict) -> str:
         "medication": medication.lower().strip(),
         "age": patient_data.get("age"),
         "weight": patient_data.get("weight"),
-        "current_medications": sorted([m.lower() for m in patient_data.get("current_medications", [])]),
+        "current_medications": sorted(
+            [m.lower() for m in patient_data.get("current_medications", [])]
+        ),
         "conditions": sorted([c.lower() for c in patient_data.get("conditions", [])]),
     }
     payload_str = str(sorted(normalized.items()))
@@ -99,16 +106,16 @@ async def _find_existing_job_by_idempotency_key(
     user_id: str,
 ) -> Optional[AnalysisJob]:
     """Find an existing job by idempotency key within a time window.
-    
+
     NOTE: Only returns jobs that are NOT failed - failed jobs should be retried.
     """
     from datetime import timedelta
-    
+
     with get_db_context() as db:
         # Look for jobs created in the last hour with the same idempotency key
         # Exclude failed jobs so they can be retried
         cutoff = datetime.utcnow() - timedelta(hours=1)
-        
+
         jobs = (
             db.query(AnalysisJob)
             .filter(
@@ -118,12 +125,12 @@ async def _find_existing_job_by_idempotency_key(
             )
             .all()
         )
-        
+
         # Filter in Python for JSON field match
         for job in jobs:
             if job.payload and job.payload.get("idempotency_key") == idempotency_key:
                 return job
-        
+
         return None
 
 
@@ -144,8 +151,12 @@ class PatientData(BaseModel):
 
     # Demographics
     age: Optional[int] = Field(None, ge=0, le=150, description="Patient age in years")
-    weight: Optional[float] = Field(None, ge=0, le=500, description="Patient weight in kg")
-    height: Optional[float] = Field(None, ge=0, le=3.0, description="Patient height in meters")
+    weight: Optional[float] = Field(
+        None, ge=0, le=500, description="Patient weight in kg"
+    )
+    height: Optional[float] = Field(
+        None, ge=0, le=3.0, description="Patient height in meters"
+    )
     sex: Optional[str] = Field(None, pattern="^[MF]$", description="Patient sex (M/F)")
 
     # Pregnancy and lactation
@@ -153,35 +164,46 @@ class PatientData(BaseModel):
     lactating: Optional[bool] = Field(False, description="Is patient breastfeeding")
 
     # Medical history
-    conditions: List[str] = Field(default_factory=list, description="Medical conditions (CID codes)")
-    current_medications: List[str] = Field(default_factory=list, description="Current medications")
+    conditions: List[str] = Field(
+        default_factory=list, description="Medical conditions (CID codes)"
+    )
+    current_medications: List[str] = Field(
+        default_factory=list, description="Current medications"
+    )
     allergies: List[str] = Field(default_factory=list, description="Known allergies")
 
     # Renal function (detailed)
-    renal_function: Optional[str] = Field(None, description="Renal function status (legacy)")
-    creatinine: Optional[float] = Field(None, ge=0, le=30, description="Serum creatinine (mg/dL)")
-    gfr: Optional[float] = Field(None, ge=0, le=200, description="GFR (mL/min/1.73m2) - calculated or measured")
+    renal_function: Optional[str] = Field(
+        None, description="Renal function status (legacy)"
+    )
+    creatinine: Optional[float] = Field(
+        None, ge=0, le=30, description="Serum creatinine (mg/dL)"
+    )
+    gfr: Optional[float] = Field(
+        None, ge=0, le=200, description="GFR (mL/min/1.73m2) - calculated or measured"
+    )
     renal_stage: Optional[str] = Field(
         None,
         pattern="^G[1-5][ab]?$",
-        description="CKD stage (G1, G2, G3a, G3b, G4, G5)"
+        description="CKD stage (G1, G2, G3a, G3b, G4, G5)",
     )
 
     # Hepatic function (detailed)
-    hepatic_function: Optional[str] = Field(None, description="Hepatic function status (legacy)")
+    hepatic_function: Optional[str] = Field(
+        None, description="Hepatic function status (legacy)"
+    )
     alt: Optional[float] = Field(None, ge=0, le=10000, description="ALT/TGP (U/L)")
     ast: Optional[float] = Field(None, ge=0, le=10000, description="AST/TGO (U/L)")
-    bilirubin: Optional[float] = Field(None, ge=0, le=50, description="Total bilirubin (mg/dL)")
+    bilirubin: Optional[float] = Field(
+        None, ge=0, le=50, description="Total bilirubin (mg/dL)"
+    )
     child_pugh: Optional[str] = Field(
-        None,
-        pattern="^[ABC]$",
-        description="Child-Pugh classification (A, B, C)"
+        None, pattern="^[ABC]$", description="Child-Pugh classification (A, B, C)"
     )
 
     # Additional clinical context
     previous_adverse_reactions: List[str] = Field(
-        default_factory=list,
-        description="Previous adverse drug reactions"
+        default_factory=list, description="Previous adverse drug reactions"
     )
 
 
@@ -216,7 +238,7 @@ class AnalyzeResponse(BaseModel):
     - Added structured_recommendations for actionable clinical guidance
     - Added patient_risk_factors for context-aware analysis
     - Added severity_modified flag to track adjustments
-    
+
     ENHANCED (2026-01-14):
     - Added accuracy_score (calibrated metric based on confidence + anamnesis + critique)
     """
@@ -263,11 +285,14 @@ class HITLApprovalRequest(BaseModel):
     session_id: str = Field(..., description="Session ID to approve")
     approved: bool = Field(..., description="True for approve, False for reject")
     physician_notes: Optional[str] = Field(None, description="Physician notes/comments")
-    modifications: Optional[Dict[str, Any]] = Field(None, description="Any modifications to apply")
+    modifications: Optional[Dict[str, Any]] = Field(
+        None, description="Any modifications to apply"
+    )
 
 
 class TriageListResponse(BaseModel):
     """Response for list of triages"""
+
     triages: List[Dict[str, Any]]
     total: int
     page: int
@@ -293,7 +318,7 @@ async def analyze_drug_interaction(
     **ENHANCED v2**: Now includes database persistence, rate limiting, and idempotency
 
     **Rate Limit**: 10 requests/minute per user
-    
+
     **Idempotency**: Send `Idempotency-Key` header to prevent duplicate jobs on retries.
     If the same key is sent within 1 hour, returns the existing job instead of creating a new one.
 
@@ -307,30 +332,42 @@ async def analyze_drug_interaction(
     try:
         # Anonymous access is supported only when explicitly enabled (or in debug).
         # This keeps the v2 contract usable for the static frontend demos without forcing auth.
-        if not current_user and (not app_settings.debug) and (not getattr(app_settings, "allow_anonymous_analysis", False)):
+        if (
+            not current_user
+            and (not app_settings.debug)
+            and (not getattr(app_settings, "allow_anonymous_analysis", False))
+        ):
             raise HTTPException(status_code=401, detail="Authentication required")
 
         effective_user = (data.user_id or current_user or "anonymous").strip()
-        
+
         # IDEMPOTENCY: Check if job already exists
         actual_idempotency_key = idempotency_key
         if not actual_idempotency_key:
             # Auto-generate idempotency key from payload hash (optional deduplication)
-            actual_idempotency_key = _compute_payload_hash(data.medication, data.patient_data.dict())
-        
+            actual_idempotency_key = _compute_payload_hash(
+                data.medication, data.patient_data.dict()
+            )
+
         # Try to find existing job with same idempotency key
-        existing_job = await _find_existing_job_by_idempotency_key(actual_idempotency_key, effective_user)
+        existing_job = await _find_existing_job_by_idempotency_key(
+            actual_idempotency_key, effective_user
+        )
         if existing_job:
-            logger.info("Returning existing job due to idempotency (job_id=%s)", existing_job.id)
+            logger.info(
+                "Returning existing job due to idempotency (job_id=%s)", existing_job.id
+            )
             return AnalyzeResponse(
                 session_id=existing_job.session_id,
                 job_id=str(existing_job.id),
-                triage_id=str(existing_job.triage_id) if existing_job.triage_id else None,
+                triage_id=(
+                    str(existing_job.triage_id) if existing_job.triage_id else None
+                ),
                 status=existing_job.status,
                 message="Existing analysis found (idempotent). Check /api/v2/status/{session_id} for results.",
                 created_at=existing_job.created_at,
             )
-        
+
         # LGPD: avoid logging raw medication/patient details; keep session correlation
         logger.info("New analysis request (user=%s)", effective_user)
 
@@ -371,7 +408,9 @@ async def analyze_drug_interaction(
         raise
     except Exception as e:
         logger.error(f"Failed to start analysis: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to start analysis: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to start analysis: {str(e)}"
+        )
 
 
 @router.get("/status/{session_id}", response_model=AnalyzeResponse)
@@ -395,7 +434,9 @@ async def get_analysis_status(
         orchestrator = get_orchestrator()
         job = await orchestrator.get_job_by_session(session_id)
         if not job:
-            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Session {session_id} not found"
+            )
 
         # Authorization (if triage exists)
         if job.triage_id:
@@ -424,11 +465,19 @@ async def get_analysis_status(
 
         # Compute calibrated accuracy_score (2026-01-14)
         # Uses confidence_score + anamnesis completeness + critique level + refinements
-        patient_info = result.get("patient_data") or job.payload.get("patient_data", {}) if job.payload else {}
+        patient_info = (
+            result.get("patient_data") or job.payload.get("patient_data", {})
+            if job.payload
+            else {}
+        )
         raw_confidence = result.get("confidence_score", 0.0) or 0.0
-        
+
         # Only compute accuracy if we have confidence data
-        if raw_confidence > 0 or result.get("interactions") or result.get("contraindications"):
+        if (
+            raw_confidence > 0
+            or result.get("interactions")
+            or result.get("contraindications")
+        ):
             accuracy_score, _ = compute_accuracy(result, patient_info)
         else:
             accuracy_score = raw_confidence
@@ -471,7 +520,7 @@ async def get_analysis_status(
 async def approve_analysis(
     request: Request,
     data: HITLApprovalRequest,
-    current_user: str = Depends(get_current_user)
+    current_user: str = Depends(get_current_user),
 ) -> AnalyzeResponse:
     """
     Physician approves or rejects analysis (HITL continuation)
@@ -495,11 +544,19 @@ async def approve_analysis(
         orchestrator = get_orchestrator()
         job = await orchestrator.get_job_by_session(data.session_id)
         if not job:
-            raise HTTPException(status_code=404, detail=f"Session {data.session_id} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Session {data.session_id} not found"
+            )
 
         state_values = job.state or {}
-        if str(job.status) != "awaiting_review" and state_values.get("status") != "awaiting_human_review":
-            raise HTTPException(status_code=400, detail=f"Session {data.session_id} is not awaiting human review")
+        if (
+            str(job.status) != "awaiting_review"
+            and state_values.get("status") != "awaiting_human_review"
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Session {data.session_id} is not awaiting human review",
+            )
 
         # Prepare human feedback
         human_feedback = {
@@ -530,7 +587,9 @@ async def approve_analysis(
                     db_triage.status = "completed" if data.approved else "rejected"
 
                     # Update or create report
-                    report = db.query(Report).filter(Report.triage_id == triage_id).first()
+                    report = (
+                        db.query(Report).filter(Report.triage_id == triage_id).first()
+                    )
                     if report:
                         report.is_final = True
                         report.confidence_score = result.get("confidence_score", 0.0)
@@ -592,7 +651,7 @@ async def list_triages(
     page: int = 1,
     per_page: int = 20,
     status: Optional[str] = None,
-    current_user: str = Depends(get_current_user)
+    current_user: str = Depends(get_current_user),
 ) -> TriageListResponse:
     """
     List triages for current user
@@ -610,10 +669,12 @@ async def list_triages(
 
             total = query.count()
 
-            triages = query.order_by(Triage.created_at.desc())\
-                          .offset((page - 1) * per_page)\
-                          .limit(per_page)\
-                          .all()
+            triages = (
+                query.order_by(Triage.created_at.desc())
+                .offset((page - 1) * per_page)
+                .limit(per_page)
+                .all()
+            )
 
             triages_data = [
                 {
@@ -642,9 +703,7 @@ async def list_triages(
 @router.get("/triages/{triage_id}/report")
 @limiter.limit("30/minute")
 async def get_triage_report(
-    request: Request,
-    triage_id: str,
-    current_user: str = Depends(get_current_user)
+    request: Request, triage_id: str, current_user: str = Depends(get_current_user)
 ):
     """
     Get report for a specific triage

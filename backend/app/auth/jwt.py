@@ -6,15 +6,16 @@ FASE 1.1: Algoritmos whitelist, key rotation, token revocation via Redis
 SKILLS: @api-design-principles, @secrets-management
 """
 
-from datetime import datetime, timedelta
-from typing import Optional, Tuple, Set
-import uuid
 import hashlib
 import logging
-from jose import JWTError, jwt
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import uuid
+from datetime import datetime, timedelta
+from typing import Optional, Set, Tuple
+
 import redis.asyncio as redis
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
 
 from ..config import settings
 
@@ -211,7 +212,7 @@ def _validate_algorithm(algorithm: str) -> None:
 def create_access_token(
     data: dict,
     expires_delta: Optional[timedelta] = None,
-    device_id: Optional[str] = None
+    device_id: Optional[str] = None,
 ) -> Tuple[str, str]:
     """
     Criar token JWT de acesso
@@ -240,16 +241,18 @@ def create_access_token(
 
     # SECURITY FIX: Claims JWT completos
     # FASE 1.1: Adicionado key_version para key rotation
-    to_encode.update({
-        "exp": expire,
-        "iat": datetime.utcnow(),
-        "nbf": datetime.utcnow(),
-        "type": "access",
-        "jti": jti,  # JWT ID único
-        "iss": JWT_ISSUER,  # Issuer
-        "aud": JWT_AUDIENCE,  # Audience
-        "kv": settings.jwt_key_version,  # Key version para rotation
-    })
+    to_encode.update(
+        {
+            "exp": expire,
+            "iat": datetime.utcnow(),
+            "nbf": datetime.utcnow(),
+            "type": "access",
+            "jti": jti,  # JWT ID único
+            "iss": JWT_ISSUER,  # Issuer
+            "aud": JWT_AUDIENCE,  # Audience
+            "kv": settings.jwt_key_version,  # Key version para rotation
+        }
+    )
 
     # Adicionar device_id se fornecido
     if device_id:
@@ -259,15 +262,18 @@ def create_access_token(
     if not settings.secret_key or settings.secret_key == "change_me_in_production":
         raise ValueError("SECRET_KEY deve ser configurada adequadamente em produção")
 
-    encoded_jwt = jwt.encode(to_encode, _get_access_secret(), algorithm=settings.jwt_algorithm)
+    encoded_jwt = jwt.encode(
+        to_encode, _get_access_secret(), algorithm=settings.jwt_algorithm
+    )
 
-    logger.debug(f"Access token created: jti={jti[:8]}..., user={data.get('sub', 'unknown')}")
+    logger.debug(
+        f"Access token created: jti={jti[:8]}..., user={data.get('sub', 'unknown')}"
+    )
     return encoded_jwt, jti
 
 
 def create_refresh_token(
-    data: dict,
-    device_id: Optional[str] = None
+    data: dict, device_id: Optional[str] = None
 ) -> Tuple[str, str]:
     """
     Criar token JWT de refresh
@@ -291,28 +297,36 @@ def create_refresh_token(
 
     # SECURITY FIX: Claims JWT completos para refresh
     # FASE 1.1: Adicionado key_version para key rotation
-    to_encode.update({
-        "exp": expire,
-        "iat": datetime.utcnow(),
-        "nbf": datetime.utcnow(),
-        "type": "refresh",
-        "jti": jti,
-        "iss": JWT_ISSUER,
-        "aud": JWT_AUDIENCE,
-        "kv": settings.jwt_key_version,  # Key version para rotation
-    })
+    to_encode.update(
+        {
+            "exp": expire,
+            "iat": datetime.utcnow(),
+            "nbf": datetime.utcnow(),
+            "type": "refresh",
+            "jti": jti,
+            "iss": JWT_ISSUER,
+            "aud": JWT_AUDIENCE,
+            "kv": settings.jwt_key_version,  # Key version para rotation
+        }
+    )
 
     if device_id:
         to_encode["device_id"] = device_id
 
     # SECURITY FIX: Usar secret diferente para refresh tokens
-    encoded_jwt = jwt.encode(to_encode, _get_refresh_secret(), algorithm=settings.jwt_algorithm)
+    encoded_jwt = jwt.encode(
+        to_encode, _get_refresh_secret(), algorithm=settings.jwt_algorithm
+    )
 
-    logger.debug(f"Refresh token created: jti={jti[:8]}..., user={data.get('sub', 'unknown')}")
+    logger.debug(
+        f"Refresh token created: jti={jti[:8]}..., user={data.get('sub', 'unknown')}"
+    )
     return encoded_jwt, jti
 
 
-def verify_token(token: str, expected_type: str = "access", check_revocation: bool = True) -> dict:
+def verify_token(
+    token: str, expected_type: str = "access", check_revocation: bool = True
+) -> dict:
     """
     Verificar e decodificar token JWT de acesso
 
@@ -352,13 +366,17 @@ def verify_token(token: str, expected_type: str = "access", check_revocation: bo
         # Verificar tipo de token
         token_type = payload.get("type")
         if token_type != expected_type:
-            logger.warning(f"Token type mismatch: expected={expected_type}, got={token_type}")
+            logger.warning(
+                f"Token type mismatch: expected={expected_type}, got={token_type}"
+            )
             raise credentials_exception
 
         # FASE 1.1: Verificar versão da chave (key rotation)
         token_kv = payload.get("kv", 1)
         if token_kv != settings.jwt_key_version:
-            logger.warning(f"Token key version mismatch: token={token_kv}, current={settings.jwt_key_version}")
+            logger.warning(
+                f"Token key version mismatch: token={token_kv}, current={settings.jwt_key_version}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token invalidated by key rotation",
@@ -388,7 +406,9 @@ def verify_token(token: str, expected_type: str = "access", check_revocation: bo
         )
 
 
-async def verify_token_async(token: str, expected_type: str = "access", check_revocation: bool = True) -> dict:
+async def verify_token_async(
+    token: str, expected_type: str = "access", check_revocation: bool = True
+) -> dict:
     """
     Verificar token de forma assíncrona (com verificação de revogação)
 
@@ -466,7 +486,9 @@ def verify_refresh_token(token: str) -> dict:
         # FASE 1.1: Verificar versão da chave (key rotation)
         token_kv = payload.get("kv", 1)
         if token_kv != settings.jwt_key_version:
-            logger.warning(f"Refresh token key version mismatch: token={token_kv}, current={settings.jwt_key_version}")
+            logger.warning(
+                f"Refresh token key version mismatch: token={token_kv}, current={settings.jwt_key_version}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Refresh token invalidated by key rotation",
@@ -535,7 +557,9 @@ async def verify_refresh_token_async(token: str, check_revocation: bool = True) 
     return payload
 
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> str:
     """
     Obter usuário atual a partir do token JWT
 
@@ -550,7 +574,9 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     """
     token = credentials.credentials
     # Use async verification to support revocation checks (Redis blacklist)
-    payload = await verify_token_async(token, expected_type="access", check_revocation=True)
+    payload = await verify_token_async(
+        token, expected_type="access", check_revocation=True
+    )
 
     user_id: str = payload.get("sub")
     if user_id is None:
@@ -576,7 +602,9 @@ async def get_optional_current_user(
 
     token = credentials.credentials
     try:
-        payload = await verify_token_async(token, expected_type="access", check_revocation=True)
+        payload = await verify_token_async(
+            token, expected_type="access", check_revocation=True
+        )
     except Exception:
         return None
 

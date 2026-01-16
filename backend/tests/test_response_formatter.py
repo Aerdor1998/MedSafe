@@ -1,11 +1,10 @@
 import pytest
 
-
 from backend.app.services.response_formatter import (
-    normalize_str,
-    patient_completeness,
     build_recommendations_from_state,
     compute_accuracy,
+    normalize_str,
+    patient_completeness,
 )
 
 
@@ -90,14 +89,14 @@ def test_compute_accuracy_penalizes_partial_missing_anamnesis_and_critique():
     assert any("partial analysis" in f.lower() for f in factors)
     assert any("CritiqueLevel=high" in f for f in factors)
 
+
 import enum
 
-
 from backend.app.services.response_formatter import (
-    normalize_str,
-    patient_completeness,
     build_recommendations_from_state,
     compute_accuracy,
+    normalize_str,
+    patient_completeness,
 )
 
 
@@ -120,12 +119,16 @@ def test_normalize_str_handles_none_enum_and_fallback():
 
 
 def test_patient_completeness_scoring_and_factors():
-    score, factors = patient_completeness({"age": 30, "sex": "M", "weight": 70, "allergies": [], "conditions": []})
+    score, factors = patient_completeness(
+        {"age": 30, "sex": "M", "weight": 70, "allergies": [], "conditions": []}
+    )
     assert 0.0 <= score <= 1.0
     # allergies field present but empty -> informational factor
     assert any("Allergies: not reported" in f for f in factors)
 
-    score2, factors2 = patient_completeness({"age": 0, "weight": 70, "current_medications": []})
+    score2, factors2 = patient_completeness(
+        {"age": 0, "weight": 70, "current_medications": []}
+    )
     assert score2 < score
     assert any("age missing/0" in f for f in factors2)
     assert any("sex/gender missing" in f for f in factors2)
@@ -137,10 +140,15 @@ def test_build_recommendations_from_state_structured_and_fallback_and_dedup():
         "structured_recommendations": {
             "header": "Header",
             "immediate_actions": ["Do X", "Do X"],  # duplicate
-            "monitoring_required": [{"value": "Watch Y"}],  # enum-like dict becomes string
+            "monitoring_required": [
+                {"value": "Watch Y"}
+            ],  # enum-like dict becomes string
             "patient_alerts": ["  "],  # ignored
         },
-        "dosage_adjustments": [{"recommendation": "Adjust dose"}, "Adjust dose"],  # duplicate across formats
+        "dosage_adjustments": [
+            {"recommendation": "Adjust dose"},
+            "Adjust dose",
+        ],  # duplicate across formats
     }
     recs = build_recommendations_from_state(state)
     assert recs[0] == "Header"
@@ -171,4 +179,3 @@ def test_compute_accuracy_applies_penalties_and_clamps():
     assert any("CritiqueLevel=high" in f for f in factors)
     assert any("Refinements=2" in f for f in factors)
     assert any("findings without evidence" in f.lower() for f in factors)
-

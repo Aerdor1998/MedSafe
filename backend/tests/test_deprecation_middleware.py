@@ -5,13 +5,17 @@ PHASE 1: Test feature flag and deprecation headers
 SKILLS: @debugging-strategies
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
-from fastapi import FastAPI
+from unittest.mock import MagicMock, patch
+
 import httpx
+import pytest
+from fastapi import FastAPI
 from starlette.responses import JSONResponse
 
-from backend.app.middleware.deprecation import DeprecationMiddleware, get_deprecation_info
+from backend.app.middleware.deprecation import (
+    DeprecationMiddleware,
+    get_deprecation_info,
+)
 
 
 class TestDeprecationMiddleware:
@@ -48,9 +52,11 @@ class TestDeprecationMiddleware:
     async def test_v2_endpoint_no_deprecation_header(self, app_with_middleware):
         """Test that V2 endpoints don't have deprecation headers"""
         transport = httpx.ASGITransport(app=app_with_middleware)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
             response = await client.get("/api/v2/test")
-        
+
         assert response.status_code == 200
         assert "x-api-deprecated" not in response.headers
 
@@ -58,24 +64,30 @@ class TestDeprecationMiddleware:
     async def test_normal_endpoint_no_deprecation_header(self, app_with_middleware):
         """Test that non-API endpoints don't have deprecation headers"""
         transport = httpx.ASGITransport(app=app_with_middleware)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
             response = await client.get("/api/normal")
-        
+
         assert response.status_code == 200
         assert "x-api-deprecated" not in response.headers
 
     @patch("backend.app.middleware.deprecation.settings")
     @pytest.mark.asyncio
-    async def test_v1_endpoint_has_deprecation_headers_when_enabled(self, mock_settings, app_with_middleware):
+    async def test_v1_endpoint_has_deprecation_headers_when_enabled(
+        self, mock_settings, app_with_middleware
+    ):
         """Test V1 endpoints have deprecation headers when enabled"""
         mock_settings.enable_legacy_v1 = True
         mock_settings.legacy_v1_sunset_date = "2025-03-01"
         mock_settings.log_deprecated_usage = False
 
         transport = httpx.ASGITransport(app=app_with_middleware)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
             response = await client.get("/api/v1/test")
-        
+
         # Should work but have deprecation headers
         assert response.status_code == 200
         assert response.headers.get("x-api-deprecated") == "true"
@@ -98,9 +110,11 @@ class TestDeprecationMiddleware:
             return {"message": "should not reach"}
 
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
             response = await client.get("/api/v1/test")
-        
+
         assert response.status_code == 410
         data = response.json()
         assert "error" in data
@@ -109,16 +123,20 @@ class TestDeprecationMiddleware:
 
     @patch("backend.app.middleware.deprecation.settings")
     @pytest.mark.asyncio
-    async def test_legacy_analyze_has_deprecation_headers(self, mock_settings, app_with_middleware):
+    async def test_legacy_analyze_has_deprecation_headers(
+        self, mock_settings, app_with_middleware
+    ):
         """Test /api/analyze has deprecation headers"""
         mock_settings.enable_legacy_v1 = True
         mock_settings.legacy_v1_sunset_date = "2025-03-01"
         mock_settings.log_deprecated_usage = False
 
         transport = httpx.ASGITransport(app=app_with_middleware)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
             response = await client.post("/api/analyze")
-        
+
         assert response.status_code == 200
         assert response.headers.get("x-api-deprecated") == "true"
 
@@ -182,7 +200,9 @@ class TestDeprecationLogging:
             return {"message": "test"}
 
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
             await client.get("/api/v1/test")
 
         # Should have logged a warning
@@ -205,7 +225,9 @@ class TestDeprecationLogging:
             return {"message": "test"}
 
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
             await client.get("/api/v1/test")
 
         # Should NOT have logged a warning

@@ -8,9 +8,9 @@ This state flows through all agents in the "Think, Act, Observe" loop.
 Each agent reads from and writes to this shared state.
 """
 
-from typing import TypedDict, Annotated, List, Dict, Any, Optional
 from datetime import datetime
 from enum import Enum
+from typing import Annotated, Any, Dict, List, Optional, TypedDict
 
 
 class RiskLevel(str, Enum):

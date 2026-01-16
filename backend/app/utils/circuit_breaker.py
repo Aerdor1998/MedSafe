@@ -2,10 +2,11 @@
 Circuit Breaker para resiliência de serviços externos
 """
 
-from circuitbreaker import circuit
 import logging
-from typing import Any, Callable
 from functools import wraps
+from typing import Any, Callable
+
+from circuitbreaker import circuit
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,9 @@ async def call_ollama_with_circuit_breaker(func: Callable, *args, **kwargs) -> A
 
 
 @circuit(failure_threshold=3, recovery_timeout=30, expected_exception=Exception)
-async def call_external_api_with_circuit_breaker(func: Callable, *args, **kwargs) -> Any:
+async def call_external_api_with_circuit_breaker(
+    func: Callable, *args, **kwargs
+) -> Any:
     """
     Chamar API externa com circuit breaker
 
@@ -69,7 +72,11 @@ def with_circuit_breaker(failure_threshold: int = 5, recovery_timeout: int = 60)
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        @circuit(failure_threshold=failure_threshold, recovery_timeout=recovery_timeout, expected_exception=Exception)
+        @circuit(
+            failure_threshold=failure_threshold,
+            recovery_timeout=recovery_timeout,
+            expected_exception=Exception,
+        )
         async def wrapper(*args, **kwargs):
             try:
                 return await func(*args, **kwargs)

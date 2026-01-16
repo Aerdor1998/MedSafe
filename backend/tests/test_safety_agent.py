@@ -4,9 +4,10 @@ Unit tests for SafetyAgent
 Tests safety guardrails, hallucination detection, and safety classification.
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
 from datetime import datetime
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from backend.app.langgraph_agents.state import RiskLevel
 
@@ -34,8 +35,9 @@ class TestSafetyAgentInit:
         # Removed: optimization mock
 
         from backend.app.langgraph_agents.safety_agent import SafetyAgent
+
         agent = SafetyAgent()
-        
+
         assert agent.agent_name == "SafetyAgent"
 
 
@@ -62,10 +64,15 @@ class TestSafetyAgentSystemPrompt:
         # Removed: optimization mock
 
         from backend.app.langgraph_agents.safety_agent import SafetyAgent
+
         agent = SafetyAgent()
         prompt = agent.get_system_prompt()
 
-        assert "SafetyAgent" in prompt or "segurança" in prompt.lower() or "safety" in prompt.lower()
+        assert (
+            "SafetyAgent" in prompt
+            or "segurança" in prompt.lower()
+            or "safety" in prompt.lower()
+        )
 
 
 class TestSafetyClassification:
@@ -92,8 +99,9 @@ class TestSafetyClassification:
 
         from backend.app.langgraph_agents.safety_agent import SafetyAgent
         from backend.app.langgraph_agents.state import SafetyClassification
+
         agent = SafetyAgent()
-        
+
         state = {
             "risk_level": RiskLevel.LOW,
             "confidence_score": 0.9,
@@ -101,10 +109,14 @@ class TestSafetyClassification:
             "contraindications": [],
         }
         violations = []
-        
+
         classification = agent._classify_safety(state, violations)
-        
-        assert classification in [SafetyClassification.SAFE, SafetyClassification.NEEDS_REVIEW, SafetyClassification.BLOCKED]
+
+        assert classification in [
+            SafetyClassification.SAFE,
+            SafetyClassification.NEEDS_REVIEW,
+            SafetyClassification.BLOCKED,
+        ]
 
     # Removed: optimization mock
     @patch("backend.app.langgraph_agents.base_agent.ChatOllama")
@@ -127,8 +139,9 @@ class TestSafetyClassification:
 
         from backend.app.langgraph_agents.safety_agent import SafetyAgent
         from backend.app.langgraph_agents.state import SafetyClassification
+
         agent = SafetyAgent()
-        
+
         state = {
             "risk_level": RiskLevel.CRITICAL,
             "confidence_score": 0.5,
@@ -137,14 +150,21 @@ class TestSafetyClassification:
         }
         # Violations should be list of dicts
         violations = [
-            {"type": "RISK_INCONSISTENCY", "severity": "critical", "message": "Critical risk level"},
-            {"type": "CONFIDENCE", "severity": "high", "message": "Low confidence"}
+            {
+                "type": "RISK_INCONSISTENCY",
+                "severity": "critical",
+                "message": "Critical risk level",
+            },
+            {"type": "CONFIDENCE", "severity": "high", "message": "Low confidence"},
         ]
-        
+
         classification = agent._classify_safety(state, violations)
-        
+
         # Critical risk with violations should result in NEEDS_REVIEW or BLOCKED
-        assert classification in [SafetyClassification.NEEDS_REVIEW, SafetyClassification.BLOCKED]
+        assert classification in [
+            SafetyClassification.NEEDS_REVIEW,
+            SafetyClassification.BLOCKED,
+        ]
 
 
 class TestSafetyChecks:
@@ -170,17 +190,18 @@ class TestSafetyChecks:
         # Removed: optimization mock
 
         from backend.app.langgraph_agents.safety_agent import SafetyAgent
+
         agent = SafetyAgent()
-        
+
         state = {
             "risk_level": RiskLevel.HIGH,
             "confidence_score": 0.6,
             "interactions": [{"severity": "high", "drug1": "A", "drug2": "B"}],
             "contraindications": [],
         }
-        
+
         violations = agent._run_safety_checks(state)
-        
+
         assert isinstance(violations, list)
 
 
@@ -211,10 +232,11 @@ class TestHITLEvaluation:
         # Removed: optimization mock
 
         from backend.app.langgraph_agents.safety_agent import SafetyAgent
+
         agent = SafetyAgent()
         # Also set settings on the agent instance
         agent.settings = settings
-        
+
         state = {
             "risk_level": RiskLevel.CRITICAL,
             "confidence_score": 0.9,
@@ -223,11 +245,15 @@ class TestHITLEvaluation:
         }
         # Violations should be list of dicts
         violations = [
-            {"type": "CRITICAL_RISK", "severity": "critical", "message": "Critical risk level"}
+            {
+                "type": "CRITICAL_RISK",
+                "severity": "critical",
+                "message": "Critical risk level",
+            }
         ]
-        
+
         needs_hitl, reasons = agent._evaluate_hitl_need(state, violations)
-        
+
         assert needs_hitl is True
         assert len(reasons) > 0
 
@@ -251,8 +277,9 @@ class TestHITLEvaluation:
         # Removed: optimization mock
 
         from backend.app.langgraph_agents.safety_agent import SafetyAgent
+
         agent = SafetyAgent()
-        
+
         state = {
             "risk_level": RiskLevel.LOW,
             "confidence_score": 0.95,
@@ -260,9 +287,9 @@ class TestHITLEvaluation:
             "contraindications": [],
         }
         violations = []
-        
+
         needs_hitl, reasons = agent._evaluate_hitl_need(state, violations)
-        
+
         # Low risk, high confidence, no violations - likely no HITL needed
         assert isinstance(needs_hitl, bool)
 
@@ -289,7 +316,11 @@ class TestFactoryFunction:
         mock_ollama.return_value = MagicMock()
         # Removed: optimization mock
 
-        from backend.app.langgraph_agents.safety_agent import create_safety_agent, SafetyAgent
+        from backend.app.langgraph_agents.safety_agent import (
+            SafetyAgent,
+            create_safety_agent,
+        )
+
         agent = create_safety_agent()
-        
+
         assert isinstance(agent, SafetyAgent)

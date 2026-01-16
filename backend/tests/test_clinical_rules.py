@@ -7,24 +7,24 @@ SKILL: @python-testing-patterns - Comprehensive test coverage
 """
 
 import pytest
+
 from backend.app.services.clinical_rules import (
     ClinicalRulesEngine,
-    PatientContext,
-    get_rules_engine,
-    calculate_gfr_cockroft_gault,
-    calculate_bmi,
-    get_renal_stage,
-    RenalStage,
     HepaticStage,
+    PatientContext,
     PopulationRisk,
+    RenalStage,
+    calculate_bmi,
+    calculate_gfr_cockroft_gault,
+    get_renal_stage,
+    get_rules_engine,
 )
 from backend.app.services.interaction_classifier import (
-    InteractionClassifierAgent,
-    get_classifier_agent,
-    SeverityLevel,
     ClassificationResult,
+    InteractionClassifierAgent,
+    SeverityLevel,
+    get_classifier_agent,
 )
-
 
 # =============================================================================
 # FIXTURES
@@ -52,7 +52,13 @@ def elderly_patient():
         sex="M",
         pregnant=False,
         gfr=45,
-        current_medications=["losartan", "metformin", "aspirin", "omeprazole", "amlodipine"],
+        current_medications=[
+            "losartan",
+            "metformin",
+            "aspirin",
+            "omeprazole",
+            "amlodipine",
+        ],
         conditions=["diabetes", "hypertension"],
     )
 
@@ -233,7 +239,7 @@ class TestInteractionClassifier:
         result = classifier.classify_interaction(
             description="May increase hypertensive activities",
             drug1="Phenelzine",
-            drug2="Methylphenidate"
+            drug2="Methylphenidate",
         )
         assert result.severity == SeverityLevel.CRITICAL
         assert result.confidence >= 0.95
@@ -243,7 +249,7 @@ class TestInteractionClassifier:
         result = classifier.classify_interaction(
             description="May increase QT prolongation risk",
             drug1="Amiodarone",
-            drug2="Erythromycin"
+            drug2="Erythromycin",
         )
         assert result.severity == SeverityLevel.CRITICAL
 
@@ -252,7 +258,7 @@ class TestInteractionClassifier:
         result = classifier.classify_interaction(
             description="May decrease the cardiotoxic activities of Drug B",
             drug1="DrugA",
-            drug2="DrugB"
+            drug2="DrugB",
         )
         assert result.severity == SeverityLevel.LOW
 
@@ -261,7 +267,7 @@ class TestInteractionClassifier:
         result = classifier.classify_interaction(
             description="The metabolism of Drug B can be increased when combined with Drug A",
             drug1="DrugA",
-            drug2="DrugB"
+            drug2="DrugB",
         )
         assert result.severity == SeverityLevel.MEDIUM
 
@@ -270,16 +276,14 @@ class TestInteractionClassifier:
         result = classifier.classify_interaction(
             description="The serum concentration of Drug B can be increased when combined with Drug A",
             drug1="DrugA",
-            drug2="DrugB"
+            drug2="DrugB",
         )
         assert result.severity == SeverityLevel.HIGH
 
     def test_adjust_for_pregnant_teratogen(self, classifier):
         """Test severity adjustment for teratogenic drug in pregnancy"""
         result = classifier.classify_interaction(
-            description="Some interaction",
-            drug1="Warfarin",
-            drug2="OtherDrug"
+            description="Some interaction", drug1="Warfarin", drug2="OtherDrug"
         )
 
         patient_context = {
@@ -287,7 +291,9 @@ class TestInteractionClassifier:
             "age": 28,
         }
 
-        adjusted = classifier.adjust_for_patient_context(result, "Warfarin", patient_context)
+        adjusted = classifier.adjust_for_patient_context(
+            result, "Warfarin", patient_context
+        )
         # Comportamento atual: eleva para HIGH (não CRITICAL) para fator pregnancy_teratogen
         assert adjusted.severity == SeverityLevel.HIGH
         assert adjusted.severity_modified is True
@@ -296,9 +302,7 @@ class TestInteractionClassifier:
     def test_adjust_for_pediatric_contraindication(self, classifier):
         """Test severity adjustment for contraindicated drug in pediatrics"""
         result = classifier.classify_interaction(
-            description="Some interaction",
-            drug1="Aspirin",
-            drug2="OtherDrug"
+            description="Some interaction", drug1="Aspirin", drug2="OtherDrug"
         )
 
         patient_context = {
@@ -306,7 +310,9 @@ class TestInteractionClassifier:
             "pregnant": False,
         }
 
-        adjusted = classifier.adjust_for_patient_context(result, "Aspirin", patient_context)
+        adjusted = classifier.adjust_for_patient_context(
+            result, "Aspirin", patient_context
+        )
         assert adjusted.severity in [SeverityLevel.HIGH, SeverityLevel.CRITICAL]
         assert adjusted.severity_modified is True
         assert "pediatric_contraindication" in adjusted.patient_risk_factors
@@ -314,9 +320,7 @@ class TestInteractionClassifier:
     def test_adjust_for_elderly_beers_list(self, classifier):
         """Test severity adjustment for Beers list drug in elderly"""
         result = classifier.classify_interaction(
-            description="Some interaction",
-            drug1="Diazepam",
-            drug2="OtherDrug"
+            description="Some interaction", drug1="Diazepam", drug2="OtherDrug"
         )
 
         patient_context = {
@@ -325,16 +329,19 @@ class TestInteractionClassifier:
             "current_medications": ["drug1", "drug2", "drug3", "drug4", "drug5"],
         }
 
-        adjusted = classifier.adjust_for_patient_context(result, "Diazepam", patient_context)
+        adjusted = classifier.adjust_for_patient_context(
+            result, "Diazepam", patient_context
+        )
         assert adjusted.severity_modified is True
-        assert "geriatric_high_risk" in adjusted.patient_risk_factors or "geriatric_polypharmacy" in adjusted.patient_risk_factors
+        assert (
+            "geriatric_high_risk" in adjusted.patient_risk_factors
+            or "geriatric_polypharmacy" in adjusted.patient_risk_factors
+        )
 
     def test_adjust_for_renal_impairment(self, classifier):
         """Test severity adjustment for nephrotoxic drug with renal impairment"""
         result = classifier.classify_interaction(
-            description="Some interaction",
-            drug1="Metformin",
-            drug2="OtherDrug"
+            description="Some interaction", drug1="Metformin", drug2="OtherDrug"
         )
 
         patient_context = {
@@ -343,7 +350,9 @@ class TestInteractionClassifier:
             "gfr": 25,  # Severe renal impairment
         }
 
-        adjusted = classifier.adjust_for_patient_context(result, "Metformin", patient_context)
+        adjusted = classifier.adjust_for_patient_context(
+            result, "Metformin", patient_context
+        )
         assert adjusted.severity in [SeverityLevel.HIGH, SeverityLevel.CRITICAL]
         assert adjusted.severity_modified is True
         assert "renal_impairment_nephrotoxic" in adjusted.patient_risk_factors
@@ -354,7 +363,7 @@ class TestInteractionClassifier:
             description="May increase hypertensive activities",
             drug1="Phenelzine",
             drug2="Methylphenidate",
-            patient_context={"age": 30, "pregnant": False}
+            patient_context={"age": 30, "pregnant": False},
         )
         assert result.severity == SeverityLevel.CRITICAL
 
@@ -374,7 +383,7 @@ class TestRulesEngine:
             confidence=0.95,
             interactions=[],
             patient_context=elderly_patient,
-            drug_name="TestDrug"
+            drug_name="TestDrug",
         )
         assert needs_escalation is True
         assert any("CRITICA" in r.upper() for r in reasons)
@@ -386,24 +395,30 @@ class TestRulesEngine:
             confidence=0.85,
             interactions=[],
             patient_context=pregnant_patient,
-            drug_name="Warfarin"
+            drug_name="Warfarin",
         )
         assert needs_escalation is True
         assert any("teratogen" in r.lower() for r in reasons)
 
-    def test_check_escalation_geriatric_polypharmacy(self, rules_engine, elderly_patient):
+    def test_check_escalation_geriatric_polypharmacy(
+        self, rules_engine, elderly_patient
+    ):
         """Test escalation for geriatric polypharmacy"""
         needs_escalation, reasons = rules_engine.check_escalation_needed(
             severity="medium",
             confidence=0.85,
             interactions=[],
             patient_context=elderly_patient,
-            drug_name="TestDrug"
+            drug_name="TestDrug",
         )
         assert needs_escalation is True
-        assert any("polifarmacia" in r.lower() or "polypharmacy" in r.lower() for r in reasons)
+        assert any(
+            "polifarmacia" in r.lower() or "polypharmacy" in r.lower() for r in reasons
+        )
 
-    def test_check_escalation_multiple_high_interactions(self, rules_engine, elderly_patient):
+    def test_check_escalation_multiple_high_interactions(
+        self, rules_engine, elderly_patient
+    ):
         """Test escalation for multiple high-risk interactions"""
         interactions = [
             {"drug1": "A", "drug2": "B", "severity": "high"},
@@ -414,49 +429,60 @@ class TestRulesEngine:
             confidence=0.85,
             interactions=interactions,
             patient_context=elderly_patient,
-            drug_name="TestDrug"
+            drug_name="TestDrug",
         )
         assert needs_escalation is True
 
-    def test_check_escalation_low_confidence_high_risk(self, rules_engine, elderly_patient):
+    def test_check_escalation_low_confidence_high_risk(
+        self, rules_engine, elderly_patient
+    ):
         """Test escalation for low confidence with high risk"""
         needs_escalation, reasons = rules_engine.check_escalation_needed(
             severity="high",
             confidence=0.5,  # Low confidence
             interactions=[],
             patient_context=elderly_patient,
-            drug_name="TestDrug"
+            drug_name="TestDrug",
         )
         assert needs_escalation is True
-        assert any("confianca" in r.lower() or "confidence" in r.lower() for r in reasons)
+        assert any(
+            "confianca" in r.lower() or "confidence" in r.lower() for r in reasons
+        )
 
-    def test_generate_structured_recommendations_critical(self, rules_engine, elderly_patient):
+    def test_generate_structured_recommendations_critical(
+        self, rules_engine, elderly_patient
+    ):
         """Test structured recommendations for critical severity"""
         recs = rules_engine.generate_structured_recommendations(
             severity="critical",
             category="Cardiovascular",
             interactions=[{"drug1": "A", "drug2": "B", "severity": "critical"}],
             contraindications=[],
-            patient_context=elderly_patient
+            patient_context=elderly_patient,
         )
 
         assert "CRITICO" in recs["header"].upper()
         assert len(recs["immediate_actions"]) > 0
         assert len(recs["monitoring_required"]) > 0
 
-    def test_generate_structured_recommendations_cardiovascular(self, rules_engine, elderly_patient):
+    def test_generate_structured_recommendations_cardiovascular(
+        self, rules_engine, elderly_patient
+    ):
         """Test structured recommendations include cardiovascular specifics"""
         recs = rules_engine.generate_structured_recommendations(
             severity="high",
             category="Cardiovascular",
             interactions=[],
             contraindications=[],
-            patient_context=elderly_patient
+            patient_context=elderly_patient,
         )
 
         # Should include cardiovascular-specific labs
         all_labs = " ".join(recs["laboratory_tests"]).lower()
-        assert "eletrolitos" in all_labs or "ecg" in " ".join(recs["monitoring_required"]).lower()
+        assert (
+            "eletrolitos" in all_labs
+            or "ecg" in " ".join(recs["monitoring_required"]).lower()
+        )
 
 
 # =============================================================================
@@ -483,7 +509,7 @@ class TestIntegration:
             description="May increase hypertensive activities",
             drug1="Phenelzine",
             drug2="Ritalina",
-            patient_context=patient_context
+            patient_context=patient_context,
         )
 
         assert result.severity == SeverityLevel.CRITICAL
@@ -503,7 +529,7 @@ class TestIntegration:
             confidence=result.confidence,
             interactions=[],
             patient_context=patient_ctx,
-            drug_name="Ritalina"
+            drug_name="Ritalina",
         )
 
         assert needs_escalation is True
@@ -514,12 +540,14 @@ class TestIntegration:
             category=result.clinical_category,
             interactions=[],
             contraindications=[],
-            patient_context=patient_ctx
+            patient_context=patient_ctx,
         )
 
         assert "NAO ADMINISTRAR" in " ".join(recs["immediate_actions"])
 
-    def test_full_workflow_warfarin_elderly(self, classifier, rules_engine, elderly_patient):
+    def test_full_workflow_warfarin_elderly(
+        self, classifier, rules_engine, elderly_patient
+    ):
         """Test full workflow for Warfarin in elderly patient"""
         # Step 1: Classify
         result = classifier.classify_with_patient_context(
@@ -531,7 +559,7 @@ class TestIntegration:
                 "pregnant": elderly_patient.pregnant,
                 "gfr": elderly_patient.gfr,
                 "current_medications": elderly_patient.current_medications,
-            }
+            },
         )
 
         # Should be at least HIGH due to bleeding risk + elderly
@@ -541,14 +569,18 @@ class TestIntegration:
         needs_escalation, reasons = rules_engine.check_escalation_needed(
             severity=result.severity.value,
             confidence=result.confidence,
-            interactions=[{"drug1": "Warfarin", "drug2": "Aspirin", "severity": "high"}],
+            interactions=[
+                {"drug1": "Warfarin", "drug2": "Aspirin", "severity": "high"}
+            ],
             patient_context=elderly_patient,
-            drug_name="Warfarin"
+            drug_name="Warfarin",
         )
 
         assert needs_escalation is True
 
-    def test_full_workflow_metformin_renal(self, classifier, rules_engine, renal_impaired_patient):
+    def test_full_workflow_metformin_renal(
+        self, classifier, rules_engine, renal_impaired_patient
+    ):
         """Test full workflow for Metformin in patient with renal impairment"""
         patient_dict = {
             "age": renal_impaired_patient.age,
@@ -562,7 +594,7 @@ class TestIntegration:
             description="Some interaction",
             drug1="Metformin",
             drug2="Furosemide",
-            patient_context=patient_dict
+            patient_context=patient_dict,
         )
 
         # Should be elevated due to renal impairment + metformin
@@ -575,7 +607,7 @@ class TestIntegration:
             confidence=result.confidence,
             interactions=[],
             patient_context=renal_impaired_patient,
-            drug_name="Metformin"
+            drug_name="Metformin",
         )
 
         # Comportamento atual: não escala automaticamente neste cenário

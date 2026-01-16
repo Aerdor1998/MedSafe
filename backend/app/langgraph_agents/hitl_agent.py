@@ -11,9 +11,9 @@ RESPONSIBILITIES:
 4. Handle approval/rejection workflows
 """
 
-from typing import Dict, Any, Optional
-from datetime import datetime
 import logging
+from datetime import datetime
+from typing import Any, Dict, Optional
 
 from .base_agent import BaseAgent
 from .state import MedSafeState
@@ -111,7 +111,9 @@ the safety concerns and make an informed decision.
             self.log_step(state, f"Review package prepared in {duration:.2f}s")
 
             logger.info(f" HITLAgent: Review package prepared")
-            logger.info(f"   Escalation reasons: {', '.join(state.get('escalation_reasons', []))}")
+            logger.info(
+                f"   Escalation reasons: {', '.join(state.get('escalation_reasons', []))}"
+            )
             logger.info(f"   Awaiting physician decision...")
 
             return updates
@@ -136,9 +138,11 @@ the safety concerns and make an informed decision.
             "executive_summary": summary,
             # Key metrics
             "metrics": {
-                "risk_level": state.get("risk_level", "unknown").value
-                if hasattr(state.get("risk_level"), "value")
-                else state.get("risk_level", "unknown"),
+                "risk_level": (
+                    state.get("risk_level", "unknown").value
+                    if hasattr(state.get("risk_level"), "value")
+                    else state.get("risk_level", "unknown")
+                ),
                 "confidence_score": state.get("confidence_score", 0.0),
                 "interactions_count": len(state.get("interactions", [])),
                 "contraindications_count": len(state.get("contraindications", [])),
@@ -160,7 +164,9 @@ the safety concerns and make an informed decision.
                 "medication": state.get("medication_text", "Unknown"),
                 "age": state.get("patient_data", {}).get("age"),
                 "conditions": state.get("patient_data", {}).get("conditions", []),
-                "current_medications": state.get("patient_data", {}).get("current_medications", []),
+                "current_medications": state.get("patient_data", {}).get(
+                    "current_medications", []
+                ),
                 "allergies": state.get("patient_data", {}).get("allergies", []),
             },
         }
@@ -181,7 +187,9 @@ the safety concerns and make an informed decision.
         # Build context
         context = {
             "Medication": medication,
-            "Risk Level": risk_level.value if hasattr(risk_level, "value") else str(risk_level),
+            "Risk Level": (
+                risk_level.value if hasattr(risk_level, "value") else str(risk_level)
+            ),
             "Interactions": len(interactions),
             "Contraindications": len(contraindications),
             "Confidence": f"{state.get('confidence_score', 0.0):.1%}",
@@ -194,7 +202,9 @@ the safety concerns and make an informed decision.
                 critical_findings.append(item.get("description", "Unknown")[:100])
 
         findings_text = (
-            "\n".join(f"- {f}" for f in critical_findings[:3]) if critical_findings else "No critical findings"
+            "\n".join(f"- {f}" for f in critical_findings[:3])
+            if critical_findings
+            else "No critical findings"
         )
 
         prompt = f"""Generate a concise executive summary for a physician reviewing this case:
@@ -232,7 +242,9 @@ Be direct and action-oriented."""
         physician_notes = human_feedback.get("notes", "")
         modifications = human_feedback.get("modifications", {})
 
-        logger.info(f" HITLAgent: Physician decision = {'APPROVED' if approved else 'REJECTED'}")
+        logger.info(
+            f" HITLAgent: Physician decision = {'APPROVED' if approved else 'REJECTED'}"
+        )
         if physician_notes:
             logger.info(f"   Notes: {physician_notes[:100]}")
 
@@ -246,7 +258,9 @@ Be direct and action-oriented."""
         if modifications:
             if "risk_level" in modifications:
                 updates["risk_level"] = modifications["risk_level"]
-                logger.info(f"   Physician modified risk level to: {modifications['risk_level']}")
+                logger.info(
+                    f"   Physician modified risk level to: {modifications['risk_level']}"
+                )
 
             if "dosage_adjustments" in modifications:
                 updates["dosage_adjustments"] = modifications["dosage_adjustments"]
@@ -270,10 +284,15 @@ Be direct and action-oriented."""
 
         # Calculate HITL duration
         if state.get("timestamps", {}).get("hitl_started"):
-            hitl_duration = (datetime.now() - state["timestamps"]["hitl_started"]).total_seconds()
+            hitl_duration = (
+                datetime.now() - state["timestamps"]["hitl_started"]
+            ).total_seconds()
             logger.info(f"   HITL review duration: {hitl_duration:.1f}s")
 
-        self.log_step(state, f"Physician feedback processed: {'APPROVED' if approved else 'REJECTED'}")
+        self.log_step(
+            state,
+            f"Physician feedback processed: {'APPROVED' if approved else 'REJECTED'}",
+        )
 
         return updates
 

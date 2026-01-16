@@ -9,25 +9,29 @@ SKILLS APLICADAS:
 - CODE-REVIEW-EXCELLENCE: Documentação e rastreabilidade
 """
 
+import asyncio
 import csv
 import logging
-from pathlib import Path
-from typing import List, Dict, Any, Optional
-from functools import lru_cache
 import re
-import asyncio
 from difflib import SequenceMatcher
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from .clinical_rules import CRITICAL_INTERACTIONS
-from .openfda_service import OpenFDAService
-from .drug_identifier import get_drug_identifier, HybridDrugIdentifier, IdentificationMethod
 from ..db.database import get_db_context
 from ..db.models import DrugInteraction
+from .clinical_rules import CRITICAL_INTERACTIONS
+from .drug_identifier import (
+    HybridDrugIdentifier,
+    IdentificationMethod,
+    get_drug_identifier,
+)
 
 # Import do agente especializado em classificação
 # SKILL: API-DESIGN-PRINCIPLES - Separação correta de responsabilidades
 # Movido de agents/ para services/ para evitar circular import
-from .interaction_classifier import get_classifier_agent, SeverityLevel
+from .interaction_classifier import SeverityLevel, get_classifier_agent
+from .openfda_service import OpenFDAService
 
 logger = logging.getLogger(__name__)
 
@@ -393,14 +397,18 @@ class DrugInteractionService:
     }
 
     def __init__(self, llm_client=None):
-        self.db_path = Path(__file__).parent.parent.parent.parent / "data" / "db_drug_interactions.csv"
+        self.db_path = (
+            Path(__file__).parent.parent.parent.parent
+            / "data"
+            / "db_drug_interactions.csv"
+        )
         self._interactions_cache = None
         self.classifier_agent = get_classifier_agent()  # Agente especializado
         self.openfda_service = OpenFDAService()
-        
+
         # NOVO: Identificador híbrido (regex + fuzzy + LLM)
         self.drug_identifier = get_drug_identifier(llm_client=llm_client)
-        
+
         logger.info(f"DrugInteractionService inicializado - Base: {self.db_path}")
         logger.info(f"🤖 InteractionClassifierAgent integrado")
         logger.info(f"🔬 HybridDrugIdentifier integrado (regex + fuzzy + LLM)")
@@ -420,7 +428,9 @@ class DrugInteractionService:
         Interações são buscadas sob demanda via find_interactions()
         """
         try:
-            logger.info("📚 Base de interações pronta para busca sob demanda (lazy loading)")
+            logger.info(
+                "📚 Base de interações pronta para busca sob demanda (lazy loading)"
+            )
             # Não carregar tudo na memória - apenas indexar o arquivo
             self._interactions_cache = {}  # Cache vazio inicialmente
 
@@ -429,7 +439,9 @@ class DrugInteractionService:
                 return
 
             logger.info(f"Arquivo de interações disponível: {self.db_path}")
-            logger.info("   Interações serão buscadas sob demanda para economizar memória")
+            logger.info(
+                "   Interações serão buscadas sob demanda para economizar memória"
+            )
 
         except Exception as e:
             logger.error(f"Erro ao verificar base de interações: {e}")
@@ -438,31 +450,33 @@ class DrugInteractionService:
     def _normalize_drug_name(self, name: str) -> str:
         """
         Normalizar nome do medicamento para busca usando identificador híbrido
-        
+
         REFATORADO: Agora usa HybridDrugIdentifier que combina:
         1. Exact match no dicionário
         2. Regex patterns para variações
         3. Fuzzy matching para erros de digitação
         4. LLM inference como fallback (se disponível)
-        
+
         SKILL: ULTRATHINK - Abordagem híbrida elegante
         """
         if not name:
             return ""
-        
+
         # Usar identificador híbrido
         identification = self.drug_identifier.identify(name)
-        
+
         # Log do método usado
         if identification.method != IdentificationMethod.NOT_FOUND:
             logger.debug(
                 f"   🔄 Identificado '{name}' → '{identification.canonical_name}' "
                 f"via {identification.method.value} (confiança: {identification.confidence:.2f})"
             )
-        
+
         return identification.canonical_name
 
-    def _classify_severity(self, description: str, drug1: str = "", drug2: str = "") -> str:
+    def _classify_severity(
+        self, description: str, drug1: str = "", drug2: str = ""
+    ) -> str:
         """
         Classificar severidade da interação baseado na descrição
 
@@ -485,10 +499,14 @@ class DrugInteractionService:
 
         # Validar decisões críticas com Reflection Pattern
         if result.severity == SeverityLevel.CRITICAL:
-            result = self.classifier_agent.validate_critical_decision(result, description)
+            result = self.classifier_agent.validate_critical_decision(
+                result, description
+            )
 
         # Log detalhado para auditoria
-        logger.debug(f"   Severidade: {result.severity.value} (confiança: {result.confidence:.2f})")
+        logger.debug(
+            f"   Severidade: {result.severity.value} (confiança: {result.confidence:.2f})"
+        )
         logger.debug(f"   Raciocínio: {result.reasoning}")
 
         return result.severity.value
@@ -501,9 +519,17 @@ class DrugInteractionService:
             return "Cardiovascular"
         elif "hepatotoxic" in description_lower or "liver" in description_lower:
             return "Hepática"
-        elif "nephrotoxic" in description_lower or "renal" in description_lower or "kidney" in description_lower:
+        elif (
+            "nephrotoxic" in description_lower
+            or "renal" in description_lower
+            or "kidney" in description_lower
+        ):
             return "Renal"
-        elif "neurotoxic" in description_lower or "cns" in description_lower or "sedation" in description_lower:
+        elif (
+            "neurotoxic" in description_lower
+            or "cns" in description_lower
+            or "sedation" in description_lower
+        ):
             return "Neurológica"
         elif "photosensitiz" in description_lower:
             return "Fotossensibilidade"
@@ -514,7 +540,9 @@ class DrugInteractionService:
         else:
             return "Farmacológica"
 
-    def find_interactions(self, drug_name: str, other_drugs: List[str]) -> List[Dict[str, Any]]:
+    def find_interactions(
+        self, drug_name: str, other_drugs: List[str]
+    ) -> List[Dict[str, Any]]:
         """
         Buscar interações entre um medicamento e uma lista de outros
         OTIMIZADO: Pre-normaliza medicamentos e usa filtro rápido antes de normalização completa
@@ -539,7 +567,9 @@ class DrugInteractionService:
         search_drugs = {drug_normalized} | set(other_normalized_map.values())
 
         # LGPD/PHI: avoid logging medication names in plaintext
-        logger.info("Buscando interações (other_meds_count=%s)", len(other_normalized_map))
+        logger.info(
+            "Buscando interações (other_meds_count=%s)", len(other_normalized_map)
+        )
 
         if not other_normalized_map:
             logger.info("   No other medications to check for interactions")
@@ -547,7 +577,9 @@ class DrugInteractionService:
 
         # 0) Fast path: DB lookup (if drug_interactions table is populated)
         try:
-            db_results = self._find_interactions_db(drug_normalized, other_normalized_map)
+            db_results = self._find_interactions_db(
+                drug_normalized, other_normalized_map
+            )
             if db_results:
                 logger.info(f"DB interactions found: {len(db_results)}")
                 return db_results
@@ -587,9 +619,13 @@ class DrugInteractionService:
                     # Check if interaction involves our drugs
                     for other_drug, other_norm in other_normalized_map.items():
                         # Match bidirecional
-                        if (drug_normalized == drug1_normalized and other_norm == drug2_normalized) or \
-                           (drug_normalized == drug2_normalized and other_norm == drug1_normalized):
-
+                        if (
+                            drug_normalized == drug1_normalized
+                            and other_norm == drug2_normalized
+                        ) or (
+                            drug_normalized == drug2_normalized
+                            and other_norm == drug1_normalized
+                        ):
                             interaction_data = {
                                 "drug1": row["Drug 1"],
                                 "drug2": row["Drug 2"],
@@ -597,23 +633,31 @@ class DrugInteractionService:
                                 "severity": self._classify_severity(
                                     row["Interaction Description"],
                                     row["Drug 1"],
-                                    row["Drug 2"]
+                                    row["Drug 2"],
                                 ),
-                                "category": self._classify_category(row["Interaction Description"]),
+                                "category": self._classify_category(
+                                    row["Interaction Description"]
+                                ),
                             }
 
                             interactions.append(interaction_data)
-                            logger.info(f"   Interação encontrada: {drug_name} + {other_drug} ({interaction_data['severity']})")
+                            logger.info(
+                                f"   Interação encontrada: {drug_name} + {other_drug} ({interaction_data['severity']})"
+                            )
                             break  # Found interaction, next row
 
-                logger.info(f"Total de interações encontradas: {len(interactions)} (escaneadas {rows_scanned}, verificadas {rows_checked})")
+                logger.info(
+                    f"Total de interações encontradas: {len(interactions)} (escaneadas {rows_scanned}, verificadas {rows_checked})"
+                )
 
         except Exception as e:
             logger.error(f"Erro ao buscar interações: {e}")
 
         return interactions
 
-    def _find_interactions_db(self, drug_norm: str, other_map: Dict[str, str]) -> List[Dict[str, Any]]:
+    def _find_interactions_db(
+        self, drug_norm: str, other_map: Dict[str, str]
+    ) -> List[Dict[str, Any]]:
         """
         Lookup interactions by canonical pairs in Postgres.
 
@@ -645,7 +689,8 @@ class DrugInteractionService:
                         "drug1": drug_norm,
                         "drug2": other_norm,
                         "description": desc,
-                        "severity": row.severity or self._classify_severity(desc, drug_norm, other_norm),
+                        "severity": row.severity
+                        or self._classify_severity(desc, drug_norm, other_norm),
                         "category": row.interaction_type or "DrugInteractionDB",
                         "source": row.source or "db",
                     }
@@ -676,7 +721,9 @@ class DrugInteractionService:
 
         return self._check_known_clinical_rules(drug_name, other_drugs)
 
-    async def _query_openfda(self, drug_name: str, other_drugs: List[str]) -> List[Dict[str, Any]]:
+    async def _query_openfda(
+        self, drug_name: str, other_drugs: List[str]
+    ) -> List[Dict[str, Any]]:
         """
         Consulta OpenFDA para validar interações com base em bulas/labels.
         """
@@ -692,7 +739,12 @@ class DrugInteractionService:
         # Consolidar texto relevante
         label_sections = []
         if label:
-            for key in ["drug_interactions", "drug_interactions_table", "warnings", "warnings_and_cautions"]:
+            for key in [
+                "drug_interactions",
+                "drug_interactions_table",
+                "warnings",
+                "warnings_and_cautions",
+            ]:
                 value = label.get(key)
                 if isinstance(value, list):
                     label_sections.extend(value)
@@ -723,7 +775,9 @@ class DrugInteractionService:
 
         return interactions
 
-    async def find_interactions_openfda(self, drug_name: str, other_drugs: List[str]) -> List[Dict[str, Any]]:
+    async def find_interactions_openfda(
+        self, drug_name: str, other_drugs: List[str]
+    ) -> List[Dict[str, Any]]:
         """Consulta OpenFDA independentemente do CSV para validação."""
         try:
             return await self._query_openfda(drug_name, other_drugs)
@@ -731,7 +785,9 @@ class DrugInteractionService:
             logger.warning(f"OpenFDA validation failed: {e}")
             return []
 
-    def _check_known_clinical_rules(self, drug_name: str, other_drugs: List[str]) -> List[Dict[str, Any]]:
+    def _check_known_clinical_rules(
+        self, drug_name: str, other_drugs: List[str]
+    ) -> List[Dict[str, Any]]:
         """
         Última camada: regras clínicas críticas conhecidas
         """
@@ -749,7 +805,9 @@ class DrugInteractionService:
                         {
                             "drug1": drug_name,
                             "drug2": other,
-                            "description": data.get("effect", "Interação clínica conhecida"),
+                            "description": data.get(
+                                "effect", "Interação clínica conhecida"
+                            ),
                             "severity": data.get("severity", "high"),
                             "category": data.get("category", "ClinicalRule"),
                             "mechanism": data.get("mechanism"),
@@ -782,7 +840,10 @@ class DrugInteractionService:
         # Verificar alergias
         for allergy in allergies:
             allergy_normalized = self._normalize_drug_name(allergy)
-            if allergy_normalized in drug_normalized or drug_normalized in allergy_normalized:
+            if (
+                allergy_normalized in drug_normalized
+                or drug_normalized in allergy_normalized
+            ):
                 contraindications.append(
                     {
                         "type": "Alergia Conhecida",
@@ -794,39 +855,161 @@ class DrugInteractionService:
                 )
 
         # Contraindicações baseadas em condições comuns
-        condition_contraindications = self._get_condition_contraindications(drug_normalized, patient_conditions)
+        condition_contraindications = self._get_condition_contraindications(
+            drug_normalized, patient_conditions
+        )
         contraindications.extend(condition_contraindications)
 
         return contraindications
 
-    def _get_condition_contraindications(self, drug_normalized: str, conditions: List[str]) -> List[Dict[str, Any]]:
+    def _get_condition_contraindications(
+        self, drug_normalized: str, conditions: List[str]
+    ) -> List[Dict[str, Any]]:
         """Contraindicações baseadas em condições médicas"""
         contraindications = []
 
         # Mapa de condições -> medicamentos contraindicados (expandido PT/EN)
         condition_drug_map = {
             # Gravidez
-            "gravidez": ["methotrexate", "isotretinoin", "warfarin", "valproic acid", "atorvastatin", "simvastatin", "rosuvastatin"],
-            "gestação": ["methotrexate", "isotretinoin", "warfarin", "valproic acid", "atorvastatin", "simvastatin", "rosuvastatin"],
-            "pregnant": ["methotrexate", "isotretinoin", "warfarin", "valproic acid", "atorvastatin", "simvastatin", "rosuvastatin"],
-            "grávida": ["methotrexate", "isotretinoin", "warfarin", "valproic acid", "atorvastatin", "simvastatin", "rosuvastatin"],
+            "gravidez": [
+                "methotrexate",
+                "isotretinoin",
+                "warfarin",
+                "valproic acid",
+                "atorvastatin",
+                "simvastatin",
+                "rosuvastatin",
+            ],
+            "gestação": [
+                "methotrexate",
+                "isotretinoin",
+                "warfarin",
+                "valproic acid",
+                "atorvastatin",
+                "simvastatin",
+                "rosuvastatin",
+            ],
+            "pregnant": [
+                "methotrexate",
+                "isotretinoin",
+                "warfarin",
+                "valproic acid",
+                "atorvastatin",
+                "simvastatin",
+                "rosuvastatin",
+            ],
+            "grávida": [
+                "methotrexate",
+                "isotretinoin",
+                "warfarin",
+                "valproic acid",
+                "atorvastatin",
+                "simvastatin",
+                "rosuvastatin",
+            ],
             # Insuficiência Renal
-            "insuficiência renal": ["metformin", "nsaid", "ibuprofen", "diclofenac", "naproxen", "lithium", "spironolactone", "enalapril", "lisinopril"],
-            "renal": ["metformin", "nsaid", "ibuprofen", "diclofenac", "naproxen", "lithium", "spironolactone", "enalapril", "lisinopril"],
-            "kidney": ["metformin", "nsaid", "ibuprofen", "diclofenac", "naproxen", "lithium", "spironolactone", "enalapril", "lisinopril"],
-            "doença renal": ["metformin", "nsaid", "ibuprofen", "diclofenac", "naproxen", "lithium", "spironolactone"],
+            "insuficiência renal": [
+                "metformin",
+                "nsaid",
+                "ibuprofen",
+                "diclofenac",
+                "naproxen",
+                "lithium",
+                "spironolactone",
+                "enalapril",
+                "lisinopril",
+            ],
+            "renal": [
+                "metformin",
+                "nsaid",
+                "ibuprofen",
+                "diclofenac",
+                "naproxen",
+                "lithium",
+                "spironolactone",
+                "enalapril",
+                "lisinopril",
+            ],
+            "kidney": [
+                "metformin",
+                "nsaid",
+                "ibuprofen",
+                "diclofenac",
+                "naproxen",
+                "lithium",
+                "spironolactone",
+                "enalapril",
+                "lisinopril",
+            ],
+            "doença renal": [
+                "metformin",
+                "nsaid",
+                "ibuprofen",
+                "diclofenac",
+                "naproxen",
+                "lithium",
+                "spironolactone",
+            ],
             # Insuficiência Hepática
-            "insuficiência hepática": ["acetaminophen", "paracetamol", "simvastatin", "atorvastatin", "methotrexate"],
-            "liver": ["acetaminophen", "paracetamol", "simvastatin", "atorvastatin", "methotrexate"],
-            "hepática": ["acetaminophen", "paracetamol", "simvastatin", "atorvastatin", "methotrexate"],
-            "cirrose": ["acetaminophen", "paracetamol", "simvastatin", "atorvastatin", "methotrexate"],
+            "insuficiência hepática": [
+                "acetaminophen",
+                "paracetamol",
+                "simvastatin",
+                "atorvastatin",
+                "methotrexate",
+            ],
+            "liver": [
+                "acetaminophen",
+                "paracetamol",
+                "simvastatin",
+                "atorvastatin",
+                "methotrexate",
+            ],
+            "hepática": [
+                "acetaminophen",
+                "paracetamol",
+                "simvastatin",
+                "atorvastatin",
+                "methotrexate",
+            ],
+            "cirrose": [
+                "acetaminophen",
+                "paracetamol",
+                "simvastatin",
+                "atorvastatin",
+                "methotrexate",
+            ],
             # Cardiovascular
-            "insuficiência cardíaca": ["nsaid", "ibuprofen", "diclofenac", "verapamil", "diltiazem"],
-            "heart failure": ["nsaid", "ibuprofen", "diclofenac", "verapamil", "diltiazem"],
+            "insuficiência cardíaca": [
+                "nsaid",
+                "ibuprofen",
+                "diclofenac",
+                "verapamil",
+                "diltiazem",
+            ],
+            "heart failure": [
+                "nsaid",
+                "ibuprofen",
+                "diclofenac",
+                "verapamil",
+                "diltiazem",
+            ],
             "cardíaca": ["nsaid", "ibuprofen", "diclofenac"],
             # Hipercalemia / Potássio alto
-            "hipercalemia": ["spironolactone", "enalapril", "losartan", "lisinopril", "potassium"],
-            "hyperkalemia": ["spironolactone", "enalapril", "losartan", "lisinopril", "potassium"],
+            "hipercalemia": [
+                "spironolactone",
+                "enalapril",
+                "losartan",
+                "lisinopril",
+                "potassium",
+            ],
+            "hyperkalemia": [
+                "spironolactone",
+                "enalapril",
+                "losartan",
+                "lisinopril",
+                "potassium",
+            ],
             "potássio alto": ["spironolactone", "enalapril", "losartan", "lisinopril"],
             # Diabetes
             "diabetes": ["corticosteroid", "prednisone", "dexamethasone"],
@@ -862,7 +1045,9 @@ class DrugInteractionService:
         return contraindications
 
     def calculate_overall_risk(
-        self, interactions: List[Dict[str, Any]], contraindications: List[Dict[str, Any]]
+        self,
+        interactions: List[Dict[str, Any]],
+        contraindications: List[Dict[str, Any]],
     ) -> str:
         """
         Calcular nível de risco geral baseado em interações e contraindicações
@@ -880,25 +1065,39 @@ class DrugInteractionService:
             'critical', 'high', 'medium', 'low'
         """
         logger.info("Calculando risco geral...")
-        logger.info(f"   {len(interactions)} interações, {len(contraindications)} contraindicações")
+        logger.info(
+            f"   {len(interactions)} interações, {len(contraindications)} contraindicações"
+        )
 
         # Contar severidades
-        critical_contraindications = [c for c in contraindications if c.get("severity") == "critical"]
-        critical_interactions = [i for i in interactions if i.get("severity") == "critical"]
+        critical_contraindications = [
+            c for c in contraindications if c.get("severity") == "critical"
+        ]
+        critical_interactions = [
+            i for i in interactions if i.get("severity") == "critical"
+        ]
 
-        high_contraindications = [c for c in contraindications if c.get("severity") == "high"]
+        high_contraindications = [
+            c for c in contraindications if c.get("severity") == "high"
+        ]
         high_interactions = [i for i in interactions if i.get("severity") == "high"]
 
-        medium_contraindications = [c for c in contraindications if c.get("severity") == "medium"]
+        medium_contraindications = [
+            c for c in contraindications if c.get("severity") == "medium"
+        ]
         medium_interactions = [i for i in interactions if i.get("severity") == "medium"]
 
         # 1. Se há contraindicações ou interações CRÍTICAS → CRITICAL
         if critical_contraindications or critical_interactions:
             logger.warning(f"🔴 RISCO CRÍTICO identificado:")
             if critical_contraindications:
-                logger.warning(f"   - {len(critical_contraindications)} contraindicação(ões) crítica(s)")
+                logger.warning(
+                    f"   - {len(critical_contraindications)} contraindicação(ões) crítica(s)"
+                )
             if critical_interactions:
-                logger.warning(f"   - {len(critical_interactions)} interação(ões) crítica(s)")
+                logger.warning(
+                    f"   - {len(critical_interactions)} interação(ões) crítica(s)"
+                )
             return "critical"
 
         # 2. Se há pelo menos 1 HIGH → HIGH
@@ -906,9 +1105,13 @@ class DrugInteractionService:
         if high_count >= 1:
             logger.warning(f"🟠 RISCO ALTO identificado:")
             if high_contraindications:
-                logger.warning(f"   - {len(high_contraindications)} contraindicação(ões) de alto risco")
+                logger.warning(
+                    f"   - {len(high_contraindications)} contraindicação(ões) de alto risco"
+                )
             if high_interactions:
-                logger.warning(f"   - {len(high_interactions)} interação(ões) de alto risco")
+                logger.warning(
+                    f"   - {len(high_interactions)} interação(ões) de alto risco"
+                )
             return "high"
 
         # 3. Se há pelo menos 1 MEDIUM → MEDIUM
@@ -916,9 +1119,13 @@ class DrugInteractionService:
         if medium_count >= 1:
             logger.info(f"🟡 RISCO MODERADO identificado:")
             if medium_contraindications:
-                logger.info(f"   - {len(medium_contraindications)} contraindicação(ões) moderada(s)")
+                logger.info(
+                    f"   - {len(medium_contraindications)} contraindicação(ões) moderada(s)"
+                )
             if medium_interactions:
-                logger.info(f"   - {len(medium_interactions)} interação(ões) moderada(s)")
+                logger.info(
+                    f"   - {len(medium_interactions)} interação(ões) moderada(s)"
+                )
             return "medium"
 
         # 4. Sem interações significativas → LOW

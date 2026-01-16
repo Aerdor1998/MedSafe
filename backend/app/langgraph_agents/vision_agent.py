@@ -14,18 +14,19 @@ RESPONSIBILITIES:
 INTEGRATION: Works alongside DocumentAgent for hybrid evidence retrieval
 """
 
-from typing import Dict, Any, Optional
-from datetime import datetime
-import logging
 import base64
 import json
+import logging
 import uuid
-import httpx
+from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, Optional
 
+import httpx
+
+from ..config import settings
 from .base_agent import BaseAgent
 from .state import MedSafeState
-from ..config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -267,7 +268,10 @@ Respond with valid JSON only."""
             }
 
             # Log API call
-            logger.info(f"Calling Ollama VLM: {self.vision_model}, " f"temp={self.vision_temperature}")
+            logger.info(
+                f"Calling Ollama VLM: {self.vision_model}, "
+                f"temp={self.vision_temperature}"
+            )
 
             # Synchronous HTTP call (httpx)
             import httpx
@@ -276,7 +280,9 @@ Respond with valid JSON only."""
                 response = client.post(self.ollama_vision_url, json=payload)
 
                 if response.status_code != 200:
-                    raise Exception(f"Ollama VLM API error: {response.status_code} - {response.text}")
+                    raise Exception(
+                        f"Ollama VLM API error: {response.status_code} - {response.text}"
+                    )
 
                 return response.json()
 
@@ -381,7 +387,9 @@ Respond with valid JSON only."""
                 # Average section confidences
                 section_confidences = [s.get("confidence", 0.5) for s in sections]
                 if section_confidences:
-                    confidence += 0.2 * (sum(section_confidences) / len(section_confidences))
+                    confidence += 0.2 * (
+                        sum(section_confidences) / len(section_confidences)
+                    )
 
             # Strength and form
             if parsed_data.get("strength"):

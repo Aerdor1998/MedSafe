@@ -5,12 +5,21 @@ PATTERN: Metrics collection and export for observability
 SKILLS: @prometheus-configuration, @grafana-dashboards, @api-design-principles
 """
 
-import time
 import logging
+import time
 from typing import Callable
+
 from fastapi import Request, Response
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    Info,
+    generate_latest,
+)
 from starlette.middleware.base import BaseHTTPMiddleware
-from prometheus_client import Counter, Histogram, Gauge, Info, generate_latest, CONTENT_TYPE_LATEST, CollectorRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -406,12 +415,14 @@ def setup_prometheus():
     PATTERN: Metrics initialization
     """
     # Set application info
-    medsafe_info.info({
-        "version": "2.0.0",
-        "python_version": "3.10",
-        "framework": "FastAPI + LangGraph",
-        "llm_provider": "Ollama",
-        "database": "PostgreSQL + pgvector",
-    })
+    medsafe_info.info(
+        {
+            "version": "2.0.0",
+            "python_version": "3.10",
+            "framework": "FastAPI + LangGraph",
+            "llm_provider": "Ollama",
+            "database": "PostgreSQL + pgvector",
+        }
+    )
 
     logger.info("Prometheus metrics initialized")

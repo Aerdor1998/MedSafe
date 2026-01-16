@@ -10,16 +10,17 @@ SECURITY: Este módulo implementa validações críticas para prevenir:
 Compliance: OWASP File Upload Security
 """
 
-import tempfile
-from pathlib import Path
-from typing import Optional, Tuple, Dict, Any
 import hashlib
 import logging
+import tempfile
 from dataclasses import dataclass
 from enum import Enum
-from fastapi import UploadFile, HTTPException
-from PIL import Image
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
+
 import PyPDF2
+from fastapi import HTTPException, UploadFile
+from PIL import Image
 
 from ..config import settings
 
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 class FileValidationError(Enum):
     """Tipos de erro de validação de arquivo."""
+
     EMPTY_FILE = "empty_file"
     FILE_TOO_LARGE = "file_too_large"
     INVALID_EXTENSION = "invalid_extension"
@@ -43,6 +45,7 @@ class FileValidationError(Enum):
 @dataclass
 class ValidationResult:
     """Resultado da validação de arquivo."""
+
     valid: bool
     mime_type: Optional[str] = None
     error: Optional[FileValidationError] = None
@@ -55,11 +58,11 @@ class ValidationResult:
 MAGIC_BYTES = {
     # JPEG: FFD8FF + variações de marcador APP
     "image/jpeg": [
-        (b"\xff\xd8\xff\xe0", "JFIF"),   # JFIF standard
-        (b"\xff\xd8\xff\xe1", "EXIF"),   # EXIF (câmeras)
-        (b"\xff\xd8\xff\xe2", "ICC"),    # ICC profile
+        (b"\xff\xd8\xff\xe0", "JFIF"),  # JFIF standard
+        (b"\xff\xd8\xff\xe1", "EXIF"),  # EXIF (câmeras)
+        (b"\xff\xd8\xff\xe2", "ICC"),  # ICC profile
         (b"\xff\xd8\xff\xe8", "SPIFF"),  # SPIFF
-        (b"\xff\xd8\xff\xdb", "Raw"),    # Raw JPEG
+        (b"\xff\xd8\xff\xdb", "Raw"),  # Raw JPEG
         (b"\xff\xd8\xff\xee", "Adobe"),  # Adobe
     ],
     # PNG: signature completa
@@ -126,7 +129,7 @@ class SecureFileUpload:
                 detail={
                     "error": "filename_required",
                     "message": "Nome do arquivo é obrigatório",
-                }
+                },
             )
 
         # Remover path traversal
@@ -139,7 +142,7 @@ class SecureFileUpload:
                 detail={
                     "error": "filename_unsafe",
                     "message": "Nome do arquivo contém caracteres não permitidos",
-                }
+                },
             )
 
         # Limitar tamanho do filename
@@ -149,17 +152,20 @@ class SecureFileUpload:
                 detail={
                     "error": "filename_too_long",
                     "message": "Nome do arquivo muito longo (máximo 255 caracteres)",
-                }
+                },
             )
 
         # Permitir apenas caracteres alfanuméricos, ponto e underscore
         import re
+
         safe_name = re.sub(r"[^a-zA-Z0-9._-]", "_", safe_name)
 
         return safe_name
 
     @staticmethod
-    def _detect_mime_by_magic(file_content: bytes) -> Tuple[Optional[str], Optional[str]]:
+    def _detect_mime_by_magic(
+        file_content: bytes,
+    ) -> Tuple[Optional[str], Optional[str]]:
         """
         Detecta MIME type por magic bytes.
 
@@ -204,7 +210,7 @@ class SecureFileUpload:
                 detail={
                     "error": "empty_file",
                     "message": "Arquivo está vazio",
-                }
+                },
             )
 
         # Verificar tamanho
@@ -218,7 +224,7 @@ class SecureFileUpload:
                     "message": f"Arquivo muito grande. Tamanho máximo: {size_mb:.1f}MB",
                     "max_size_bytes": max_size,
                     "file_size_bytes": len(file_content),
-                }
+                },
             )
 
         # Detectar tipo por magic bytes
@@ -231,7 +237,7 @@ class SecureFileUpload:
                     "error": "invalid_magic_bytes",
                     "message": "Tipo de arquivo não reconhecido. Permitidos: JPEG, PNG, PDF",
                     "hint": "Verifique se o arquivo não está corrompido",
-                }
+                },
             )
 
         if mime_type not in SecureFileUpload.ALLOWED_MIME_TYPES:
@@ -241,7 +247,7 @@ class SecureFileUpload:
                     "error": "unsupported_type",
                     "message": f"Tipo de arquivo não suportado: {mime_type}",
                     "allowed_types": list(SecureFileUpload.ALLOWED_MIME_TYPES),
-                }
+                },
             )
 
         logger.debug(f"File type validated: {mime_type} ({variant})")
@@ -267,7 +273,7 @@ class SecureFileUpload:
                 detail={
                     "error": "missing_extension",
                     "message": "Arquivo deve ter uma extensão válida",
-                }
+                },
             )
 
         ext = "." + filename.rsplit(".", 1)[-1].lower()
@@ -280,7 +286,7 @@ class SecureFileUpload:
                     "error": "invalid_extension",
                     "message": f"Extensão '{ext}' não permitida",
                     "allowed_extensions": list(allowed),
-                }
+                },
             )
 
         return ext
@@ -333,7 +339,9 @@ class SecureFileUpload:
             raise HTTPException(400, f"Invalid PDF file: {str(e)}")
 
     @staticmethod
-    async def save_upload_file(file: UploadFile, destination_dir: Optional[Path] = None) -> Path:
+    async def save_upload_file(
+        file: UploadFile, destination_dir: Optional[Path] = None
+    ) -> Path:
         """
         Salva arquivo de upload de forma segura
 

@@ -17,7 +17,9 @@ def _required_env(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "test-secret-key-minimum-32-characters-long")
     monkeypatch.setenv("JWT_SECRET", "test-jwt-secret-minimum-32-characters-long")
     monkeypatch.setenv("POSTGRES_PASSWORD", "test_password")
-    monkeypatch.setenv("DATABASE_URL", "postgresql://medsafe:test_password@localhost:5432/medsafe")
+    monkeypatch.setenv(
+        "DATABASE_URL", "postgresql://medsafe:test_password@localhost:5432/medsafe"
+    )
 
 
 @dataclass
@@ -138,7 +140,12 @@ def _patched_orchestrator(monkeypatch):
     monkeypatch.setattr(mod, "AnalysisJob", _AnalysisJob, raising=True)
 
     # Minimal langgraph settings
-    monkeypatch.setattr(mod, "get_langgraph_settings", lambda: type("S", (), {"effective_model_name": "model-x"})(), raising=True)
+    monkeypatch.setattr(
+        mod,
+        "get_langgraph_settings",
+        lambda: type("S", (), {"effective_model_name": "model-x"})(),
+        raising=True,
+    )
 
     return mod, fake_db
 
@@ -156,7 +163,12 @@ async def test_create_triage_persists_and_merges_meds(_patched_orchestrator):
     mod, fake_db = _patched_orchestrator
     orch = mod.AnalysisOrchestrator()
     triage_id = await orch.create_triage(
-        {"age": 30, "current_medications": ["Warfarin"], "conditions": ["HTN"], "allergies": []},
+        {
+            "age": 30,
+            "current_medications": ["Warfarin"],
+            "conditions": ["HTN"],
+            "allergies": [],
+        },
         "Aspirin",
         user_id="u1",
         notes="n",
@@ -170,13 +182,19 @@ async def test_create_triage_persists_and_merges_meds(_patched_orchestrator):
 
 
 @pytest.mark.asyncio
-async def test_run_analysis_calls_graph_with_thread_id_and_model_override(_patched_orchestrator, monkeypatch):
+async def test_run_analysis_calls_graph_with_thread_id_and_model_override(
+    _patched_orchestrator, monkeypatch
+):
     mod, _db = _patched_orchestrator
-    fake_graph = _FakeGraph({"risk_level": "low", "interactions": [], "contraindications": []})
+    fake_graph = _FakeGraph(
+        {"risk_level": "low", "interactions": [], "contraindications": []}
+    )
     monkeypatch.setattr(mod, "get_graph", lambda: fake_graph, raising=True)
 
     orch = mod.AnalysisOrchestrator()
-    result = await orch.run_analysis({"age": 10, "meds_in_use": ["A"]}, "B", session_id="s1", model_override="m1")
+    result = await orch.run_analysis(
+        {"age": 10, "meds_in_use": ["A"]}, "B", session_id="s1", model_override="m1"
+    )
     assert result["risk_level"] == "low"
     (initial_state, cfg) = fake_graph.calls[0]
     assert cfg["configurable"]["thread_id"] == "s1"
@@ -199,20 +217,40 @@ def test_format_v2_response_structured_and_enum_risk(_patched_orchestrator):
     assert out["structured_recommendations"]["immediate_actions"] == ["X"]
 
 
-def test_format_legacy_response_includes_highlights_and_model_fallback(_patched_orchestrator, monkeypatch):
+def test_format_legacy_response_includes_highlights_and_model_fallback(
+    _patched_orchestrator, monkeypatch
+):
     mod, _db = _patched_orchestrator
     orch = mod.AnalysisOrchestrator()
 
     # Make accuracy deterministic for assertion
-    monkeypatch.setattr(mod, "compute_accuracy", lambda state, patient: (0.8, ["f1"]), raising=True)
-    monkeypatch.setattr(mod, "build_recommendations_from_state", lambda state: ["Rec 1", "Rec 2"], raising=True)
+    monkeypatch.setattr(
+        mod, "compute_accuracy", lambda state, patient: (0.8, ["f1"]), raising=True
+    )
+    monkeypatch.setattr(
+        mod,
+        "build_recommendations_from_state",
+        lambda state: ["Rec 1", "Rec 2"],
+        raising=True,
+    )
 
-    patient = {"age": 70, "sex": "F", "weight": 60, "current_medications": ["A"], "conditions": ["C"], "allergies": []}
+    patient = {
+        "age": 70,
+        "sex": "F",
+        "weight": 60,
+        "current_medications": ["A"],
+        "conditions": ["C"],
+        "allergies": [],
+    }
     result = {
         "session_id": "s1",
         "risk_level": _EnumLike("critical"),
-        "interactions": [{"severity": "high", "drug1": "A", "drug2": "B", "description": "desc"}],
-        "contraindications": [{"severity": "critical", "type": "x", "description": "y"}],
+        "interactions": [
+            {"severity": "high", "drug1": "A", "drug2": "B", "description": "desc"}
+        ],
+        "contraindications": [
+            {"severity": "critical", "type": "x", "description": "y"}
+        ],
         "confidence_score": 0.9,
         "status": "completed",
     }
@@ -225,12 +263,16 @@ def test_format_legacy_response_includes_highlights_and_model_fallback(_patched_
 
 
 @pytest.mark.asyncio
-async def test_create_and_update_job_and_save_report_updates_triage_status(_patched_orchestrator):
+async def test_create_and_update_job_and_save_report_updates_triage_status(
+    _patched_orchestrator,
+):
     mod, fake_db = _patched_orchestrator
     orch = mod.AnalysisOrchestrator()
 
     # create triage to be updated by save_report
-    triage_id = await orch.create_triage({"age": 30, "current_medications": []}, "A", save_to_db=True)
+    triage_id = await orch.create_triage(
+        {"age": 30, "current_medications": []}, "A", save_to_db=True
+    )
 
     job_id = await orch.create_analysis_job(
         session_id="sess",
@@ -249,10 +291,11 @@ async def test_create_and_update_job_and_save_report_updates_triage_status(_patc
     assert job.retries == 1
 
     # report: requires_human_review -> triage status awaiting_review and is_final False
-    report_id = await orch.save_report(triage_id, {"risk_level": "high", "requires_human_review": True})
+    report_id = await orch.save_report(
+        triage_id, {"risk_level": "high", "requires_human_review": True}
+    )
     assert report_id == "id-3"
     triage = next(x for x in fake_db.items if isinstance(x, _Triage))
     assert triage.status == "awaiting_review"
     report = next(x for x in fake_db.items if isinstance(x, _Report))
     assert report.is_final is False
-

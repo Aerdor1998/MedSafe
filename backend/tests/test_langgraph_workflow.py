@@ -5,4 +5,6 @@ Coberto por testes E2E/integração autenticada.
 
 import pytest
 
-pytestmark = pytest.mark.skip(reason="Workflow v2 exige JWT e infraestrutura; cobrir em e2e/autenticado.")
+pytestmark = pytest.mark.skip(
+    reason="Workflow v2 exige JWT e infraestrutura; cobrir em e2e/autenticado."
+)

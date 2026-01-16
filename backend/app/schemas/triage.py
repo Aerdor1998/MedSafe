@@ -2,9 +2,11 @@
 Schemas para triagem de pacientes
 """
 
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from pydantic import Field, validator
-from .base import BaseSchema, TimestampSchema, IDSchema
+
+from .base import BaseSchema, IDSchema, TimestampSchema
 
 
 class TriageCreate(BaseSchema):
@@ -19,13 +21,17 @@ class TriageCreate(BaseSchema):
     cid_codes: List[str] = Field(default=[], description="Códigos CID das comorbidades")
 
     # Medicamentos em uso
-    meds_in_use: List[Dict[str, Any]] = Field(default=[], description="Lista de medicamentos em uso")
+    meds_in_use: List[Dict[str, Any]] = Field(
+        default=[], description="Lista de medicamentos em uso"
+    )
 
     # Alergias
     allergies: List[str] = Field(default=[], description="Lista de alergias")
 
     # Função renal e hepática
-    renal_function: Optional[Dict[str, Any]] = Field(None, description="Dados da função renal (TFG, creatinina, etc.)")
+    renal_function: Optional[Dict[str, Any]] = Field(
+        None, description="Dados da função renal (TFG, creatinina, etc.)"
+    )
     hepatic_function: Optional[Dict[str, Any]] = Field(
         None, description="Dados da função hepática (ALT, AST, bilirrubina, etc.)"
     )
@@ -70,16 +76,26 @@ class TriageReport(BaseSchema):
     risk_level: str = Field(..., description="Nível de risco (baixo, médio, alto)")
 
     # Resultados da análise
-    contraindications: List[Dict[str, Any]] = Field(default=[], description="Lista de contraindicações encontradas")
+    contraindications: List[Dict[str, Any]] = Field(
+        default=[], description="Lista de contraindicações encontradas"
+    )
 
-    interactions: List[Dict[str, Any]] = Field(default=[], description="Lista de interações medicamentosas")
+    interactions: List[Dict[str, Any]] = Field(
+        default=[], description="Lista de interações medicamentosas"
+    )
 
-    dosage_adjustments: List[Dict[str, Any]] = Field(default=[], description="Ajustes de posologia recomendados")
+    dosage_adjustments: List[Dict[str, Any]] = Field(
+        default=[], description="Ajustes de posologia recomendados"
+    )
 
-    adverse_reactions: List[Dict[str, Any]] = Field(default=[], description="Reações adversas identificadas")
+    adverse_reactions: List[Dict[str, Any]] = Field(
+        default=[], description="Reações adversas identificadas"
+    )
 
     # Evidências e citações
-    evidence_links: List[Dict[str, Any]] = Field(default=[], description="Links para evidências e fontes")
+    evidence_links: List[Dict[str, Any]] = Field(
+        default=[], description="Links para evidências e fontes"
+    )
 
     # Metadados
     analysis_timestamp: str = Field(..., description="Timestamp da análise")

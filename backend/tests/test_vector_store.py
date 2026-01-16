@@ -2,7 +2,6 @@ import types
 
 import pytest
 
-
 from backend.app.db import vector_store as vs
 
 
@@ -18,8 +17,13 @@ def test_score_to_relevance_thresholds():
 def test_reciprocal_rank_fusion_combines_lists():
     store = vs.MedicalVectorStore.__new__(vs.MedicalVectorStore)
     semantic = [{"content": "A", "metadata": {}, "score": 0.9, "relevance": "HIGH"}]
-    keyword = [{"content": "B", "metadata": {}, "score": 0.9, "relevance": "HIGH"}, {"content": "A", "metadata": {}, "score": 0.1, "relevance": "LOW"}]
-    combined = store._reciprocal_rank_fusion(semantic, keyword, semantic_weight=0.7, k=10)
+    keyword = [
+        {"content": "B", "metadata": {}, "score": 0.9, "relevance": "HIGH"},
+        {"content": "A", "metadata": {}, "score": 0.1, "relevance": "LOW"},
+    ]
+    combined = store._reciprocal_rank_fusion(
+        semantic, keyword, semantic_weight=0.7, k=10
+    )
     assert {c["content"] for c in combined} == {"A", "B"}
     assert all("relevance" in c for c in combined)
 

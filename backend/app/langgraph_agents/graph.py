@@ -35,23 +35,25 @@ WORKFLOW:
   END (Final Report)
 """
 
-from typing import Dict, Any, Literal
-from datetime import datetime
 import logging
+from datetime import datetime
+from typing import Any, Dict, Literal
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
-from .state import MedSafeState
+from .clinical_agent import create_clinical_agent
 from .config import get_settings
-# NOTE: Checkpointer import removed - state is persisted via AnalysisJob table
+from .document_agent import create_document_agent
+from .hitl_agent import create_hitl_agent
+from .reflection_agent import create_reflection_agent
+from .safety_agent import create_safety_agent
+from .state import MedSafeState
 
 # Import all agents
 from .triage_agent import create_triage_agent
-from .document_agent import create_document_agent
-from .clinical_agent import create_clinical_agent
-from .reflection_agent import create_reflection_agent
-from .safety_agent import create_safety_agent
-from .hitl_agent import create_hitl_agent
+
+# NOTE: Checkpointer import removed - state is persisted via AnalysisJob table
+
 
 logger = logging.getLogger(__name__)
 
@@ -100,14 +102,14 @@ def create_medsafe_graph() -> StateGraph:
         """Reflection node: Quality assurance and critique"""
         updates = reflection_agent.process(state)
         merged_state = {**state, **updates}
-        
+
         # Increment refinement_count if refinement is needed
         # This ensures the count is incremented BEFORE the next clinical pass
         if updates.get("needs_refinement", False):
             current_count = state.get("refinement_count", 0)
             merged_state["refinement_count"] = current_count + 1
             logger.info(f"Refinement count incremented to {current_count + 1}")
-        
+
         return merged_state
 
     def safety_node(state: MedSafeState) -> MedSafeState:
@@ -149,7 +151,9 @@ def create_medsafe_graph() -> StateGraph:
         requires_hitl = state.get("requires_human_review", False)
 
         if requires_hitl and settings.enable_hitl:
-            logger.info(f" Escalating to HITL: {', '.join(state.get('escalation_reasons', []))}")
+            logger.info(
+                f" Escalating to HITL: {', '.join(state.get('escalation_reasons', []))}"
+            )
             return "hitl"
         else:
             logger.info("No HITL required - proceeding to finalization")
@@ -167,9 +171,11 @@ def create_medsafe_graph() -> StateGraph:
             "session_id": state.get("session_id"),
             "timestamp": datetime.now().isoformat(),
             "medication": state.get("medication_text"),
-            "risk_level": state.get("risk_level", "unknown").value
-            if hasattr(state.get("risk_level"), "value")
-            else state.get("risk_level", "unknown"),
+            "risk_level": (
+                state.get("risk_level", "unknown").value
+                if hasattr(state.get("risk_level"), "value")
+                else state.get("risk_level", "unknown")
+            ),
             "confidence_score": state.get("confidence_score", 0.0),
             # Findings
             "interactions": state.get("interactions", []),
@@ -180,13 +186,17 @@ def create_medsafe_graph() -> StateGraph:
             # Evidence
             "evidence_links": state.get("evidence_links", []),
             # Quality metrics
-            "critique_level": state.get("critique_level", "unknown").value
-            if hasattr(state.get("critique_level"), "value")
-            else str(state.get("critique_level", "unknown")),
+            "critique_level": (
+                state.get("critique_level", "unknown").value
+                if hasattr(state.get("critique_level"), "value")
+                else str(state.get("critique_level", "unknown"))
+            ),
             "refinement_cycles": state.get("refinement_count", 0),
-            "safety_classification": state.get("safety_classification", "unknown").value
-            if hasattr(state.get("safety_classification"), "value")
-            else str(state.get("safety_classification", "unknown")),
+            "safety_classification": (
+                state.get("safety_classification", "unknown").value
+                if hasattr(state.get("safety_classification"), "value")
+                else str(state.get("safety_classification", "unknown"))
+            ),
             "human_reviewed": state.get("human_approved", False),
             # Metadata
             "agent_steps": state.get("agent_steps", []),
@@ -257,13 +267,17 @@ def create_medsafe_graph() -> StateGraph:
     #
     # For HITL patterns, the interrupt happens via the job status ('awaiting_review')
     # and state is recovered from the database, not from LangGraph's checkpointer.
-    logger.info("   Skipping LangGraph checkpointing (using AnalysisJob table for state)")
+    logger.info(
+        "   Skipping LangGraph checkpointing (using AnalysisJob table for state)"
+    )
 
     # Compile graph WITHOUT checkpointer to support ainvoke()
     logger.info("   Compiling graph...")
     compiled_graph = workflow.compile(
         # No checkpointer - state persisted via AnalysisJob table
-        interrupt_before=["hitl"] if settings.enable_hitl else [],  # Interrupt at HITL for human input
+        interrupt_before=(
+            ["hitl"] if settings.enable_hitl else []
+        ),  # Interrupt at HITL for human input
     )
 
     logger.info("MedSafe LangGraph compiled successfully")
@@ -288,30 +302,30 @@ def get_graph() -> StateGraph:
 
     SKILL: @api-design-principles - Singleton pattern
     SKILL: @python-performance-optimization - Thread-safe initialization
-    
+
     Uses double-checked locking pattern for optimal performance:
     - First check without lock (fast path for already-initialized case)
     - Second check with lock (thread-safe initialization)
     """
     global _graph
-    
+
     # Fast path: already initialized (no lock needed)
     if _graph is not None:
         return _graph
-    
+
     # Slow path: need to initialize (with lock)
     with _graph_lock:
         # Double-check after acquiring lock
         if _graph is None:
             _graph = create_medsafe_graph()
-    
+
     return _graph
 
 
 def reset_graph():
     """
     Reset graph (useful for testing).
-    
+
     Thread-safe reset using the global lock.
     """
     global _graph

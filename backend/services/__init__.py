@@ -13,4 +13,3 @@ try:
     from backend.app.services.openfda_service import OpenFDAService
 except ImportError:
     OpenFDAService = None
-

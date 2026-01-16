@@ -11,13 +11,13 @@ The ReflectionAgent implements the "Observe and Iterate" step:
 - Prevents hallucinations through self-critique
 """
 
-from typing import Dict, Any
-from datetime import datetime
-import logging
 import json
+import logging
+from datetime import datetime
+from typing import Any, Dict
 
 from .base_agent import BaseAgent
-from .state import MedSafeState, CritiqueLevel
+from .state import CritiqueLevel, MedSafeState
 
 logger = logging.getLogger(__name__)
 
@@ -104,14 +104,17 @@ Formato de saída: JSON estruturado com critique_level, issues encontradas e fee
 
             # Update state
             updates = {
-                "reflection_history": state.get("reflection_history", []) + [reflection],
+                "reflection_history": state.get("reflection_history", [])
+                + [reflection],
                 "critique_level": reflection["critique_level"],
                 "needs_refinement": needs_refinement,
                 "feedback": reflection["feedback"],
             }
 
             # Update timestamps
-            timestamps = state.get("timestamps", {}).copy() if state.get("timestamps") else {}
+            timestamps = (
+                state.get("timestamps", {}).copy() if state.get("timestamps") else {}
+            )
             timestamps["reflection_end"] = datetime.now()
             updates["timestamps"] = timestamps
 
@@ -123,9 +126,13 @@ Formato de saída: JSON estruturado com critique_level, issues encontradas e fee
                 f"(refinement: {needs_refinement}) in {duration:.2f}s",
             )
 
-            logger.info(f"ReflectionAgent: Critique level = {reflection['critique_level'].value}")
+            logger.info(
+                f"ReflectionAgent: Critique level = {reflection['critique_level'].value}"
+            )
             if needs_refinement:
-                logger.warning(f"    Refinement needed: {reflection['feedback'][:100]}...")
+                logger.warning(
+                    f"    Refinement needed: {reflection['feedback'][:100]}..."
+                )
             else:
                 logger.info(f"   Analysis approved")
 
@@ -151,8 +158,12 @@ Formato de saída: JSON estruturado com critique_level, issues encontradas e fee
         }
 
         # Build detailed analysis summary
-        interactions_summary = self._summarize_interactions(state.get("interactions", []))
-        contraindications_summary = self._summarize_contraindications(state.get("contraindications", []))
+        interactions_summary = self._summarize_interactions(
+            state.get("interactions", [])
+        )
+        contraindications_summary = self._summarize_contraindications(
+            state.get("contraindications", [])
+        )
 
         # Construct reflection prompt
         prompt = f"""Revise esta análise clínica quanto à precisão e completude:
@@ -231,60 +242,77 @@ Forneça em PORTUGUÊS:
         # Determine critique level - look for explicit critique level markers
         # Be more specific to avoid confusing drug risk level with critique level
         critique_level = CritiqueLevel.PASS  # Default to PASS
-        
+
         # Check for explicit critique level statements
         # These patterns indicate the LLM is specifically critiquing the analysis quality
-        if any(phrase in response_lower for phrase in [
-            "critique level: critical",
-            "critique: critical",
-            "level: critical",
-            "critical issues found",
-            "critical errors",
-            "dangerous errors",
-            "major safety concern"
-        ]):
+        if any(
+            phrase in response_lower
+            for phrase in [
+                "critique level: critical",
+                "critique: critical",
+                "level: critical",
+                "critical issues found",
+                "critical errors",
+                "dangerous errors",
+                "major safety concern",
+            ]
+        ):
             critique_level = CritiqueLevel.CRITICAL
-        elif any(phrase in response_lower for phrase in [
-            "critique level: high",
-            "critique: high", 
-            "significant gaps",
-            "significant issues",
-            "major inaccuracies",
-            "incomplete analysis"
-        ]):
+        elif any(
+            phrase in response_lower
+            for phrase in [
+                "critique level: high",
+                "critique: high",
+                "significant gaps",
+                "significant issues",
+                "major inaccuracies",
+                "incomplete analysis",
+            ]
+        ):
             critique_level = CritiqueLevel.HIGH
-        elif any(phrase in response_lower for phrase in [
-            "critique level: medium",
-            "critique: medium",
-            "minor issues",
-            "some improvements",
-            "could be improved"
-        ]):
+        elif any(
+            phrase in response_lower
+            for phrase in [
+                "critique level: medium",
+                "critique: medium",
+                "minor issues",
+                "some improvements",
+                "could be improved",
+            ]
+        ):
             critique_level = CritiqueLevel.MEDIUM
-        elif any(phrase in response_lower for phrase in [
-            "critique level: low",
-            "critique: low",
-            "minor suggestions",
-            "small enhancements"
-        ]):
+        elif any(
+            phrase in response_lower
+            for phrase in [
+                "critique level: low",
+                "critique: low",
+                "minor suggestions",
+                "small enhancements",
+            ]
+        ):
             critique_level = CritiqueLevel.LOW
-        elif any(phrase in response_lower for phrase in [
-            "critique level: pass",
-            "critique: pass",
-            "analysis is accurate",
-            "analysis is complete",
-            "no issues found",
-            "well-documented",
-            "comprehensive analysis",
-            "accurate and complete",
-            "properly identified"
-        ]):
+        elif any(
+            phrase in response_lower
+            for phrase in [
+                "critique level: pass",
+                "critique: pass",
+                "analysis is accurate",
+                "analysis is complete",
+                "no issues found",
+                "well-documented",
+                "comprehensive analysis",
+                "accurate and complete",
+                "properly identified",
+            ]
+        ):
             critique_level = CritiqueLevel.PASS
 
         # Extract issues (look for numbered lists or bullet points)
         issues = []
         for line in response.split("\n"):
-            if line.strip().startswith(("-", "•", "*")) or any(line.strip().startswith(f"{i}.") for i in range(1, 10)):
+            if line.strip().startswith(("-", "•", "*")) or any(
+                line.strip().startswith(f"{i}.") for i in range(1, 10)
+            ):
                 issue_text = line.strip().lstrip("-•*").lstrip("0123456789.").strip()
                 if issue_text and len(issue_text) > 10:  # Filter out very short entries
                     issues.append(issue_text)
@@ -318,7 +346,9 @@ Forneça em PORTUGUÊS:
                 logger.warning(f"🔴 CRITICAL issues found - refinement required")
                 return True
             else:
-                logger.error(f"🔴 CRITICAL issues remain after {max_refinements} refinement cycles!")
+                logger.error(
+                    f"🔴 CRITICAL issues remain after {max_refinements} refinement cycles!"
+                )
                 return False
 
         # Refine HIGH issues (if cycles remain)
@@ -327,7 +357,9 @@ Forneça em PORTUGUÊS:
                 logger.warning(f"🟠 HIGH severity issues - refinement recommended")
                 return True
             else:
-                logger.warning(f"🟠 HIGH issues remain after {max_refinements} cycles - proceeding")
+                logger.warning(
+                    f"🟠 HIGH issues remain after {max_refinements} cycles - proceeding"
+                )
                 return False
 
         # MEDIUM: refine if early in cycle
