@@ -1,171 +1,79 @@
-# MedSafe - Sistema Inteligente de Contraindicacao de Medicamentos
+# MedSafe — Sistema Inteligente de Contraindicação de Medicamentos
 
-Sistema de analise de contraindicacoes medicamentosas baseado em **Multi-Agent AI System** com LangGraph, Ollama (IA local), PostgreSQL e pgvector.
+> Sistema multi-agente (LangGraph) que analisa prescrições em busca de contraindicações medicamentosas — RAG sobre documentação médica, 191k+ regras de interação, guardrails de segurança e revisão humana (HITL). 100% local-first: a inferência roda em Ollama, sem enviar dados de paciente para APIs externas.
 
 [![CI/CD](https://github.com/Aerdor1998/MedSafe/workflows/MedSafe%20CI%2FCD/badge.svg)](https://github.com/Aerdor1998/MedSafe/actions)
-[![Python](https://img.shields.io/badge/Python-3.10+-blue)]()
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688)]()
-[![LangGraph](https://img.shields.io/badge/LangGraph-0.2.50+-purple)]()
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED)]()
-[![Coverage](https://img.shields.io/badge/Coverage-%E2%89%A560%25-green)]()
+[![Python](https://img.shields.io/badge/Python-3.10+-blue)](https://www.python.org/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-0.2.50+-purple)](https://langchain-ai.github.io/langgraph/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## Funcionalidades
+## Por que existe
 
-- **Multi-Agent AI System** (LangGraph) com 6 agentes especializados
-- **RAG (Retrieval-Augmented Generation)** com documentacao medica
-- **OCR de Prescricoes** com Tesseract + Vision AI
-- **Base de Interacoes** com 191k+ interacoes medicamentosas
-- **Safety Guardrails** com validacao em multiplas camadas
-- **Human-in-the-Loop (HITL)** para aprovacao medica
-- **Reflection Agent** para autocritica e melhoria continua
-- **PostgreSQL + pgvector** para embeddings e busca semantica
+Interações medicamentosas são uma das principais causas evitáveis de eventos adversos em saúde. O MedSafe automatiza a triagem de prescrições cruzando os medicamentos do paciente contra uma base de **191k+ interações conhecidas** e evidências médicas recuperadas via RAG — mas mantém o médico no circuito: nenhum caso crítico é finalizado sem aprovação humana.
+
+## Arquitetura — Multi-Agent System (LangGraph)
+
+```mermaid
+flowchart TD
+    A["TriageAgent<br/>valida entrada · extrai dados do paciente"] --> B["DocumentAgent<br/>RAG: evidências médicas (pgvector)"]
+    B --> C["ClinicalAgent<br/>análise de interações · 191k+ regras"]
+    C --> D["ReflectionAgent<br/>autocrítica e refinamento"]
+    D -- "refina (máx. 3x)" --> C
+    D --> E["SafetyAgent<br/>guardrails de segurança"]
+    E -- "caso crítico" --> F["HITLAgent<br/>revisão médica humana"]
+    E -- "aprovado" --> G["Relatório final"]
+    F --> G
+```
+
+**Decisões de design:**
+
+- **Reflection loop limitado a 3 iterações** — autocrítica melhora a análise clínica, mas precisa de teto para latência previsível.
+- **Human-in-the-loop obrigatório** para casos sinalizados pelo SafetyAgent — IA sugere, médico decide.
+- **LLM local (Ollama / qwen2.5:7b)** — dados de paciente nunca saem da infraestrutura (LGPD by design).
+- **Guardrails em camadas**: validação de entrada → regras clínicas determinísticas → safety agent → HITL.
+
+## Stack
+
+| Componente | Tecnologia |
+|------------|-----------|
+| AI Framework | LangGraph 0.2.50+ (6 agentes especializados) |
+| LLM | Ollama · qwen2.5:7b (inferência local) |
+| RAG / Embeddings | PostgreSQL 16 + pgvector |
+| Backend | FastAPI 0.115+ · Pydantic |
+| OCR de prescrições | Tesseract + Vision AI |
+| Cache / Filas | Redis 7 |
+| Observabilidade | Prometheus + Grafana |
+| Auth | JWT + RBAC |
 
 ## Quick Start
 
-### Usando Docker (Recomendado)
-
 ```bash
-# 1. Clonar repositorio
-git clone https://github.com/Aerdor1998/MedSafe.git
-cd MedSafe
-
-# 2. Configurar variaveis de ambiente
+git clone https://github.com/Aerdor1998/MedSafe.git && cd MedSafe
 cp env.example .env
-
-# 3. Iniciar todos os servicos
 ./scripts/medsafe-full-start.sh
-
-# 4. Verificar status
-./scripts/docker-status.sh
 ```
 
-**Endpoints:**
-- **API**: http://localhost:9001
-- **API Docs**: http://localhost:9001/docs
-- **Health Check**: http://localhost:9001/healthz
-- **Prometheus**: http://localhost:9090
-- **Grafana**: http://localhost:3001
+| Endpoint | URL |
+|----------|-----|
+| API | http://localhost:9001 |
+| API Docs (Swagger) | http://localhost:9001/docs |
+| Health Check | http://localhost:9001/healthz |
+| Prometheus | http://localhost:9090 |
+| Grafana | http://localhost:3001 |
 
-### Desenvolvimento Local
+<details>
+<summary><strong>Desenvolvimento local (sem Docker completo)</strong></summary>
 
 ```bash
-# 1. Criar ambiente virtual
-python3 -m venv .venv
-source .venv/bin/activate
-
-# 2. Instalar dependencias
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-
-# 3. Iniciar servicos necessarios
 docker-compose up -d db redis
-
-# 4. Iniciar aplicacao
 uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 9001
 ```
 
-## Arquitetura
+</details>
 
-### Multi-Agent System (LangGraph)
-
-```
-START
-  |
-  v
-+------------------+
-|   TriageAgent    |  <- Valida entrada, extrai dados do paciente
-+------------------+
-  |
-  v
-+------------------+
-|  DocumentAgent   |  <- RAG: busca evidencias medicas
-+------------------+
-  |
-  v
-+------------------+
-|  ClinicalAgent   |  <- Analisa interacoes (191k+ regras)
-+------------------+
-  |
-  v
-+------------------+     +------------------+
-| ReflectionAgent  | <-> |  ClinicalAgent   |  <- Loop de refinamento (max 3x)
-+------------------+     +------------------+
-  |
-  v
-+------------------+
-|   SafetyAgent    |  <- Guardrails de seguranca
-+------------------+
-  |
-  +---> requires_hitl? --YES--> +------------------+
-  |                             |    HITLAgent     |  <- Revisao medica humana
-  |                             +------------------+
-  |                                      |
-  +---> NO                               |
-  |                                      |
-  v                                      v
-+------------------+
-|    Finalize      |  <- Gera relatorio final
-+------------------+
-  |
-  v
- END
-```
-
-### Stack Tecnologico
-
-| Componente | Tecnologia | Versao |
-|------------|-----------|--------|
-| **Backend** | FastAPI | 0.115+ |
-| **AI Framework** | LangGraph | 0.2.50+ |
-| **LLM Local** | Ollama | qwen2.5:7b |
-| **Database** | PostgreSQL + pgvector | 16+ |
-| **Cache** | Redis | 7+ |
-| **Observability** | Prometheus + Grafana | - |
-
-### Estrutura do Projeto
-
-```
-MedSafe/
-├── backend/
-│   ├── app/
-│   │   ├── main.py                 # FastAPI entry point
-│   │   ├── config.py               # Configuracoes (Pydantic Settings)
-│   │   ├── langgraph_agents/       # LangGraph Agents
-│   │   │   ├── graph.py            # StateGraph workflow
-│   │   │   ├── state.py            # Shared state
-│   │   │   ├── base_agent.py       # Base class
-│   │   │   ├── triage_agent.py     # Orchestrator
-│   │   │   ├── document_agent.py   # RAG
-│   │   │   ├── clinical_agent.py   # Clinical rules
-│   │   │   ├── reflection_agent.py # Self-critique
-│   │   │   ├── safety_agent.py     # Safety guardrails
-│   │   │   └── hitl_agent.py       # Human-in-the-loop
-│   │   ├── routers/                # API routes
-│   │   ├── services/               # Business logic
-│   │   ├── db/                     # Database layer
-│   │   ├── auth/                   # Authentication (JWT + RBAC)
-│   │   ├── middleware/             # HTTP middleware
-│   │   ├── workers/                # Background workers
-│   │   ├── utils/                  # Utilities
-│   │   └── schemas/                # Pydantic models
-│   └── tests/                      # Unit & integration tests
-├── frontend/                       # SPA (HTML5 + Three.js)
-├── alembic/                        # Database migrations
-├── data/                           # Drug interactions CSV (191k+)
-├── scripts/                        # Scripts utilitarios
-├── infra/                          # Infrastructure configs
-│   ├── prometheus/                 # Monitoring
-│   └── monitoring/grafana/         # Dashboards
-├── tests/e2e/                      # End-to-end tests
-├── docker-compose.yml              # Development
-├── docker-compose.prod.yml         # Production
-├── Dockerfile                      # Production image
-├── requirements.txt                # Python dependencies
-└── README.md
-```
-
-## API Endpoints
-
-### Analise de Medicamentos
+## Exemplo de uso
 
 ```bash
 POST /api/v2/triage
@@ -181,94 +89,36 @@ Content-Type: application/json
 }
 ```
 
-### LangGraph Workflow
+A resposta inclui interações detectadas, severidade, evidências recuperadas via RAG e flag de revisão humana quando aplicável. Workflow completo via `POST /api/v2/langgraph/analyze`.
 
-```bash
-POST /api/v2/langgraph/analyze
-Content-Type: application/json
+## Estrutura do projeto
 
-{
-  "medications": ["Aspirina", "Warfarina"],
-  "patient_info": {...}
-}
+```
+MedSafe/
+├── backend/app/
+│   ├── langgraph_agents/   # StateGraph + 6 agentes (triage, RAG, clinical, reflection, safety, HITL)
+│   ├── routers/            # API routes
+│   ├── services/           # Lógica de negócio
+│   ├── auth/               # JWT + RBAC
+│   └── db/                 # Camada de dados (PostgreSQL + pgvector)
+├── alembic/                # Migrations versionadas
+├── data/                   # Base de interações (191k+ registros)
+├── infra/                  # Prometheus + Grafana
+└── tests/                  # Unit, integração e E2E
 ```
 
-### Health Check
+## Qualidade e segurança
 
-```bash
-GET /healthz
-GET /readyz
-GET /livez
-GET /metrics
-```
+- **CI (GitHub Actions)**: lint (Black/isort/Flake8) · type-check (MyPy) · testes unitários e de integração (coverage ≥ 60%) · security scan (Bandit, Safety, pip-audit) · build Docker com scan Trivy
+- **Testes**: `pytest backend/tests/ --cov=backend/app`
+- **Segurança**: rate limiting, security headers (CSP/HSTS), sanitização de inputs, logs de auditoria LGPD-compliant
 
-Documentacao completa: http://localhost:9001/docs
+## Limitações conhecidas
 
-## Testes
+- A base de interações cobre os pares mais comuns; combinações raras dependem do RAG e exigem revisão humana.
+- O modelo local (7B) prioriza privacidade sobre capacidade — casos ambíguos são roteados para HITL em vez de respondidos com baixa confiança.
+- Ferramenta de **apoio à decisão**: não substitui avaliação médica.
 
-```bash
-# Todos os testes
-pytest backend/tests/ -v
+## Licença
 
-# Com coverage
-pytest backend/tests/ --cov=backend/app --cov-report=term-missing
-
-# Testes E2E
-pytest tests/e2e/ -v
-```
-
-## Variaveis de Ambiente
-
-Principais variaveis (ver `env.example` para lista completa):
-
-```env
-# API
-DEBUG=false
-PORT=9001
-
-# Database
-DATABASE_URL=postgresql://medsafe:password@db:5432/medsafe
-
-# Redis
-REDIS_URL=redis://redis:6379/0
-
-# Ollama
-OLLAMA_HOST=http://ollama:11434
-OLLAMA_MODEL=qwen2.5:7b
-
-# Security
-SECRET_KEY=your-secret-key-minimum-32-chars
-JWT_SECRET=your-jwt-secret-minimum-32-chars
-```
-
-## Seguranca
-
-- Autenticacao JWT com RBAC
-- Rate limiting (slowapi + Redis)
-- Security headers (CSP, HSTS, X-Frame-Options)
-- Sanitizacao de inputs
-- Logs de auditoria (LGPD compliant)
-- Safety Guardrails em multiplas camadas
-- Human-in-the-Loop para decisoes criticas
-
-## CI/CD
-
-O projeto usa GitHub Actions com os seguintes jobs:
-
-- **Lint**: Black + isort + Flake8 + Bandit
-- **Type Check**: MyPy
-- **Unit Tests**: pytest com coverage >= 60%
-- **Integration Tests**: Testes com PostgreSQL + Redis
-- **Security Scan**: Safety + pip-audit + Bandit
-- **Docker Build**: Build e scan de vulnerabilidades (Trivy)
-- **E2E Tests**: Testes end-to-end (apenas em push para main)
-
-## Licenca
-
-MIT License
-
----
-
-**Versao**: 1.0.0
-**Atualizado**: 16/01/2026
-**Mantido por**: Equipe MedSafe
+[MIT](LICENSE)
