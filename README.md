@@ -1,11 +1,27 @@
-# MedSafe — Sistema Inteligente de Contraindicação de Medicamentos
+<div align="center">
+
+<h1>MedSafe</h1>
+
+<p><strong>Sistema Inteligente de Contraindicação de Medicamentos</strong> — IA multi-agente 100% local, com o médico no circuito.</p>
+
+[![CI/CD](https://img.shields.io/github/actions/workflow/status/Aerdor1998/MedSafe/ci.yml?branch=main&style=for-the-badge&label=CI%2FCD&logo=githubactions&logoColor=white)](https://github.com/Aerdor1998/MedSafe/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-0.2.50+-purple?style=for-the-badge)](https://langchain-ai.github.io/langgraph/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
+
+[Por que existe](#por-que-existe) ·
+[Arquitetura](#arquitetura--multi-agent-system-langgraph) ·
+[Stack](#stack) ·
+[Quick Start](#quick-start) ·
+[Exemplo de uso](#exemplo-de-uso) ·
+[Estrutura](#estrutura-do-projeto) ·
+[Qualidade](#qualidade-e-segurança) ·
+[Limitações](#limitações-conhecidas) ·
+[Licença](#licença)
+
+</div>
 
 > Sistema multi-agente (LangGraph) que analisa prescrições em busca de contraindicações medicamentosas — RAG sobre documentação médica, 191k+ regras de interação, guardrails de segurança e revisão humana (HITL). 100% local-first: a inferência roda em Ollama, sem enviar dados de paciente para APIs externas.
-
-[![CI/CD](https://github.com/Aerdor1998/MedSafe/workflows/MedSafe%20CI%2FCD/badge.svg)](https://github.com/Aerdor1998/MedSafe/actions)
-[![Python](https://img.shields.io/badge/Python-3.10+-blue)](https://www.python.org/)
-[![LangGraph](https://img.shields.io/badge/LangGraph-0.2.50+-purple)](https://langchain-ai.github.io/langgraph/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Por que existe
 
@@ -29,21 +45,30 @@ flowchart TD
 
 - **Reflection loop limitado a 3 iterações** — autocrítica melhora a análise clínica, mas precisa de teto para latência previsível.
 - **Human-in-the-loop obrigatório** para casos sinalizados pelo SafetyAgent — IA sugere, médico decide.
-- **LLM local (Ollama / qwen2.5:7b)** — dados de paciente nunca saem da infraestrutura (LGPD by design).
+- **LLM local (Ollama / qwen3:8b)** — dados de paciente nunca saem da infraestrutura (LGPD by design).
 - **Guardrails em camadas**: validação de entrada → regras clínicas determinísticas → safety agent → HITL.
 
 ## Stack
 
-| Componente | Tecnologia |
-|------------|-----------|
-| AI Framework | LangGraph 0.2.50+ (6 agentes especializados) |
-| LLM | Ollama · qwen2.5:7b (inferência local) |
-| RAG / Embeddings | PostgreSQL 16 + pgvector |
-| Backend | FastAPI 0.115+ · Pydantic |
-| OCR de prescrições | Tesseract + Vision AI |
-| Cache / Filas | Redis 7 |
-| Observabilidade | Prometheus + Grafana |
-| Auth | JWT + RBAC |
+**IA & Agentes** (6 agentes especializados, inferência local)
+
+![LangGraph](https://img.shields.io/badge/LangGraph_0.2.50+-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)
+![Ollama](https://img.shields.io/badge/Ollama_·_qwen3:8b-000000?style=for-the-badge&logo=ollama&logoColor=white)
+![Tesseract](https://img.shields.io/badge/OCR-Tesseract_+_Vision_AI-555555?style=for-the-badge)
+
+**Backend & Dados**
+
+![Python](https://img.shields.io/badge/Python_3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI_0.115+-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![Pydantic](https://img.shields.io/badge/Pydantic-E92063?style=for-the-badge&logo=pydantic&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL_+_pgvector-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis_7-DC382D?style=for-the-badge&logo=redis&logoColor=white)
+
+**Observabilidade & Segurança**
+
+![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=for-the-badge&logo=prometheus&logoColor=white)
+![Grafana](https://img.shields.io/badge/Grafana-F46800?style=for-the-badge&logo=grafana&logoColor=white)
+![JWT](https://img.shields.io/badge/JWT_+_RBAC-000000?style=for-the-badge&logo=jsonwebtokens&logoColor=white)
 
 ## Quick Start
 
@@ -76,47 +101,51 @@ uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 9001
 ## Exemplo de uso
 
 ```bash
-POST /api/v2/triage
+POST /api/v2/analyze
 Content-Type: application/json
 
 {
+  "medication": "Varfarina",
   "patient_data": {
     "age": 65,
     "weight": 70,
-    "conditions": ["diabetes", "hypertension"]
-  },
-  "medications": ["Metformina", "Losartana", "AAS"]
+    "conditions": ["diabetes tipo 2", "hipertensão"],
+    "current_medications": ["Metformina", "Losartana", "AAS"]
+  }
 }
 ```
 
-A resposta inclui interações detectadas, severidade, evidências recuperadas via RAG e flag de revisão humana quando aplicável. Workflow completo via `POST /api/v2/langgraph/analyze`.
+A análise roda de forma assíncrona (rate limit de 10 req/min, com suporte a `Idempotency-Key`): a resposta retorna um `session_id`, e o resultado — interações detectadas, contraindicações, nível de risco e score de confiança — é consultado via `GET /api/v2/status/{session_id}`. Casos críticos ficam pendentes até aprovação médica em `POST /api/v2/hitl/approve`.
 
 ## Estrutura do projeto
 
 ```
 MedSafe/
-├── backend/app/
-│   ├── langgraph_agents/   # StateGraph + 6 agentes (triage, RAG, clinical, reflection, safety, HITL)
-│   ├── routers/            # API routes
-│   ├── services/           # Lógica de negócio
-│   ├── auth/               # JWT + RBAC
-│   └── db/                 # Camada de dados (PostgreSQL + pgvector)
+├── backend/
+│   ├── app/
+│   │   ├── langgraph_agents/   # StateGraph + 6 agentes (triage, RAG, clinical, reflection, safety, HITL)
+│   │   ├── routers/            # API routes
+│   │   ├── services/           # Lógica de negócio
+│   │   ├── auth/               # JWT + RBAC
+│   │   ├── middleware/         # Security headers, rate limit, métricas
+│   │   └── db/                 # Camada de dados (PostgreSQL + pgvector)
+│   └── tests/                  # Testes unitários e de integração
 ├── alembic/                # Migrations versionadas
 ├── data/                   # Base de interações (191k+ registros)
-├── infra/                  # Prometheus + Grafana
-└── tests/                  # Unit, integração e E2E
+├── infra/                  # Prometheus, Grafana, Nginx, Ollama
+└── tests/e2e/              # Testes end-to-end
 ```
 
 ## Qualidade e segurança
 
 - **CI (GitHub Actions)**: lint (Black/isort/Flake8) · type-check (MyPy) · testes unitários e de integração (coverage ≥ 60%) · security scan (Bandit, Safety, pip-audit) · build Docker com scan Trivy
 - **Testes**: `pytest backend/tests/ --cov=backend/app`
-- **Segurança**: rate limiting, security headers (CSP/HSTS), sanitização de inputs, logs de auditoria LGPD-compliant
+- **Segurança**: rate limiting, security headers (CSP/HSTS), validação rigorosa de entrada (Pydantic), logs de auditoria LGPD-compliant
 
 ## Limitações conhecidas
 
 - A base de interações cobre os pares mais comuns; combinações raras dependem do RAG e exigem revisão humana.
-- O modelo local (7B) prioriza privacidade sobre capacidade — casos ambíguos são roteados para HITL em vez de respondidos com baixa confiança.
+- O modelo local (8B) prioriza privacidade sobre capacidade — casos ambíguos são roteados para HITL em vez de respondidos com baixa confiança.
 - Ferramenta de **apoio à decisão**: não substitui avaliação médica.
 
 ## Licença
