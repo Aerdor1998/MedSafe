@@ -13,8 +13,9 @@ The ReflectionAgent implements the "Observe and Iterate" step:
 
 import json
 import logging
+import re
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from .base_agent import BaseAgent
 from .state import CritiqueLevel, MedSafeState
@@ -185,8 +186,10 @@ Avalie criticamente:
 4. Há evidência de alucinação? (Afirmações sem embasamento)
 5. Há lacunas de segurança? (Avisos faltando, recomendações incompletas)
 
-Forneça em PORTUGUÊS:
-- Nível de crítica: CRITICAL, HIGH, MEDIUM, LOW ou PASS
+OBRIGATÓRIO: a PRIMEIRA linha da sua resposta deve ser exatamente
+`CRITIQUE_LEVEL: <NIVEL>` onde <NIVEL> é CRITICAL, HIGH, MEDIUM, LOW ou PASS.
+
+Depois dessa linha, forneça em PORTUGUÊS:
 - Lista de problemas específicos encontrados (se houver)
 - Feedback acionável para refinamento (se necessário)
 """
@@ -231,23 +234,13 @@ Forneça em PORTUGUÊS:
             )
         return "\n".join(summary)
 
-    def _parse_reflection_response(self, response: str) -> Dict[str, Any]:
-        """
-        Parse LLM reflection response into structured format
-
-        SKILL: @ultrathink - Robust parsing with fallbacks
-        """
-        response_lower = response.lower()
-
-        # Determine critique level - look for explicit critique level markers
-        # Be more specific to avoid confusing drug risk level with critique level
-        critique_level = CritiqueLevel.PASS  # Default to PASS
-
-        # Check for explicit critique level statements
-        # These patterns indicate the LLM is specifically critiquing the analysis quality
-        if any(
-            phrase in response_lower
-            for phrase in [
+    # Fallback: frases (PT-BR + EN) que indicam cada nível quando o LLM não
+    # emite a linha CRITIQUE_LEVEL exigida pelo prompt. Ordem importa
+    # (CRITICAL primeiro) — o primeiro nível com match vence.
+    _LEVEL_PHRASES = [
+        (
+            CritiqueLevel.CRITICAL,
+            [
                 "critique level: critical",
                 "critique: critical",
                 "level: critical",
@@ -255,45 +248,60 @@ Forneça em PORTUGUÊS:
                 "critical errors",
                 "dangerous errors",
                 "major safety concern",
-            ]
-        ):
-            critique_level = CritiqueLevel.CRITICAL
-        elif any(
-            phrase in response_lower
-            for phrase in [
+                "nível de crítica: crítico",
+                "nível de crítica: critical",
+                "crítica: crítico",
+                "erros perigosos",
+                "erro perigoso",
+                "problemas críticos",
+            ],
+        ),
+        (
+            CritiqueLevel.HIGH,
+            [
                 "critique level: high",
                 "critique: high",
                 "significant gaps",
                 "significant issues",
                 "major inaccuracies",
                 "incomplete analysis",
-            ]
-        ):
-            critique_level = CritiqueLevel.HIGH
-        elif any(
-            phrase in response_lower
-            for phrase in [
+                "nível de crítica: alto",
+                "nível de crítica: high",
+                "lacunas significativas",
+                "imprecisões significativas",
+                "análise incompleta",
+            ],
+        ),
+        (
+            CritiqueLevel.MEDIUM,
+            [
                 "critique level: medium",
                 "critique: medium",
                 "minor issues",
                 "some improvements",
                 "could be improved",
-            ]
-        ):
-            critique_level = CritiqueLevel.MEDIUM
-        elif any(
-            phrase in response_lower
-            for phrase in [
+                "nível de crítica: médio",
+                "nível de crítica: medium",
+                "problemas menores",
+                "pode ser melhorada",
+                "algumas melhorias",
+            ],
+        ),
+        (
+            CritiqueLevel.LOW,
+            [
                 "critique level: low",
                 "critique: low",
                 "minor suggestions",
                 "small enhancements",
-            ]
-        ):
-            critique_level = CritiqueLevel.LOW
-        elif any(
-            phrase in response_lower
-            for phrase in [
+                "nível de crítica: baixo",
+                "nível de crítica: low",
+                "pequenas sugestões",
+            ],
+        ),
+        (
+            CritiqueLevel.PASS,
+            [
                 "critique level: pass",
                 "critique: pass",
                 "analysis is accurate",
@@ -303,9 +311,48 @@ Forneça em PORTUGUÊS:
                 "comprehensive analysis",
                 "accurate and complete",
                 "properly identified",
-            ]
-        ):
-            critique_level = CritiqueLevel.PASS
+                "nível de crítica: pass",
+                "análise está precisa",
+                "análise está completa",
+                "análise aprovada",
+                "nenhum problema encontrado",
+            ],
+        ),
+    ]
+
+    def _parse_reflection_response(self, response: str) -> Dict[str, Any]:
+        """
+        Parse LLM reflection response into structured format.
+
+        Ordem de resolução do nível de crítica:
+        1. Linha estruturada `CRITIQUE_LEVEL: <NIVEL>` (exigida pelo prompt) —
+           determinística, prevalece sobre o restante do texto.
+        2. Fallback por frases em PT-BR e EN.
+        3. Sem sinal algum → MEDIUM. Uma crítica ilegível NUNCA aprova (PASS)
+           silenciosamente uma análise médica; MEDIUM dispara refinamento nos
+           ciclos iniciais e é limitado por max_reflection_cycles.
+        """
+        response = response or ""
+        response_lower = response.lower()
+
+        critique_level: Optional[CritiqueLevel] = None
+        level_from_tag = False
+
+        # 1) Linha estruturada (fonte primária)
+        tag_match = re.search(
+            r"critique_level\s*[:=]\s*(critical|high|medium|low|pass)",
+            response_lower,
+        )
+        if tag_match:
+            critique_level = CritiqueLevel(tag_match.group(1))
+            level_from_tag = True
+
+        # 2) Fallback por frases (PT-BR + EN)
+        if critique_level is None:
+            for level, phrases in self._LEVEL_PHRASES:
+                if any(phrase in response_lower for phrase in phrases):
+                    critique_level = level
+                    break
 
         # Extract issues (look for numbered lists or bullet points)
         issues = []
@@ -317,9 +364,18 @@ Forneça em PORTUGUÊS:
                 if issue_text and len(issue_text) > 10:  # Filter out very short entries
                     issues.append(issue_text)
 
-        # If we found specific issues but didn't detect a clear critique level,
-        # use MEDIUM as the default since something was flagged
-        if issues and critique_level == CritiqueLevel.PASS:
+        # 3) Default seguro: sem nenhum sinal reconhecido, não aprovar.
+        if critique_level is None:
+            logger.warning(
+                "ReflectionAgent: resposta sem CRITIQUE_LEVEL reconhecível "
+                "(len=%d) — assumindo MEDIUM por segurança",
+                len(response),
+            )
+            critique_level = CritiqueLevel.MEDIUM
+
+        # Issues listados com nível PASS derivado de frases (não do tag
+        # explícito) indicam sinal ambíguo — algo foi apontado, então refinar.
+        if issues and critique_level == CritiqueLevel.PASS and not level_from_tag:
             critique_level = CritiqueLevel.MEDIUM
 
         return {

@@ -279,6 +279,12 @@ class PHIRedactionFilter(logging.Filter):
         if value is None:
             return value
 
+        # Primitivos numéricos/booleanos não contêm PHI e NÃO podem virar
+        # string: %-style logging (ex.: "len=%d") quebraria e a linha de log
+        # seria perdida com "--- Logging error ---".
+        if isinstance(value, (bool, int, float)):
+            return value
+
         if isinstance(value, str):
             return self._redact_string(value)
 
