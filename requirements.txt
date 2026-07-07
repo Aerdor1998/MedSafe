@@ -67,6 +67,8 @@ requests
 Pillow>=10.0.0
 pytesseract
 opencv-python>=4.8.0
+# Rasterização de PDF para o pipeline OCR/VLM (binário embutido, sem poppler)
+pypdfium2>=4.0.0
 
 # ============================================================================
 # AI & ML

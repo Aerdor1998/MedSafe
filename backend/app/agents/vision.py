@@ -20,6 +20,10 @@ from ..db.models import Document
 
 logger = logging.getLogger(__name__)
 
+# Máximo de páginas de PDF rasterizadas e enviadas ao VLM em uma análise
+# (bulas têm o nome/seções principais nas primeiras páginas; limita custo).
+MAX_PDF_PAGES = 3
+
 
 class VisionAgent:
     """Agente para análise de imagem/PDF usando qwen2.5-vl via Ollama"""
@@ -89,7 +93,7 @@ class VisionAgent:
             image_content = await self._prepare_image_content(image_data)
 
             # Chamar Ollama
-            response = await self._call_ollama_vision(prompt, image_content)
+            response = await self._call_ollama_vision(prompt, [image_content])
 
             # Processar resposta
             result = self._parse_vision_response(response, session_id)
@@ -103,17 +107,62 @@ class VisionAgent:
     async def _analyze_pdf(
         self, pdf_data: Dict[str, Any], session_id: str
     ) -> Dict[str, Any]:
-        """Analisar PDF com qwen2.5-vl"""
+        """Analisar PDF: rasteriza as páginas em PNG e envia ao VLM."""
         try:
-            # Para PDFs, converter páginas para imagens
-            # Implementar conversão PDF -> imagem se necessário
+            raw_pdf = self._get_raw_bytes(pdf_data)
+            images = self._pdf_to_images(raw_pdf)
 
-            # Por enquanto, tratar como imagem
-            return await self._analyze_image(pdf_data, session_id)
+            prompt = self._build_vision_prompt()
+            response = await self._call_ollama_vision(prompt, images)
+
+            return self._parse_vision_response(response, session_id)
 
         except Exception as e:
             logger.error(f"Erro na análise de PDF: {e}")
             raise
+
+    def _get_raw_bytes(self, image_data: Dict[str, Any]) -> bytes:
+        """Obter bytes crus do arquivo a partir do dict de entrada."""
+        if image_data.get("image_bytes"):
+            return image_data["image_bytes"]
+        if image_data.get("base64_data"):
+            return base64.b64decode(image_data["base64_data"])
+        if image_data.get("file_path"):
+            with open(image_data["file_path"], "rb") as f:
+                return f.read()
+        raise ValueError("Nenhum dado de arquivo válido encontrado")
+
+    def _pdf_to_images(self, pdf_bytes: bytes) -> List[str]:
+        """
+        Rasterizar até MAX_PDF_PAGES páginas do PDF em PNGs base64.
+
+        Usa pypdfium2 (binário embutido no wheel — sem dependência de
+        sistema como poppler/tesseract).
+        """
+        import pypdfium2 as pdfium
+
+        doc = pdfium.PdfDocument(pdf_bytes)
+        try:
+            total_pages = len(doc)
+            pages_to_render = min(total_pages, MAX_PDF_PAGES)
+            if total_pages > MAX_PDF_PAGES:
+                logger.info(
+                    "PDF com %d páginas; analisando as %d primeiras",
+                    total_pages,
+                    MAX_PDF_PAGES,
+                )
+
+            images: List[str] = []
+            for idx in range(pages_to_render):
+                # scale=2.0 ≈ 144 DPI: legível para o VLM sem estourar payload
+                pil_image = doc[idx].render(scale=2.0).to_pil()
+                buf = io.BytesIO()
+                pil_image.save(buf, format="PNG")
+                images.append(base64.b64encode(buf.getvalue()).decode("utf-8"))
+
+            return images
+        finally:
+            doc.close()
 
     def _build_vision_prompt(self) -> str:
         """Construir prompt para análise de visão"""
@@ -173,14 +222,14 @@ Responda em formato JSON válido com a seguinte estrutura:
             raise
 
     async def _call_ollama_vision(
-        self, prompt: str, image_content: str
+        self, prompt: str, images: List[str]
     ) -> Dict[str, Any]:
-        """Chamar Ollama para análise de visão"""
+        """Chamar Ollama para análise de visão (uma ou mais imagens)"""
         try:
             payload = {
                 "model": self.model,
                 "prompt": prompt,
-                "images": [image_content],
+                "images": images,
                 "stream": False,
                 "options": {"temperature": 0.1, "top_p": 0.9, "num_predict": 2048},
             }
