@@ -177,3 +177,6 @@ secrets.json
 # Ollama models (grandes)
 *.gguf
 models/*.bin
+
+# Relatórios de eval (gerados localmente; golden set fica em git)
+evals/results/

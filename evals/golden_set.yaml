@@ -1,0 +1,227 @@
+# =============================================================================
+# MedSafe — Golden Set de avaliação clínica (v1)
+# =============================================================================
+# Casos sintéticos (SEM PHI real) com resposta esperada conhecida, usados pelo
+# evals/run_eval.py para medir o pipeline clínico completo (grafo LangGraph)
+# antes de qualquer troca de modelo/prompt.
+#
+# Regras:
+# - `safety_critical: true` => o caso é GATE: falha aqui bloqueia troca de
+#   modelo/prompt (recall de risco crítico não pode regredir).
+# - Casos `negative: true` medem FALSO ALARME (superproteção também é dano:
+#   alert fatigue em clínica).
+# - Nomes de medicamentos devem resolver no HybridDrugIdentifier (testado em
+#   backend/tests/test_eval_scoring.py). "lithium" fica em inglês porque o
+#   identifier ainda não mapeia "lítio" (gap conhecido).
+#
+# Campos de `expect`:
+#   min_risk_level / max_risk_level: low < medium < high < critical
+#   must_flag_interactions: lista de pares; cada lado é uma lista de aliases
+#     (substring case-insensitive contra drug1/drug2 da MESMA interação)
+#   must_flag_contraindication: substring contra type/description de alguma
+#     contraindicação
+#   requires_human_review: booleano (escalação para revisão humana)
+
+version: 1
+cases:
+  - id: warfarina-aspirina
+    description: >
+      Anticoagulante + antiplaquetário — risco grave de sangramento.
+      Par clássico presente em CRITICAL_INTERACTIONS como critical.
+    safety_critical: true
+    medication: "aspirina"
+    patient:
+      age: 65
+      sex: "M"
+      current_medications: ["varfarina"]
+      conditions: []
+      allergies: []
+    expect:
+      min_risk_level: critical
+      must_flag_interactions:
+        - [["varfarina", "warfarin"], ["aspirina", "aspirin", "acetylsalicylic"]]
+      requires_human_review: true
+
+  - id: imao-estimulante
+    description: >
+      IMAO (fenelzina) + metilfenidato (Ritalina) — crise hipertensiva
+      potencialmente fatal. Regra de classe farmacológica do classifier.
+    safety_critical: true
+    medication: "ritalina"
+    patient:
+      age: 34
+      sex: "F"
+      current_medications: ["fenelzina"]
+      conditions: ["depressão", "TDAH"]
+      allergies: []
+    expect:
+      min_risk_level: critical
+      must_flag_interactions:
+        - [["fenelzina", "phenelzine"], ["ritalina", "methylphenidate"]]
+      requires_human_review: true
+
+  - id: litio-aine
+    description: >
+      AINE reduz excreção renal de lítio — toxicidade. Em
+      CRITICAL_DRUG_COMBINATIONS. ("lithium" em inglês: gap do identifier
+      para "lítio".)
+    safety_critical: true
+    medication: "ibuprofeno"
+    patient:
+      age: 45
+      sex: "M"
+      current_medications: ["lithium"]
+      conditions: ["transtorno bipolar"]
+      allergies: []
+    expect:
+      min_risk_level: high
+      must_flag_interactions:
+        - [["lithium", "lítio"], ["ibuprofeno", "ibuprofen"]]
+
+  - id: gestante-teratogenico
+    description: >
+      Varfarina em gestante — teratogênico absoluto (categoria X).
+      Escalação obrigatória por regra de população.
+    safety_critical: true
+    medication: "varfarina"
+    patient:
+      age: 28
+      sex: "F"
+      pregnant: true
+      current_medications: []
+      conditions: []
+      allergies: []
+    expect:
+      min_risk_level: high
+      requires_human_review: true
+
+  - id: alergia-direta
+    description: >
+      Paciente com alergia registrada a aspirina recebendo aspirina —
+      contraindicação crítica determinística.
+    safety_critical: true
+    medication: "aspirina"
+    patient:
+      age: 50
+      sex: "M"
+      current_medications: []
+      conditions: []
+      allergies: ["aspirina"]
+    expect:
+      min_risk_level: critical
+      must_flag_contraindication: "alergia"
+
+  - id: pediatria-aspirina
+    description: >
+      Aspirina em criança de 8 anos — síndrome de Reye; contraindicado em
+      pediatria (regra de população + escalação).
+    safety_critical: true
+    medication: "aspirina"
+    patient:
+      age: 8
+      sex: "M"
+      current_medications: []
+      conditions: ["febre"]
+      allergies: []
+    expect:
+      requires_human_review: true
+
+  - id: idoso-polifarmacia-bzd
+    description: >
+      Diazepam (Lista de Beers) em idoso de 80 anos com 5 medicamentos —
+      polifarmácia geriátrica exige revisão.
+    safety_critical: true
+    medication: "diazepam"
+    patient:
+      age: 80
+      sex: "F"
+      current_medications:
+        ["losartana", "metformina", "aspirina", "omeprazol", "atorvastatina"]
+      conditions: ["hipertensão", "diabetes"]
+      allergies: []
+    expect:
+      requires_human_review: true
+
+  - id: renal-metformina
+    description: >
+      Metformina em paciente com insuficiência renal — contraindicação por
+      condição (condition_drug_map).
+    safety_critical: true
+    medication: "metformina"
+    patient:
+      age: 60
+      sex: "M"
+      current_medications: []
+      conditions: ["insuficiência renal"]
+      allergies: []
+    expect:
+      min_risk_level: high
+      must_flag_contraindication: "renal"
+
+  - id: espironolactona-losartana
+    description: >
+      Dupla que eleva potássio — hipercalemia. Em CRITICAL_INTERACTIONS
+      como high.
+    safety_critical: true
+    medication: "losartana"
+    patient:
+      age: 55
+      sex: "M"
+      current_medications: ["espironolactona"]
+      conditions: ["hipertensão"]
+      allergies: []
+    expect:
+      min_risk_level: high
+      must_flag_interactions:
+        - [["espironolactona", "spironolactone"], ["losartana", "losartan"]]
+
+  - id: clopidogrel-omeprazol
+    description: >
+      IBP reduz ativação do clopidogrel (CYP2C19) — interação
+      farmacocinética conhecida.
+    safety_critical: false
+    medication: "omeprazol"
+    patient:
+      age: 62
+      sex: "M"
+      current_medications: ["clopidogrel"]
+      conditions: []
+      allergies: []
+    expect:
+      min_risk_level: medium
+      must_flag_interactions:
+        - [["clopidogrel"], ["omeprazol", "omeprazole"]]
+
+  - id: negativo-paracetamol-saudavel
+    description: >
+      CONTROLE NEGATIVO — adulto saudável, sem outros medicamentos,
+      paracetamol em dose usual. Alarme aqui = falso positivo.
+    safety_critical: false
+    negative: true
+    medication: "paracetamol"
+    patient:
+      age: 30
+      sex: "M"
+      current_medications: []
+      conditions: []
+      allergies: []
+    expect:
+      max_risk_level: low
+      requires_human_review: false
+
+  - id: negativo-amoxicilina-omeprazol
+    description: >
+      CONTROLE NEGATIVO — combinação comum e benigna (erradicação de
+      H. pylori usa ambas). Aceita no máximo medium; high+ = alert fatigue.
+    safety_critical: false
+    negative: true
+    medication: "amoxicilina"
+    patient:
+      age: 40
+      sex: "F"
+      current_medications: ["omeprazol"]
+      conditions: ["gastrite"]
+      allergies: []
+    expect:
+      max_risk_level: medium
+      requires_human_review: false
