@@ -15,12 +15,16 @@ from .config import settings
 from .db.database import init_db
 from .middleware import register_middlewares
 from .middleware.prometheus import metrics_endpoint
+from .utils.error_tracking import setup_error_tracking
 from .utils.logging_config import setup_logging
 
 # Setup structured logging
 log_file = None  # None = console only (Docker-friendly)
 setup_logging(log_level=settings.log_level, log_file=log_file)
 logger = logging.getLogger(__name__)
+
+# Error tracking (no-op sem SENTRY_DSN)
+setup_error_tracking(settings)
 
 
 async def check_services_health():

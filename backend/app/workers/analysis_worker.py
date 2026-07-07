@@ -205,6 +205,11 @@ def _get_claim_function():
 
 
 async def main() -> None:
+    from ..config import settings
+    from ..utils.error_tracking import setup_error_tracking
+
+    setup_error_tracking(settings)
+
     poll_interval = float(os.getenv("MEDSAFE_WORKER_POLL_INTERVAL", "1.0"))
     idle_sleep = max(0.2, min(poll_interval, 10.0))
 

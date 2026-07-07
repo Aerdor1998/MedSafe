@@ -133,6 +133,9 @@ services:
       - RATE_LIMIT_STORAGE=${RATE_LIMIT_STORAGE:-memory://}
       # Cache (optional)
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      # Error tracking (vazio = desabilitado; ver docker-compose.glitchtip.yml)
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE:-0.0}
       # OCR
       - TESSERACT_CMD=/usr/bin/tesseract
       - OCR_LANG=por+eng
@@ -195,6 +198,9 @@ services:
       - OLLAMA_API_KEY=${OLLAMA_API_KEY:-}
       # Cache (optional)
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      # Error tracking (vazio = desabilitado)
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE:-0.0}
       # Feature flags
       - ENABLE_LEGACY_V1=${ENABLE_LEGACY_V1:-true}
       - LEGACY_V1_SUNSET_DATE=${LEGACY_V1_SUNSET_DATE:-2025-03-01}

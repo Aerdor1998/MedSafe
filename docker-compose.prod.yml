@@ -108,6 +108,9 @@ services:
       - METRICS_PORT=9090
       # PERFORMANCE: Use Redis for distributed rate limiting in production
       - RATE_LIMIT_STORAGE=redis://:${REDIS_PASSWORD}@redis:6379/1
+      # Error tracking (vazio = desabilitado; ver docker-compose.glitchtip.yml)
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE:-0.0}
       # Feature flags
       - ENABLE_LEGACY_V1=${ENABLE_LEGACY_V1:-false}
       - LEGACY_V1_SUNSET_DATE=${LEGACY_V1_SUNSET_DATE:-2025-03-01}
@@ -173,6 +176,8 @@ services:
       - ENABLE_METRICS=true
       - METRICS_PORT=9090
       - RATE_LIMIT_STORAGE=redis://:${REDIS_PASSWORD}@redis:6379/1
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE:-0.0}
       - ENABLE_LEGACY_V1=${ENABLE_LEGACY_V1:-false}
       - LEGACY_V1_SUNSET_DATE=${LEGACY_V1_SUNSET_DATE:-2025-03-01}
     volumes:

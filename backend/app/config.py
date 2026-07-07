@@ -153,6 +153,11 @@ class Settings(BaseSettings):
     enable_metrics: bool = True
     metrics_port: int = 9090
 
+    # Error tracking (SDK compatível com Sentry — GlitchTip self-hosted).
+    # Vazio/None = desabilitado. Trocar de backend = trocar o DSN.
+    sentry_dsn: Optional[str] = None
+    sentry_traces_sample_rate: float = 0.0
+
     # ==========================================================================
     # DATA RETENTION & PRIVACY (LGPD Compliance)
     # ==========================================================================
