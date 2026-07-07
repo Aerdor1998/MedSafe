@@ -225,6 +225,14 @@ class HybridDrugIdentifier:
         "metotrexato": "methotrexate",
         "ciclosporina": "cyclosporine",
         "azatioprina": "azathioprine",
+        # ===== ESTABILIZADORES DE HUMOR =====
+        # CSV (DrugBank) usa "Lithium cation" — mapear variantes para a
+        # forma canônica do CSV, senão o lookup exato nunca casa.
+        "lítio": "lithium cation",
+        "litio": "lithium cation",
+        "lithium": "lithium cation",
+        "carbonato de lítio": "lithium cation",
+        "carbolitium": "lithium cation",
         # ===== OUTROS =====
         "alopurinol": "allopurinol",
         "colchicina": "colchicine",

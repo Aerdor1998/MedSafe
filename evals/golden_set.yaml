@@ -62,15 +62,15 @@ cases:
 
   - id: litio-aine
     description: >
-      AINE reduz excreção renal de lítio — toxicidade. Em
-      CRITICAL_DRUG_COMBINATIONS. ("lithium" em inglês: gap do identifier
-      para "lítio".)
+      AINE reduz excreção renal de lítio — toxicidade. CSV (DrugBank)
+      registra como "Lithium cation"; o identifier mapeia lítio/lithium
+      para essa forma canônica.
     safety_critical: true
     medication: "ibuprofeno"
     patient:
       age: 45
       sex: "M"
-      current_medications: ["lithium"]
+      current_medications: ["lítio"]
       conditions: ["transtorno bipolar"]
       allergies: []
     expect:
