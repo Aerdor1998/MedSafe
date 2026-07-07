@@ -38,10 +38,11 @@ def import_interactions():
         conn.commit()
 
     # Ler CSV
-    csv_path = "../../data/db_drug_interactions.csv"
+    csv_path = os.getenv("DRUG_INTERACTIONS_CSV", "../../data/db_drug_interactions.csv")
     if not os.path.exists(csv_path):
-        csv_path = (
-            "/home/lucasmsilva/Documentos/Cursor/MedSafe/data/db_drug_interactions.csv"
+        raise FileNotFoundError(
+            f"CSV de interações não encontrado em '{csv_path}'. "
+            "Defina DRUG_INTERACTIONS_CSV com o caminho correto."
         )
 
     logger.info(f"📁 Lendo CSV: {csv_path}")

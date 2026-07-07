@@ -216,3 +216,63 @@ class TestInteractionsEndpoint:
         )
 
         assert response.status_code in [200, 400, 404, 422, 500]
+
+
+class TestAnalyzeAnonymousAuthGate:
+    """
+    Regression tests for Fix 2: DEBUG must never widen the anonymous-access
+    surface of /api/v2/analyze. Only allow_anonymous_analysis (default False)
+    may permit unauthenticated requests.
+    """
+
+    @pytest.fixture
+    def client(self, app):
+        """Create test client"""
+        return TestClient(app)
+
+    @pytest.fixture
+    def app(self):
+        """Create test app"""
+        from backend.app.routers.langgraph import router
+
+        app = FastAPI()
+        app.include_router(router)
+        return app
+
+    @staticmethod
+    def _valid_payload():
+        return {"medication": "aspirin", "patient_data": {}}
+
+    def test_debug_true_without_allow_anonymous_requires_auth(
+        self, client, monkeypatch
+    ):
+        """debug=True alone must NOT bypass authentication."""
+        import backend.app.routers.langgraph as langgraph_module
+
+        monkeypatch.setattr(langgraph_module.app_settings, "debug", True)
+        monkeypatch.setattr(
+            langgraph_module.app_settings, "allow_anonymous_analysis", False
+        )
+
+        response = client.post("/api/v2/analyze", json=self._valid_payload())
+
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Authentication required"
+
+    def test_allow_anonymous_analysis_true_permits_anonymous_access(
+        self, client, monkeypatch
+    ):
+        """Explicit allow_anonymous_analysis=True still permits anonymous access."""
+        import backend.app.routers.langgraph as langgraph_module
+
+        monkeypatch.setattr(langgraph_module.app_settings, "debug", False)
+        monkeypatch.setattr(
+            langgraph_module.app_settings, "allow_anonymous_analysis", True
+        )
+
+        response = client.post("/api/v2/analyze", json=self._valid_payload())
+
+        # Must not be rejected for lack of authentication. Any downstream
+        # failure (missing DB/orchestrator wiring in this bare-router test
+        # app) is unrelated to the auth gate under test.
+        assert response.status_code != 401

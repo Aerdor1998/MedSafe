@@ -311,9 +311,9 @@ class MedSafeApp {
             this.displayOCRResult(result);
             
             // Auto-fill medication if identified
-            if (result.medication_name) {
-                document.getElementById('medication-search').value = result.medication_name;
-                this.medicationData.name = result.medication_name;
+            if (result.drug_name) {
+                document.getElementById('medication-search').value = result.drug_name;
+                this.medicationData.name = result.drug_name;
             }
 
         } catch (error) {
@@ -357,9 +357,9 @@ class MedSafeApp {
         ocrResult.classList.remove('hidden');
         ocrText.textContent = result.extracted_text || 'Nenhum texto identificado';
 
-        if (result.medication_name) {
+        if (result.drug_name) {
             // SECURITY FIX: Sanitizar dados da API antes de exibir
-            const safeMedName = this.sanitizeText(result.medication_name);
+            const safeMedName = this.sanitizeText(result.drug_name);
             const safeExtractedText = this.sanitizeText(result.extracted_text);
 
             ocrResult.innerHTML = this.sanitizeHtml(`

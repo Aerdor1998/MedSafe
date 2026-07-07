@@ -308,11 +308,11 @@ def _log_retention_action(
     try:
         sql = """
             INSERT INTO audit_logs (
-                id, event_type, severity, actor_id, actor_type,
-                resource_type, details, created_at
+                id, event_type, event_category, severity, user_id,
+                resource_type, action, details, success, created_at
             ) VALUES (
-                gen_random_uuid(), :event_type, 'info', 'system', 'worker',
-                :resource_type, :details, NOW()
+                gen_random_uuid(), :event_type, :event_category, :severity, NULL,
+                :resource_type, :action, :details, TRUE, NOW()
             )
         """
 
@@ -325,18 +325,21 @@ def _log_retention_action(
             "justification": f"Retenção automática após {policy.retention_days} dias",
         }
 
-        import json
-
         db.execute(
             text(sql),
             {
                 "event_type": f"data_retention_{action}",
+                "event_category": "lgpd",
+                "severity": "INFO",
                 "resource_type": table_name,
+                "action": action,
                 "details": json.dumps(details),
             },
         )
     except Exception as e:
-        logger.warning(f"Não foi possível registrar auditoria: {e}")
+        logger.error(
+            f"Falha ao registrar auditoria de retenção LGPD (table={table_name}, action={action}): {e}"
+        )
 
 
 # =============================================================================
@@ -353,8 +356,6 @@ def execute_retention_policy(policy: RetentionPolicy) -> RetentionResult:
     2. Soft delete ou hard delete (conforme política)
     3. Registrar ação no audit_log
     """
-    import time
-
     start_time = time.time()
 
     result = RetentionResult(
@@ -370,36 +371,6 @@ def execute_retention_policy(policy: RetentionPolicy) -> RetentionResult:
         f"Executando retenção para {policy.table_name}: "
         f"cutoff={cutoff_date.isoformat()}, retention={policy.retention_days} dias"
     )
-    # #region agent log
-    try:
-        with open(
-            "/home/lucasmsilva/Documentos/Cursor/MedSafe/.cursor/debug.log",
-            "a",
-            encoding="utf-8",
-        ) as f:
-            f.write(
-                json.dumps(
-                    {
-                        "sessionId": "debug-session",
-                        "runId": "pre-fix",
-                        "hypothesisId": "H10",
-                        "location": "data_retention_worker.py:execute_retention_policy",
-                        "message": "retention policy inputs",
-                        "data": {
-                            "table_name": policy.table_name,
-                            "date_column": policy.date_column,
-                            "soft_delete": policy.soft_delete,
-                            "anonymize_columns_count": len(policy.anonymize_columns),
-                        },
-                        "timestamp": int(time.time() * 1000),
-                    }
-                )
-                + "\n"
-            )
-    except Exception:
-        pass
-    # #endregion agent log
-
     try:
         with get_db_context() as db:
             # 1. Anonimizar colunas sensíveis

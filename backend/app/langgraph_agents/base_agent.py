@@ -59,6 +59,10 @@ class BaseAgent(ABC):
         self.use_cloud = self.settings.is_cloud_model and self.settings.ollama_api_key
         self.cloud_failed = False
 
+        # Timeout is enforced at the underlying ollama.Client/AsyncClient (httpx)
+        # level via client_kwargs, since ChatOllama itself has no timeout kwarg.
+        client_kwargs = {"timeout": self.settings.ollama_timeout}
+
         if self.use_cloud:
             llm_kwargs = {
                 "base_url": self.settings.effective_ollama_url,
@@ -66,6 +70,7 @@ class BaseAgent(ABC):
                 "temperature": self.settings.ollama_temperature,
                 "num_predict": self.settings.ollama_max_tokens,
                 "headers": {"Authorization": f"Bearer {self.settings.ollama_api_key}"},
+                "client_kwargs": client_kwargs,
             }
             logger.info(
                 f"🌐 Primary: cloud model {self.settings.effective_model_name} "
@@ -77,6 +82,7 @@ class BaseAgent(ABC):
                 "model": self.settings.ollama_local_model,
                 "temperature": self.settings.ollama_temperature,
                 "num_predict": self.settings.ollama_max_tokens,
+                "client_kwargs": client_kwargs,
             }
             logger.info(
                 f"🖥️ Using local model: {self.settings.ollama_local_model} "
@@ -92,6 +98,7 @@ class BaseAgent(ABC):
                 model=self.settings.ollama_local_model,
                 temperature=self.settings.ollama_temperature,
                 num_predict=self.settings.ollama_max_tokens,
+                client_kwargs=client_kwargs,
             )
 
         logger.info(

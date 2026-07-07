@@ -4,9 +4,11 @@ Unit tests for BaseAgent
 Tests the abstract base class functionality for all MedSafe agents.
 """
 
+import time
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 
 from backend.app.langgraph_agents.base_agent import BaseAgent
@@ -52,6 +54,36 @@ class TestBaseAgentInit:
     @patch("backend.app.langgraph_agents.base_agent.ChatOllama")
     @patch("backend.app.langgraph_agents.base_agent.get_settings")
     @patch("backend.app.langgraph_agents.base_agent.get_agent_logger")
+    def test_init_local_model_configures_client_timeout(
+        self, mock_logger, mock_settings, mock_ollama
+    ):
+        """
+        Fix 1 regression: ollama_timeout must actually reach ChatOllama, via
+        client_kwargs={"timeout": ...} forwarded to the underlying
+        ollama.Client/AsyncClient (httpx), since ChatOllama itself has no
+        top-level timeout kwarg.
+        """
+        settings = MagicMock()
+        settings.is_cloud_model = False
+        settings.ollama_api_key = None
+        settings.ollama_base_url = "http://localhost:11434"
+        settings.ollama_local_model = "qwen3:8b"
+        settings.ollama_temperature = 0.7
+        settings.ollama_max_tokens = 4096
+        settings.effective_model_name = "qwen3:8b"
+        settings.ollama_timeout = 42
+        mock_settings.return_value = settings
+        mock_logger.return_value = MagicMock()
+        mock_ollama.return_value = MagicMock()
+
+        ConcreteAgent("TestAgent")
+
+        _, kwargs = mock_ollama.call_args
+        assert kwargs.get("client_kwargs") == {"timeout": 42}
+
+    @patch("backend.app.langgraph_agents.base_agent.ChatOllama")
+    @patch("backend.app.langgraph_agents.base_agent.get_settings")
+    @patch("backend.app.langgraph_agents.base_agent.get_agent_logger")
     def test_init_cloud_model(self, mock_logger, mock_settings, mock_ollama):
         """Test initialization with cloud model"""
         settings = MagicMock()
@@ -74,6 +106,34 @@ class TestBaseAgentInit:
         # The agent stores the api key string in use_cloud, so just check it's truthy
         assert agent.use_cloud  # Should be truthy
         assert hasattr(agent, "fallback_llm")
+
+    @patch("backend.app.langgraph_agents.base_agent.ChatOllama")
+    @patch("backend.app.langgraph_agents.base_agent.get_settings")
+    @patch("backend.app.langgraph_agents.base_agent.get_agent_logger")
+    def test_init_cloud_model_configures_client_timeout_on_both_llms(
+        self, mock_logger, mock_settings, mock_ollama
+    ):
+        """Fix 1: both the primary (cloud) and fallback (local) ChatOllama
+        instances must receive the configured client timeout."""
+        settings = MagicMock()
+        settings.is_cloud_model = True
+        settings.ollama_api_key = "test-api-key"
+        settings.effective_ollama_url = "https://api.ollama.com"
+        settings.effective_model_name = "gpt-oss:120b-cloud"
+        settings.ollama_base_url = "http://localhost:11434"
+        settings.ollama_local_model = "qwen3:8b"
+        settings.ollama_temperature = 0.7
+        settings.ollama_max_tokens = 4096
+        settings.ollama_timeout = 17
+        mock_settings.return_value = settings
+        mock_logger.return_value = MagicMock()
+        mock_ollama.return_value = MagicMock()
+
+        ConcreteAgent("TestAgent")
+
+        assert mock_ollama.call_count == 2
+        for call in mock_ollama.call_args_list:
+            assert call.kwargs.get("client_kwargs") == {"timeout": 17}
 
 
 class TestBaseAgentAbstractMethods:
@@ -254,6 +314,61 @@ class TestInvokeLLM:
 
         with pytest.raises(Exception, match="Connection error"):
             agent.invoke_llm("Test message")
+
+    @patch("backend.app.langgraph_agents.base_agent.ChatOllama")
+    @patch("backend.app.langgraph_agents.base_agent.get_settings")
+    @patch("backend.app.langgraph_agents.base_agent.get_agent_logger")
+    def test_invoke_llm_timeout_raises_and_does_not_hang(
+        self, mock_logger, mock_settings, mock_ollama
+    ):
+        """
+        Fix 1 regression: when the Ollama call exceeds the configured
+        timeout (simulated here as the httpx timeout error the ollama
+        client raises), invoke_llm must surface the failure as a normal
+        exception -- not hang -- so callers can route it through
+        handle_error like any other LLM failure.
+        """
+        settings = MagicMock()
+        settings.is_cloud_model = False
+        settings.ollama_api_key = None
+        settings.ollama_base_url = "http://localhost:11434"
+        settings.ollama_local_model = "qwen3:8b"
+        settings.ollama_temperature = 0.7
+        settings.ollama_max_tokens = 4096
+        settings.effective_model_name = "qwen3:8b"
+        settings.warning_execution_time = 30
+        settings.ollama_timeout = 0.2  # small timeout for a fast test
+        mock_settings.return_value = settings
+        mock_logger.return_value = MagicMock()
+
+        mock_llm = MagicMock()
+
+        def _simulate_timeout(*args, **kwargs):
+            # Stand-in for the real httpx.ReadTimeout the ollama client
+            # raises once client_kwargs={"timeout": ...} actually fires.
+            time.sleep(0.05)
+            raise httpx.ReadTimeout("Request timed out")
+
+        mock_llm.invoke.side_effect = _simulate_timeout
+        mock_ollama.return_value = mock_llm
+
+        agent = ConcreteAgent("TestAgent")
+
+        start = time.monotonic()
+        with pytest.raises(httpx.ReadTimeout):
+            agent.invoke_llm("Test message")
+        elapsed = time.monotonic() - start
+
+        # Generous bound to keep the test robust while still proving the
+        # call fails fast instead of hanging indefinitely.
+        assert elapsed < 5.0
+
+        # Existing subclasses wrap invoke_llm calls and route failures to
+        # handle_error -- confirm that hand-off still works for this error.
+        state = {}
+        result = agent.handle_error(state, httpx.ReadTimeout("Request timed out"))
+        assert result["status"] == "error"
+        assert "TestAgent" in result["error"]
 
 
 class TestLogStep:
