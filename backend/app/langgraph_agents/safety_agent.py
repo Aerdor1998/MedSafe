@@ -406,8 +406,11 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
         if age and (age < 18 or age > 75):
             escalation_reasons.append(f"Vulnerable population (age {age})")
 
-        # Return decision
-        requires_hitl = len(escalation_reasons) > 0 and self.settings.enable_hitl
+        # Return decision.
+        # requires_human_review é informação CLÍNICA e independe do toggle
+        # enable_hitl (workflow): o gate de workflow é aplicado no worker
+        # (analysis_worker) e no grafo (should_escalate_to_hitl).
+        requires_hitl = len(escalation_reasons) > 0
 
         return requires_hitl, escalation_reasons
 
