@@ -261,6 +261,53 @@ class TestHITLEvaluation:
     @patch("backend.app.langgraph_agents.base_agent.ChatOllama")
     @patch("backend.app.langgraph_agents.base_agent.get_settings")
     @patch("backend.app.langgraph_agents.base_agent.get_agent_logger")
+    def test_critical_requires_review_even_with_hitl_disabled(
+        self, mock_logger, mock_settings, mock_ollama
+    ):
+        """
+        Regressão (pega pelo golden set eval): requires_human_review é
+        informação CLÍNICA ("este caso precisa de um humano") e não pode
+        ser zerada por enable_hitl=False, que é toggle de WORKFLOW — o
+        gate de workflow já existe no worker (analysis_worker) e no grafo
+        (should_escalate_to_hitl). Risco crítico deve reportar review=True
+        mesmo com o HITL desligado.
+        """
+        settings = MagicMock()
+        settings.is_cloud_model = False
+        settings.ollama_api_key = None
+        settings.ollama_base_url = "http://localhost:11434"
+        settings.ollama_local_model = "qwen3:8b"
+        settings.ollama_temperature = 0.7
+        settings.ollama_max_tokens = 4096
+        settings.effective_model_name = "qwen3:8b"
+        settings.enable_hitl = False  # workflow DESLIGADO
+        settings.auto_escalate_critical = True
+        settings.block_on_critical_violations = True
+        mock_settings.return_value = settings
+        mock_logger.return_value = MagicMock()
+        mock_ollama.return_value = MagicMock()
+
+        from backend.app.langgraph_agents.safety_agent import SafetyAgent
+
+        agent = SafetyAgent()
+        agent.settings = settings
+
+        state = {
+            "risk_level": RiskLevel.CRITICAL,
+            "confidence_score": 0.9,
+            "interactions": [],
+            "contraindications": [],
+        }
+
+        needs_hitl, reasons = agent._evaluate_hitl_need(state, [])
+
+        assert needs_hitl is True
+        assert any("CRITICAL" in r for r in reasons)
+
+    # Removed: optimization mock
+    @patch("backend.app.langgraph_agents.base_agent.ChatOllama")
+    @patch("backend.app.langgraph_agents.base_agent.get_settings")
+    @patch("backend.app.langgraph_agents.base_agent.get_agent_logger")
     def test_evaluate_hitl_need_safe(self, mock_logger, mock_settings, mock_ollama):
         """Test HITL evaluation for safe cases"""
         settings = MagicMock()
