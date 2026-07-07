@@ -96,6 +96,9 @@ lxml
 structlog
 prometheus-client
 python-json-logger
+# Error tracking (SDK compatível com Sentry; backend definido pelo SENTRY_DSN
+# — hoje GlitchTip self-hosted, ver docker-compose.glitchtip.yml)
+sentry-sdk[fastapi]>=2.0.0
 
 # ============================================================================
 # Resilience

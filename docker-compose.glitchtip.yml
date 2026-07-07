@@ -1,0 +1,73 @@
+# Docker Compose - GlitchTip (error tracking self-hosted, compatível com Sentry)
+#
+# Stack separado do app (padrão docker-compose.monitoring.yml): sobe/desce
+# de forma independente e usa Postgres/Valkey próprios para não acoplar ao
+# banco clínico do MedSafe.
+#
+# Uso:
+#   1. Defina no .env:
+#        GLITCHTIP_SECRET_KEY=$(openssl rand -hex 32)
+#        GLITCHTIP_POSTGRES_PASSWORD=$(openssl rand -hex 16)
+#   2. docker compose -f docker-compose.glitchtip.yml up -d
+#   3. Acesse http://localhost:8090, crie usuário/organização/projeto (Python
+#      → FastAPI) e copie o DSN gerado.
+#   4. Cole o DSN em SENTRY_DSN no .env e reinicie api/worker.
+#
+# Referência: https://glitchtip.com/documentation/install (compose.sample.yml,
+# imagem glitchtip/glitchtip:6, modo SERVER_ROLE=all_in_one).
+#
+# Migração no lançamento: subir o mesmo stack no servidor (ou usar outro
+# backend compatível com Sentry) e trocar apenas o SENTRY_DSN do app.
+
+services:
+  glitchtip-postgres:
+    image: postgres:16-alpine
+    container_name: medsafe_glitchtip_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: glitchtip
+      POSTGRES_PASSWORD: ${GLITCHTIP_POSTGRES_PASSWORD:?GLITCHTIP_POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: glitchtip
+    volumes:
+      - glitchtip_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U glitchtip"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  glitchtip-valkey:
+    image: valkey/valkey:9
+    container_name: medsafe_glitchtip_valkey
+    restart: unless-stopped
+
+  glitchtip:
+    image: glitchtip/glitchtip:6
+    container_name: medsafe_glitchtip
+    restart: unless-stopped
+    depends_on:
+      glitchtip-postgres:
+        condition: service_healthy
+      glitchtip-valkey:
+        condition: service_started
+    ports:
+      - "8090:8000"
+    environment:
+      SERVER_ROLE: all_in_one
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:?GLITCHTIP_SECRET_KEY must be set in .env (openssl rand -hex 32)}
+      DATABASE_URL: postgres://glitchtip:${GLITCHTIP_POSTGRES_PASSWORD}@glitchtip-postgres:5432/glitchtip
+      VALKEY_URL: redis://glitchtip-valkey:6379
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:-http://localhost:8090}
+      DEFAULT_FROM_EMAIL: ${GLITCHTIP_FROM_EMAIL:-glitchtip@medsafe.local}
+      # Sem SMTP local: e-mails (convites/reset) saem no log do container
+      EMAIL_URL: ${GLITCHTIP_EMAIL_URL:-consolemail://}
+      ENABLE_ADMIN: "False"
+      ENABLE_OPENAPI: "False"
+    volumes:
+      - glitchtip_uploads:/code/uploads
+
+volumes:
+  glitchtip_pg_data:
+    driver: local
+  glitchtip_uploads:
+    driver: local

@@ -484,6 +484,10 @@ async def main() -> None:
     Executa a cada RETENTION_INTERVAL_HOURS (padrão: 24h).
     Em produção, configurar via cron ou scheduler externo.
     """
+    from ..utils.error_tracking import setup_error_tracking
+
+    setup_error_tracking(settings)
+
     interval_hours = float(os.getenv("RETENTION_INTERVAL_HOURS", "24"))
     run_once = os.getenv("RETENTION_RUN_ONCE", "false").lower() == "true"
 
