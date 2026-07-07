@@ -330,12 +330,10 @@ async def analyze_drug_interaction(
     5. Return session_id and status
     """
     try:
-        # Anonymous access is supported only when explicitly enabled (or in debug).
-        # This keeps the v2 contract usable for the static frontend demos without forcing auth.
-        if (
-            not current_user
-            and (not app_settings.debug)
-            and (not getattr(app_settings, "allow_anonymous_analysis", False))
+        # Anonymous access is supported only when explicitly enabled via
+        # allow_anonymous_analysis. DEBUG must never widen the auth surface.
+        if not current_user and (
+            not getattr(app_settings, "allow_anonymous_analysis", False)
         ):
             raise HTTPException(status_code=401, detail="Authentication required")
 

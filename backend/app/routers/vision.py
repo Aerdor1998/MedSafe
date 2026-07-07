@@ -32,12 +32,10 @@ async def analyze_vision(
     """
     Analyze an uploaded image/PDF and extract medication information.
 
-    Anonymous access is allowed only when enabled (or in debug).
+    Anonymous access is allowed only when explicitly enabled.
     """
-    if (
-        not current_user
-        and (not app_settings.debug)
-        and (not getattr(app_settings, "allow_anonymous_analysis", False))
+    if not current_user and not getattr(
+        app_settings, "allow_anonymous_analysis", False
     ):
         raise HTTPException(status_code=401, detail="Authentication required")
 
