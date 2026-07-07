@@ -17,14 +17,14 @@ omit =
     # Tests themselves
     backend/tests/*
     
-    # LangGraph agents that require full LLM integration to test properly
+    # LangGraph agents that require full LLM integration to test properly.
+    # NOTE: clinical_agent e reflection_agent têm testes unitários reais
+    # (test_clinical_agent.py, test_reflection_agent.py) e SÃO medidos.
     backend/app/langgraph_agents/document_agent.py
     backend/app/langgraph_agents/vision_agent.py
     backend/app/langgraph_agents/graph.py
     backend/app/langgraph_agents/hitl_agent.py
-    backend/app/langgraph_agents/reflection_agent.py
     backend/app/langgraph_agents/triage_agent.py
-    backend/app/langgraph_agents/clinical_agent.py
     backend/app/langgraph_agents/checkpointing.py
     
     # Optimization modules that require runtime profiling and DB
