@@ -1047,8 +1047,8 @@
                 if (!response.ok) throw new Error('Erro no OCR');
                 const result = await response.json();
 
-                if (result.medication_name) {
-                    const cleanedName = cleanText(result.medication_name);
+                if (result.drug_name) {
+                    const cleanedName = cleanText(result.drug_name);
                     document.getElementById('medication-search').value = cleanedName;
                     ocrResult.innerHTML = `<i class="fas fa-check-circle mr-2 text-brand-emerald"></i>Medicamento identificado: <strong class="text-brand-cyan">${sanitizeText(cleanedName)}</strong>`;
                 } else {
