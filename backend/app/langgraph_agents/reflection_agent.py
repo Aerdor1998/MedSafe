@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from .base_agent import BaseAgent
-from .state import CritiqueLevel, MedSafeState
+from .state import CritiqueLevel, MedSafeState, RiskLevel
 
 logger = logging.getLogger(__name__)
 
@@ -395,6 +395,23 @@ Depois dessa linha, forneça em PORTUGUÊS:
         critique_level = reflection["critique_level"]
         refinement_count = state.get("refinement_count", 0)
         max_refinements = self.settings.max_reflection_cycles
+
+        # Early-exit de latência: se o risco já está no teto (CRITICAL),
+        # refinar não muda o desfecho de segurança — a escalação não tem
+        # para onde subir e o HITL é acionado de qualquer forma. Profiling
+        # (evals/profile_pipeline.py) mostrou ~75s gastos em ciclos que não
+        # convergem nesses casos. Exceção: critique CRITICAL indica análise
+        # criticamente falha — aí a qualidade importa e o refinamento fica.
+        risk_level = state.get("risk_level")
+        risk_value = getattr(risk_level, "value", risk_level)
+        if (
+            critique_level != CritiqueLevel.CRITICAL
+            and risk_value == RiskLevel.CRITICAL.value
+        ):
+            logger.info(
+                "Refinamento pulado: risco já CRITICAL (teto) — " "HITL cobre a revisão"
+            )
+            return False
 
         # Always refine CRITICAL issues (if cycles remain)
         if critique_level == CritiqueLevel.CRITICAL:

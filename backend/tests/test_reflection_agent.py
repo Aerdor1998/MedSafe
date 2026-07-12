@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from backend.app.langgraph_agents.state import CritiqueLevel
+from backend.app.langgraph_agents.state import CritiqueLevel, RiskLevel
 
 
 def _make_agent():
@@ -187,6 +187,58 @@ class TestSafeDefault:
         """MEDIUM (default seguro) deve refinar nos ciclos iniciais."""
         agent = _make_agent()
         reflection = agent._parse_reflection_response("resposta ilegível qualquer")
+        state = {"refinement_count": 0}
+
+        assert agent._should_refine(state, reflection) is True
+
+
+class TestRiskCeilingEarlyExit:
+    """Risco já CRITICAL (teto) não deve gastar ciclos de refinamento.
+
+    Escalar não tem para onde subir e o HITL revisa o caso de qualquer
+    forma; profiling mostrou ~75s desperdiçados nesses ciclos. A única
+    exceção é critique CRITICAL — análise criticamente falha ainda refina.
+    """
+
+    @pytest.mark.parametrize(
+        "critique",
+        [CritiqueLevel.HIGH, CritiqueLevel.MEDIUM, CritiqueLevel.LOW],
+    )
+    def test_critical_risk_skips_refinement(self, critique):
+        agent = _make_agent()
+        reflection = {"critique_level": critique}
+        state = {"refinement_count": 0, "risk_level": RiskLevel.CRITICAL}
+
+        assert agent._should_refine(state, reflection) is False
+
+    def test_critical_risk_as_string_also_skips(self):
+        """Estado serializado (checkpoint) guarda o enum como string."""
+        agent = _make_agent()
+        reflection = {"critique_level": CritiqueLevel.HIGH}
+        state = {"refinement_count": 0, "risk_level": RiskLevel.CRITICAL.value}
+
+        assert agent._should_refine(state, reflection) is False
+
+    def test_critical_critique_still_refines_at_critical_risk(self):
+        """Análise criticamente falha refina mesmo com risco no teto."""
+        agent = _make_agent()
+        reflection = {"critique_level": CritiqueLevel.CRITICAL}
+        state = {"refinement_count": 0, "risk_level": RiskLevel.CRITICAL}
+
+        assert agent._should_refine(state, reflection) is True
+
+    def test_non_critical_risk_keeps_refining(self):
+        """Risco abaixo do teto mantém o comportamento atual."""
+        agent = _make_agent()
+        reflection = {"critique_level": CritiqueLevel.HIGH}
+        state = {"refinement_count": 0, "risk_level": RiskLevel.HIGH}
+
+        assert agent._should_refine(state, reflection) is True
+
+    def test_missing_risk_level_keeps_refining(self):
+        """Estado sem risk_level (início do fluxo) não sofre early-exit."""
+        agent = _make_agent()
+        reflection = {"critique_level": CritiqueLevel.HIGH}
         state = {"refinement_count": 0}
 
         assert agent._should_refine(state, reflection) is True
