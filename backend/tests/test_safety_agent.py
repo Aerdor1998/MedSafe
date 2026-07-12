@@ -4,10 +4,7 @@ Unit tests for SafetyAgent
 Tests safety guardrails, hallucination detection, and safety classification.
 """
 
-from datetime import datetime
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from backend.app.langgraph_agents.state import RiskLevel
 
@@ -513,6 +510,102 @@ class TestRule5PregnancyField:
 
         assert needs_hitl is True
         assert any("pregnancy" in r.lower() for r in reasons)
+
+
+class TestUncertainLowRiskEscalation:
+    """
+    Regressão do gap clopidogrel-omeprazol do golden set (11/12).
+
+    Contrato: risk LOW + confidence < 0.6 (estrito, alinhado com
+    LOW_CONFIDENCE_SAFETY) + achados presentes (interações ou
+    contraindicações) → process() escala risk_level para MEDIUM.
+    Sem achados, NÃO escala — controle negativo paracetamol (conf 0.425,
+    risk low, 0 achados) precisa continuar low (max_risk_level <= low).
+    Calibrado contra evals/results/20260707T175212Z_qwen3_8b.json.
+    """
+
+    def test_low_risk_uncertain_with_interaction_escalates_to_medium(self):
+        """Espelho do caso clopidogrel-omeprazol: conf 0.58, risk low,
+        1 interação → risk_level escalado para MEDIUM, sem pagear humano
+        (conf >= 0.5 não dispara Rule 4)"""
+        agent = _build_agent()
+        state = {
+            "risk_level": RiskLevel.LOW,
+            "confidence_score": 0.58,
+            "interactions": [
+                {"severity": "moderate", "drug1": "drugA", "drug2": "drugB"}
+            ],
+            "contraindications": [],
+        }
+
+        updates = agent.process(state)
+
+        assert updates["risk_level"] == RiskLevel.MEDIUM
+        assert updates["requires_human_review"] is False
+
+    def test_low_risk_uncertain_no_findings_stays_low(self):
+        """Controle negativo paracetamol: conf 0.425, sem achados →
+        risk_level NÃO escalado (segue low; sem falso alarme)"""
+        agent = _build_agent()
+        state = {
+            "risk_level": RiskLevel.LOW,
+            "confidence_score": 0.425,
+            "interactions": [],
+            "contraindications": [],
+        }
+
+        updates = agent.process(state)
+
+        assert "risk_level" not in updates
+        assert updates["requires_human_review"] is False
+
+    def test_boundary_confidence_exactly_point_six_no_escalation(self):
+        """Fronteira: conf == 0.6 exato com achados → NÃO escala
+        (contrato é estritamente < 0.6)"""
+        agent = _build_agent()
+        state = {
+            "risk_level": RiskLevel.LOW,
+            "confidence_score": 0.6,
+            "interactions": [
+                {"severity": "moderate", "drug1": "drugA", "drug2": "drugB"}
+            ],
+            "contraindications": [],
+        }
+
+        updates = agent.process(state)
+
+        assert "risk_level" not in updates
+
+    def test_medium_risk_untouched(self):
+        """Controle negativo amoxicilina: risk medium não é LOW →
+        escalação não se aplica (não vira high por incerteza)"""
+        agent = _build_agent()
+        state = {
+            "risk_level": RiskLevel.MEDIUM,
+            "confidence_score": 0.655,
+            "interactions": [{"severity": "low", "drug1": "drugA", "drug2": "drugB"}],
+            "contraindications": [],
+        }
+
+        updates = agent.process(state)
+
+        assert "risk_level" not in updates
+
+    def test_contraindication_also_counts_as_finding(self):
+        """Achado via contraindicação (sem interações) também escala"""
+        agent = _build_agent()
+        state = {
+            "risk_level": RiskLevel.LOW,
+            "confidence_score": 0.58,
+            "interactions": [],
+            "contraindications": [
+                {"severity": "moderate", "description": "contraindicado"}
+            ],
+        }
+
+        updates = agent.process(state)
+
+        assert updates["risk_level"] == RiskLevel.MEDIUM
 
 
 class TestFactoryFunction:

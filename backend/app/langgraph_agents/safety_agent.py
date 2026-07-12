@@ -115,6 +115,25 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
                 ),
             }
 
+            # Escalate uncertain LOW risk when findings exist.
+            # Golden set gap (clopidogrel+omeprazol, eval 20260707T175212Z):
+            # LOW_CONFIDENCE_SAFETY warned but the final report stayed "low".
+            # Contract: LOW risk + confidence < 0.6 + interactions or
+            # contraindications present → risk becomes MEDIUM. Without
+            # findings (e.g. paracetamol negative control), stays LOW.
+            has_findings = bool(
+                state.get("interactions") or state.get("contraindications")
+            )
+            if has_findings and any(
+                v["type"] == "LOW_CONFIDENCE_SAFETY" for v in violations
+            ):
+                updates["risk_level"] = RiskLevel.MEDIUM
+                self.log_step(
+                    state,
+                    "Escalated risk_level LOW→MEDIUM: "
+                    "low confidence with findings present",
+                )
+
             # Update timestamps - ensure timestamps dict exists in updates
             if "timestamps" not in updates:
                 updates["timestamps"] = state.get("timestamps", {}).copy()
@@ -241,7 +260,10 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
                         {
                             "type": "MISSING_CRITICAL_WARNING",
                             "severity": "critical",
-                            "message": f'Critical issue not addressed in recommendations: {issue.get("description", "Unknown")[:100]}',
+                            "message": (
+                                "Critical issue not addressed in recommendations: "
+                                f'{issue.get("description", "Unknown")[:100]}'
+                            ),
                         }
                     )
 
