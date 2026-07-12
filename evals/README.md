@@ -43,6 +43,16 @@ metadados de reprodutibilidade (modelo efetivo, temperatura, commit git).
    - `false_alarm_rate` **igual ou melhor** (superproteção gera alert
      fatigue em clínica — também é dano).
 
+## Histórico de comparações
+
+| Data | Baseline | Candidato | Decisão |
+|---|---|---|---|
+| 2026-07-12 | qwen3:8b — 17/17, recall 1.0, falso alarme 0.0, p50 103s, máx 387s | qwen3:14b — 6/6 acertos nos casos que completaram, mas 405–541s/caso com VRAM saturada (15,7/16 GB na RTX 4070 Ti SUPER) | **Mantido qwen3:8b.** 14b inviável neste hardware: latência acima do timeout de produção (300s). Reavaliar só com quantização mais agressiva ou GPU maior. |
+
+Lição operacional: dois modelos residentes (14b + 8b) estouraram a VRAM e
+**travaram o Ollama** no meio da rodada — em GPU de 16 GB, garanta que só o
+candidato esteja carregado (`ollama ps`) antes de rodar a suíte.
+
 ## Notas
 
 - Boa parte das expectativas cobre o caminho **determinístico** (CSV,
