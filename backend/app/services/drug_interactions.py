@@ -20,7 +20,11 @@ from typing import Any, Dict, List, Optional
 
 from ..db.database import get_db_context
 from ..db.models import DrugInteraction
-from .clinical_rules import CRITICAL_INTERACTIONS
+from .clinical_rules import (
+    CRITICAL_INTERACTIONS,
+    POPULATION_DRUG_ALERTS,
+    PopulationRisk,
+)
 from .drug_identifier import (
     HybridDrugIdentifier,
     IdentificationMethod,
@@ -821,7 +825,11 @@ class DrugInteractionService:
         return results
 
     def analyze_contraindications(
-        self, drug_name: str, patient_conditions: List[str], allergies: List[str]
+        self,
+        drug_name: str,
+        patient_conditions: List[str],
+        allergies: List[str],
+        pregnant: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         Analisar contraindicações baseado em condições do paciente
@@ -830,12 +838,20 @@ class DrugInteractionService:
             drug_name: Nome do medicamento
             patient_conditions: Condições médicas do paciente
             allergies: Alergias conhecidas
+            pregnant: Se o paciente está grávida (campo booleano do paciente)
 
         Returns:
             Lista de contraindicações identificadas
         """
         contraindications = []
         drug_normalized = self._normalize_drug_name(drug_name)
+
+        # Gravidez é um campo booleano do paciente (não uma condition string):
+        # verificar teratogênicos categoria X FDA via nome canônico
+        if pregnant:
+            contraindications.extend(
+                self._get_pregnancy_contraindications(drug_normalized)
+            )
 
         # Verificar alergias
         for allergy in allergies:
@@ -861,6 +877,47 @@ class DrugInteractionService:
         contraindications.extend(condition_contraindications)
 
         return contraindications
+
+    def _get_pregnancy_contraindications(
+        self, drug_normalized: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Contraindicações para gestantes (teratogênicos categoria X FDA).
+
+        Usa o nome canônico (já resolvido pelo HybridDrugIdentifier, PT→EN)
+        para casar com POPULATION_DRUG_ALERTS[PREGNANCY]["contraindicated"].
+        """
+        if not drug_normalized:
+            return []
+
+        drug_lower = drug_normalized.lower()
+        contraindicated_list = POPULATION_DRUG_ALERTS.get(
+            PopulationRisk.PREGNANCY, {}
+        ).get("contraindicated", [])
+
+        for contraindicated in contraindicated_list:
+            if contraindicated.lower() in drug_lower:
+                # LGPD/PHI: não logar nome do medicamento em plaintext
+                logger.info(
+                    "Contraindicação de gravidez detectada (teratogênico categoria X)"
+                )
+                return [
+                    {
+                        "type": "Contraindicação em Gestação",
+                        "description": (
+                            "Medicamento teratogênico (categoria X FDA) "
+                            "contraindicado durante a gravidez"
+                        ),
+                        "severity": "high",
+                        "source": "Regras Clínicas - Alertas Populacionais (FDA)",
+                        "recommendation": (
+                            "CONTRAINDICADO em gestantes - discutir alternativa "
+                            "terapêutica com o prescritor"
+                        ),
+                    }
+                ]
+
+        return []
 
     def _get_condition_contraindications(
         self, drug_normalized: str, conditions: List[str]

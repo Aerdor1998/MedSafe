@@ -166,7 +166,7 @@ class InteractionClassifierAgent:
             "metabolism_altered": r"(?i)(metabolism.*can.*be.*(increased|decreased))",
             # Biodisponibilidade/eficácia
             "bioavailability": r"(?i)(bioavailability)",
-            "therapeutic_effect": r"(?i)(therapeutic.*effect.*decrease)",
+            "therapeutic_effect": r"(?i)(therapeutic.*(effect|efficacy).*decreas)",
             # Fotossensibilidade
             "photosensitizing": r"(?i)(photosensitizing.*activities)",
             # Concentração sérica diminuída

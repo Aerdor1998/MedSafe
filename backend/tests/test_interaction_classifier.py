@@ -160,6 +160,37 @@ class TestInteractionClassifierAgent:
         assert result.severity == SeverityLevel.MEDIUM
         assert "photosensitizing" in result.matched_patterns
 
+    def test_classify_therapeutic_efficacy_decreased_as_medium(self, classifier):
+        """
+        Testar que "therapeutic efficacy ... decreased" classifica como MEDIUM
+
+        Caso golden real do DrugBank: Clopidogrel + Omeprazole
+        Regressão: antes o padrão só casava "effect", não "efficacy" -> caía em LOW
+        """
+        description = (
+            "The therapeutic efficacy of Clopidogrel can be decreased when used "
+            "in combination with Omeprazole."
+        )
+        result = classifier.classify_interaction(
+            description, "Clopidogrel", "Omeprazole"
+        )
+
+        assert result.severity == SeverityLevel.MEDIUM
+        assert "therapeutic_effect" in result.matched_patterns
+
+    def test_classify_therapeutic_effect_decreased_as_medium(self, classifier):
+        """
+        Testar que a frase antiga "therapeutic effect ... decreased" continua MEDIUM
+        (sem regressão após expandir o regex para effect|efficacy)
+        """
+        description = (
+            "The therapeutic effect of Drug1 can be decreased when combined with Drug2."
+        )
+        result = classifier.classify_interaction(description, "Drug1", "Drug2")
+
+        assert result.severity == SeverityLevel.MEDIUM
+        assert "therapeutic_effect" in result.matched_patterns
+
     def test_classify_serum_concentration_decrease_as_medium(self, classifier):
         """
         Testar diminuição de concentração sérica como MEDIUM
