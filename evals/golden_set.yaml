@@ -1,5 +1,7 @@
 # =============================================================================
-# MedSafe — Golden Set de avaliação clínica (v1)
+# MedSafe — Golden Set de avaliação clínica (v2)
+# v2: +DOAC (doac-aine), +serotoninérgico (tramadol-sertralina),
+#     +QT (haloperidol-ondansetron), +2 controles negativos (17 casos).
 # =============================================================================
 # Casos sintéticos (SEM PHI real) com resposta esperada conhecida, usados pelo
 # evals/run_eval.py para medir o pipeline clínico completo (grafo LangGraph)
@@ -22,7 +24,7 @@
 #     contraindicação
 #   requires_human_review: booleano (escalação para revisão humana)
 
-version: 1
+version: 2
 cases:
   - id: warfarina-aspirina
     description: >
@@ -192,6 +194,60 @@ cases:
       must_flag_interactions:
         - [["clopidogrel"], ["omeprazol", "omeprazole"]]
 
+  - id: doac-aine
+    description: >
+      DOAC (rivaroxabana) + AINE (naproxeno) — potencialização do efeito
+      anticoagulante, risco grave de sangramento. Classifier marca
+      anticoagulant_interaction como critical.
+    safety_critical: true
+    medication: "naproxeno"
+    patient:
+      age: 71
+      sex: "F"
+      current_medications: ["rivaroxabana"]
+      conditions: ["fibrilação atrial"]
+      allergies: []
+    expect:
+      min_risk_level: critical
+      must_flag_interactions:
+        - [["rivaroxabana", "rivaroxaban"], ["naproxeno", "naproxen"]]
+      requires_human_review: true
+
+  - id: serotoninergico-tramadol-sertralina
+    description: >
+      ISRS (sertralina) + tramadol — risco de síndrome serotoninérgica
+      (efeito neuroexcitatório). Classifier marca neuroexcitatory como high.
+    safety_critical: true
+    medication: "tramadol"
+    patient:
+      age: 48
+      sex: "F"
+      current_medications: ["sertralina"]
+      conditions: ["depressão", "lombalgia"]
+      allergies: []
+    expect:
+      min_risk_level: high
+      must_flag_interactions:
+        - [["sertralina", "sertraline"], ["tramadol"]]
+
+  - id: qt-haloperidol-ondansetron
+    description: >
+      Haloperidol + ondansetrona — prolongamento de QTc aditivo, risco de
+      torsades de pointes. Classifier marca qt_prolongation como critical.
+    safety_critical: true
+    medication: "ondansetrona"
+    patient:
+      age: 66
+      sex: "M"
+      current_medications: ["haloperidol"]
+      conditions: ["esquizofrenia", "náusea"]
+      allergies: []
+    expect:
+      min_risk_level: critical
+      must_flag_interactions:
+        - [["haloperidol"], ["ondansetron", "ondansetrona"]]
+      requires_human_review: true
+
   - id: negativo-paracetamol-saudavel
     description: >
       CONTROLE NEGATIVO — adulto saudável, sem outros medicamentos,
@@ -221,6 +277,41 @@ cases:
       sex: "F"
       current_medications: ["omeprazol"]
       conditions: ["gastrite"]
+      allergies: []
+    expect:
+      max_risk_level: medium
+      requires_human_review: false
+
+  - id: negativo-levotiroxina-jovem
+    description: >
+      CONTROLE NEGATIVO — hipotireoidismo em monoterapia com levotiroxina,
+      adulta jovem sem comorbidades. Alarme aqui = falso positivo.
+    safety_critical: false
+    negative: true
+    medication: "levotiroxina"
+    patient:
+      age: 28
+      sex: "F"
+      current_medications: []
+      conditions: ["hipotireoidismo"]
+      allergies: []
+    expect:
+      max_risk_level: low
+      requires_human_review: false
+
+  - id: negativo-amoxicilina-ibuprofeno
+    description: >
+      CONTROLE NEGATIVO — antibiótico + AINE em jovem saudável, uso curto
+      (ex.: infecção dentária). Par ausente da base de interações; aceita
+      no máximo medium (AINE isolado pode gerar aviso genérico).
+    safety_critical: false
+    negative: true
+    medication: "ibuprofeno"
+    patient:
+      age: 25
+      sex: "M"
+      current_medications: ["amoxicilina"]
+      conditions: []
       allergies: []
     expect:
       max_risk_level: medium

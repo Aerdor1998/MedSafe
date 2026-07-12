@@ -56,6 +56,24 @@ class TestInteractionClassifierAgent:
         assert result.severity == SeverityLevel.CRITICAL
         assert "qt_prolongation" in result.matched_patterns
 
+    def test_classify_qtc_prolonging_as_critical(self, classifier):
+        """
+        Fraseado dominante no CSV DrugBank: "QTc-prolonging activities".
+        Regressão: antes do fix, classificava LOW (regex exigia
+        "prolongation" literal).
+
+        Caso real do CSV: Haloperidol + Fluoxetine (risco de torsades)
+        """
+        description = (
+            "Haloperidol may increase the QTc-prolonging activities of Fluoxetine."
+        )
+        result = classifier.classify_interaction(
+            description, "Haloperidol", "Fluoxetine"
+        )
+
+        assert result.severity == SeverityLevel.CRITICAL
+        assert "qt_prolongation" in result.matched_patterns
+
     def test_classify_av_block_as_critical(self, classifier):
         """
         Testar classificação de bloqueio AV como CRÍTICO
@@ -159,6 +177,37 @@ class TestInteractionClassifierAgent:
 
         assert result.severity == SeverityLevel.MEDIUM
         assert "photosensitizing" in result.matched_patterns
+
+    def test_classify_therapeutic_efficacy_decreased_as_medium(self, classifier):
+        """
+        Testar que "therapeutic efficacy ... decreased" classifica como MEDIUM
+
+        Caso golden real do DrugBank: Clopidogrel + Omeprazole
+        Regressão: antes o padrão só casava "effect", não "efficacy" -> caía em LOW
+        """
+        description = (
+            "The therapeutic efficacy of Clopidogrel can be decreased when used "
+            "in combination with Omeprazole."
+        )
+        result = classifier.classify_interaction(
+            description, "Clopidogrel", "Omeprazole"
+        )
+
+        assert result.severity == SeverityLevel.MEDIUM
+        assert "therapeutic_effect" in result.matched_patterns
+
+    def test_classify_therapeutic_effect_decreased_as_medium(self, classifier):
+        """
+        Testar que a frase antiga "therapeutic effect ... decreased" continua MEDIUM
+        (sem regressão após expandir o regex para effect|efficacy)
+        """
+        description = (
+            "The therapeutic effect of Drug1 can be decreased when combined with Drug2."
+        )
+        result = classifier.classify_interaction(description, "Drug1", "Drug2")
+
+        assert result.severity == SeverityLevel.MEDIUM
+        assert "therapeutic_effect" in result.matched_patterns
 
     def test_classify_serum_concentration_decrease_as_medium(self, classifier):
         """

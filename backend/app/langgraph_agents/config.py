@@ -103,7 +103,9 @@ class LangGraphSettings(BaseSettings):
     # ========================================================================
     # AGENT BEHAVIOR SETTINGS (PDF pg 25-26)
     # ========================================================================
-    max_reflection_cycles: int = 3  # Iterative refinement limit
+    # Iterative refinement limit (env-overridable para tuning de latência;
+    # ver evals/run_eval.py — cada ciclo extra re-executa o ClinicalAgent)
+    max_reflection_cycles: int = int(os.getenv("MAX_REFLECTION_CYCLES", "3"))
     reflection_confidence_threshold: float = 0.85  # When to stop refining
 
     # Safety Guardrails (PDF pg 34-38)

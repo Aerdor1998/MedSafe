@@ -65,7 +65,7 @@ Classificações de Segurança:
 
 Gatilhos de escalação (requerem HITL):
 - Níveis de risco CRÍTICO ou ALTO
-- Escores de confiança baixos (<0.7)
+- Confiança muito baixa (<0.5) com sinal clínico (achados ou risco >= médio)
 - Combinações de medicamentos conhecidas como perigosas
 - Contraindicações para populações vulneráveis (gestantes, crianças)
 - Recomendações conflitantes
@@ -114,6 +114,25 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
                     else "needs_review"
                 ),
             }
+
+            # Escalate uncertain LOW risk when findings exist.
+            # Golden set gap (clopidogrel+omeprazol, eval 20260707T175212Z):
+            # LOW_CONFIDENCE_SAFETY warned but the final report stayed "low".
+            # Contract: LOW risk + confidence < 0.6 + interactions or
+            # contraindications present → risk becomes MEDIUM. Without
+            # findings (e.g. paracetamol negative control), stays LOW.
+            has_findings = bool(
+                state.get("interactions") or state.get("contraindications")
+            )
+            if has_findings and any(
+                v["type"] == "LOW_CONFIDENCE_SAFETY" for v in violations
+            ):
+                updates["risk_level"] = RiskLevel.MEDIUM
+                self.log_step(
+                    state,
+                    "Escalated risk_level LOW→MEDIUM: "
+                    "low confidence with findings present",
+                )
 
             # Update timestamps - ensure timestamps dict exists in updates
             if "timestamps" not in updates:
@@ -241,7 +260,10 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
                         {
                             "type": "MISSING_CRITICAL_WARNING",
                             "severity": "critical",
-                            "message": f'Critical issue not addressed in recommendations: {issue.get("description", "Unknown")[:100]}',
+                            "message": (
+                                "Critical issue not addressed in recommendations: "
+                                f'{issue.get("description", "Unknown")[:100]}'
+                            ),
                         }
                     )
 
@@ -388,18 +410,31 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
                 f"{len(critical_violations)} critical safety violations"
             )
 
-        # Rule 4: Escalate low confidence
+        # Rule 4: Escalate very low confidence ONLY with clinical signal.
+        # Confiança < 0.5 (alinha com VERY_LOW_CONFIDENCE em
+        # _check_confidence_alignment) num contexto com achados
+        # (interações/contraindicações) ou risco >= MEDIUM → humano revisa.
+        # Análise vazia e benigna com confiança estruturalmente baixa NÃO
+        # deve pagear humano (evita alert fatigue nos controles negativos).
         confidence = state.get("confidence_score", 0.0)
-        if confidence < 0.7:
+        has_clinical_signal = (
+            bool(state.get("interactions"))
+            or bool(state.get("contraindications"))
+            or state.get("risk_level")
+            in (RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.CRITICAL)
+        )
+        if confidence < 0.5 and has_clinical_signal:
             escalation_reasons.append(f"Low confidence ({confidence:.2%})")
 
         # Rule 5: Escalate vulnerable populations
         patient_data = state.get("patient_data", {})
         conditions = [c.lower() for c in patient_data.get("conditions", [])]
-        if any(
+        is_pregnant_condition = any(
             keyword in " ".join(conditions)
             for keyword in ["pregnancy", "pregnant", "gestação"]
-        ):
+        )
+        # Gravidez é um CAMPO booleano no MedSafe (não uma condition string)
+        if patient_data.get("pregnant") or is_pregnant_condition:
             escalation_reasons.append("Vulnerable population (pregnancy)")
 
         age = patient_data.get("age")

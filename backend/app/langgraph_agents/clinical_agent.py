@@ -641,12 +641,14 @@ Seja minucioso, preciso e baseado em evidências.
 
         conditions = patient_data.get("conditions", [])
         allergies = patient_data.get("allergies", [])
+        pregnant = bool(patient_data.get("pregnant"))
 
         # Use existing DrugInteractionService
         contraindications = self.interaction_service.analyze_contraindications(
             drug_name=medication_text,
             patient_conditions=conditions,
             allergies=allergies,
+            pregnant=pregnant,
         )
 
         logger.info(f"   Found {len(contraindications)} contraindications")

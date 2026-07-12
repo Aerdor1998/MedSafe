@@ -604,3 +604,106 @@ class TestFactoryFunction:
         agent = create_clinical_agent()
 
         assert isinstance(agent, ClinicalAgent)
+
+
+class TestPregnancyContraindications:
+    """Regression tests for golden case gestante-teratogenico.
+
+    Pregnancy is a boolean field (patient_data["pregnant"]), not a condition
+    string; a pregnant patient + teratogenic drug (FDA category X) must yield
+    a high-severity contraindication and overall risk >= high.
+    """
+
+    def _service(self):
+        from backend.app.services.drug_interactions import DrugInteractionService
+
+        return DrugInteractionService()
+
+    def test_pregnant_teratogenic_generates_high_contraindication(self):
+        """Pregnant + varfarina (PT) -> >=1 pregnancy contraindication (high)"""
+        service = self._service()
+
+        contraindications = service.analyze_contraindications(
+            drug_name="varfarina",
+            patient_conditions=[],
+            allergies=[],
+            pregnant=True,
+        )
+
+        pregnancy_entries = [
+            c
+            for c in contraindications
+            if "gesta" in (c.get("type", "") + c.get("description", "")).lower()
+        ]
+        assert len(pregnancy_entries) >= 1
+        assert any(c.get("severity") == "high" for c in pregnancy_entries)
+
+        # Overall risk with no interactions must still be >= high
+        risk = service.calculate_overall_risk([], contraindications)
+        assert risk in ("high", "critical")
+
+    def test_pregnant_non_teratogenic_no_pregnancy_contraindication(self):
+        """Pregnant + paracetamol -> no pregnancy contraindication"""
+        service = self._service()
+
+        contraindications = service.analyze_contraindications(
+            drug_name="paracetamol",
+            patient_conditions=[],
+            allergies=[],
+            pregnant=True,
+        )
+
+        pregnancy_entries = [
+            c
+            for c in contraindications
+            if "gesta" in (c.get("type", "") + c.get("description", "")).lower()
+        ]
+        assert pregnancy_entries == []
+
+    def test_not_pregnant_teratogenic_no_pregnancy_contraindication(self):
+        """Non-pregnant + varfarina -> no pregnancy contraindication"""
+        service = self._service()
+
+        contraindications = service.analyze_contraindications(
+            drug_name="varfarina",
+            patient_conditions=[],
+            allergies=[],
+            pregnant=False,
+        )
+
+        pregnancy_entries = [
+            c
+            for c in contraindications
+            if "gesta" in (c.get("type", "") + c.get("description", "")).lower()
+        ]
+        assert pregnancy_entries == []
+
+    @patch("backend.app.langgraph_agents.clinical_agent.get_interaction_service")
+    @patch("backend.app.langgraph_agents.clinical_agent.get_rules_engine")
+    @patch("backend.app.langgraph_agents.clinical_agent.get_vector_store")
+    @patch("backend.app.langgraph_agents.base_agent.ChatOllama")
+    def test_agent_passes_pregnant_flag_to_service(
+        self, mock_ollama, mock_vs, mock_rules, mock_interaction
+    ):
+        """ClinicalAgent._analyze_contraindications forwards pregnant field"""
+        mock_service = MagicMock()
+        mock_service.analyze_contraindications.return_value = []
+        mock_interaction.return_value = mock_service
+        mock_rules.return_value = MagicMock()
+        mock_vs.return_value = None
+        mock_ollama.return_value = MagicMock()
+
+        agent = ClinicalAgent()
+        agent._analyze_contraindications(
+            "varfarina",
+            {
+                "age": 28,
+                "sex": "F",
+                "pregnant": True,
+                "conditions": [],
+                "allergies": [],
+            },
+        )
+
+        _, kwargs = mock_service.analyze_contraindications.call_args
+        assert kwargs.get("pregnant") is True

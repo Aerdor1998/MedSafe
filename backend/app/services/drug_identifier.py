@@ -181,6 +181,11 @@ class HybridDrugIdentifier:
         "esomeprazol": "esomeprazole",
         "nexium": "esomeprazole",
         "ranitidina": "ranitidine",
+        # ===== ANTIEMÉTICOS =====
+        "ondansetrona": "ondansetron",
+        "ondansetron": "ondansetron",
+        "vonau": "ondansetron",
+        "zofran": "ondansetron",
         # ===== ANTIPSICÓTICOS =====
         "haloperidol": "haloperidol",
         "haldol": "haloperidol",

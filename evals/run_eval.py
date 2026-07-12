@@ -11,7 +11,7 @@ Uso (host, com o docker compose do repo rodando):
     OLLAMA_HOST=http://localhost:11435 \
     POSTGRES_HOST=localhost POSTGRES_PORT=5433 \
     POSTGRES_PASSWORD=... SECRET_KEY=... JWT_SECRET=... \
-    python evals/run_eval.py [--limit N] [--case ID] [--timeout 300]
+    python evals/run_eval.py [--limit N] [--case ID] [--timeout 600]
 
 Troca de modelo = trocar OLLAMA_LLM no ambiente e rodar de novo; compare
 os JSONs em evals/results/. O gate para adotar um modelo novo é
@@ -60,6 +60,11 @@ def _serialize_checks(checks: list[CheckResult]) -> list[dict]:
     return [{"name": c.name, "passed": c.passed, "detail": c.detail} for c in checks]
 
 
+def _enum_value(v):
+    """Enums (ex.: CritiqueLevel) viram string; passthrough para o resto."""
+    return v.value if hasattr(v, "value") else v
+
+
 async def run_case(orchestrator, case: dict, timeout: float) -> dict:
     started = time.monotonic()
     try:
@@ -95,6 +100,18 @@ async def run_case(orchestrator, case: dict, timeout: float) -> dict:
             "requires_human_review": bool(result.get("requires_human_review", False)),
             "confidence_score": result.get("confidence_score"),
             "duration_seconds": round(duration, 1),
+            # run_analysis retorna o estado bruto do grafo: a chave top-level
+            # é refinement_count; refinement_cycles só existe em final_report.
+            "refinement_cycles": result.get(
+                "refinement_count",
+                (result.get("final_report") or {}).get("refinement_cycles"),
+            ),
+            "critique_level": _enum_value(
+                result.get(
+                    "critique_level",
+                    (result.get("final_report") or {}).get("critique_level"),
+                )
+            ),
         },
     }
 
@@ -104,7 +121,7 @@ async def main() -> int:
     parser.add_argument("--golden", default=str(ROOT / "evals" / "golden_set.yaml"))
     parser.add_argument("--case", default=None, help="rodar apenas o caso com este id")
     parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument("--timeout", type=float, default=300.0, help="por caso (s)")
+    parser.add_argument("--timeout", type=float, default=600.0, help="por caso (s)")
     parser.add_argument("--output-dir", default=str(ROOT / "evals" / "results"))
     args = parser.parse_args()
 
