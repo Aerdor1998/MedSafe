@@ -189,6 +189,12 @@ class DrugInteractionService:
         "esomeprazol": "esomeprazole",
         # Hidroclorotiazida
         "hidroclorotiazida": "hydrochlorothiazide",
+        # ===== ANTIEMÉTICOS =====
+        # Ondansetrona
+        "ondansetrona": "ondansetron",
+        "ondansetron": "ondansetron",
+        "vonau": "ondansetron",
+        "zofran": "ondansetron",
         # ===== ANTIPSICÓTICOS =====
         # Haloperidol
         "haloperidol": "haloperidol",
