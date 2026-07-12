@@ -115,7 +115,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       # Ollama
       - OLLAMA_HOST=http://ollama:11434
-      - OLLAMA_LLM=${OLLAMA_LLM:-qwen3:8b}
+      - OLLAMA_LLM=${OLLAMA_LLM:-medgemma:latest}
       - OLLAMA_CLOUD=${OLLAMA_CLOUD:-}
       - OLLAMA_VLM=${OLLAMA_VLM:-qwen2.5vl:7b}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-qwen3-embedding:0.6b}
@@ -191,7 +191,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       # Ollama
       - OLLAMA_HOST=http://ollama:11434
-      - OLLAMA_LLM=${OLLAMA_LLM:-qwen3:8b}
+      - OLLAMA_LLM=${OLLAMA_LLM:-medgemma:latest}
       - OLLAMA_CLOUD=${OLLAMA_CLOUD:-}
       - OLLAMA_VLM=${OLLAMA_VLM:-qwen2.5vl:7b}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-qwen3-embedding:0.6b}

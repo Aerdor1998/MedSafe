@@ -11,7 +11,6 @@ The ReflectionAgent implements the "Observe and Iterate" step:
 - Prevents hallucinations through self-critique
 """
 
-import json
 import logging
 import re
 from datetime import datetime
@@ -97,6 +96,24 @@ Formato de saída: JSON estruturado com critique_level, issues encontradas e fee
                     "feedback": "No analysis to review yet",
                 }
 
+            # Early-exit de latência (fase 4): risco LOW determinístico —
+            # a crítica LLM em casos benignos gerava ciclos de refinamento
+            # espúrios (profiling: caso benigno 129.5s com 3 ciclos vs 57.9s
+            # do caso crítico) sem mudar o desfecho. O SafetyAgent
+            # determinístico ainda valida o resultado na sequência.
+            risk_value = getattr(
+                state.get("risk_level"), "value", state.get("risk_level")
+            )
+            if risk_value == RiskLevel.LOW.value:
+                logger.info(
+                    "Reflexão pulada: risco LOW — SafetyAgent cobre a validação"
+                )
+                return {
+                    "critique_level": CritiqueLevel.PASS,
+                    "needs_refinement": False,
+                    "feedback": "Risco LOW — reflexão pulada (early-exit de latência)",
+                }
+
             # Perform reflection
             reflection = self._perform_reflection(state)
 
@@ -135,7 +152,7 @@ Formato de saída: JSON estruturado com critique_level, issues encontradas e fee
                     f"    Refinement needed: {reflection['feedback'][:100]}..."
                 )
             else:
-                logger.info(f"   Analysis approved")
+                logger.info("   Analysis approved")
 
             return updates
 
@@ -416,7 +433,7 @@ Depois dessa linha, forneça em PORTUGUÊS:
         # Always refine CRITICAL issues (if cycles remain)
         if critique_level == CritiqueLevel.CRITICAL:
             if refinement_count < max_refinements:
-                logger.warning(f"🔴 CRITICAL issues found - refinement required")
+                logger.warning("🔴 CRITICAL issues found - refinement required")
                 return True
             else:
                 logger.error(
@@ -427,7 +444,7 @@ Depois dessa linha, forneça em PORTUGUÊS:
         # Refine HIGH issues (if cycles remain)
         if critique_level == CritiqueLevel.HIGH:
             if refinement_count < max_refinements:
-                logger.warning(f"🟠 HIGH severity issues - refinement recommended")
+                logger.warning("🟠 HIGH severity issues - refinement recommended")
                 return True
             else:
                 logger.warning(
@@ -438,7 +455,7 @@ Depois dessa linha, forneça em PORTUGUÊS:
         # MEDIUM: refine if early in cycle
         if critique_level == CritiqueLevel.MEDIUM:
             if refinement_count < max_refinements - 1:
-                logger.info(f"🟡 MEDIUM issues - attempting refinement")
+                logger.info("🟡 MEDIUM issues - attempting refinement")
                 return True
 
         # LOW or PASS: no refinement needed

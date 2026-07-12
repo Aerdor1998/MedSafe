@@ -272,3 +272,71 @@ class TestPromptRequestsStructuredTag:
 
         assert "CRITIQUE_LEVEL" in captured["prompt"]
         assert critique["critique_level"] == CritiqueLevel.PASS
+
+
+class TestLowRiskReflectionGate:
+    """Risco LOW não deve pagar o custo de uma rodada de reflexão.
+
+    Profiling (Fase 3) mostrou que casos benignos gastavam ciclos de
+    LLM sem alterar o desfecho — o HITL nunca é acionado para LOW e a
+    crítica raramente muda o resultado. O gate pula a reflexão inteira
+    e marca a análise como aprovada, preservando o fluxo para riscos
+    MEDIUM ou acima.
+    """
+
+    def _base_state(self, risk):
+        # Precisa de ao menos uma interação: sem análise clínica o
+        # process() retorna antes de chegar no gate de risco.
+        return {
+            "medication_text": "dipirona",
+            "patient_data": {"conditions": []},
+            "interactions": [
+                {"drug1": "a", "drug2": "b", "severity": "low", "description": "x"}
+            ],
+            "contraindications": [],
+            "risk_level": risk,
+            "confidence_score": 0.9,
+            "refinement_count": 0,
+        }
+
+    def test_low_risk_skips_llm_entirely(self):
+        agent = _make_agent()
+        agent.invoke_llm = MagicMock()
+        state = self._base_state(RiskLevel.LOW)
+
+        result = agent.process(state)
+
+        agent.invoke_llm.assert_not_called()
+        assert result["critique_level"] == CritiqueLevel.PASS
+
+    def test_low_risk_as_string_also_skips(self):
+        """Estado vindo de checkpoint serializa o enum como string."""
+        agent = _make_agent()
+        agent.invoke_llm = MagicMock()
+        state = self._base_state(RiskLevel.LOW.value)
+
+        result = agent.process(state)
+
+        agent.invoke_llm.assert_not_called()
+        assert result["critique_level"] == CritiqueLevel.PASS
+
+    def test_medium_risk_still_reflects(self):
+        agent = _make_agent()
+        agent.invoke_llm = MagicMock(return_value="CRITIQUE_LEVEL: PASS\nTudo certo.")
+        state = self._base_state(RiskLevel.MEDIUM)
+
+        result = agent.process(state)
+
+        agent.invoke_llm.assert_called_once()
+        assert result["critique_level"] == CritiqueLevel.PASS
+
+    def test_missing_risk_level_still_reflects(self):
+        """Sem risk_level no estado, o gate não pode assumir benignidade."""
+        agent = _make_agent()
+        agent.invoke_llm = MagicMock(return_value="CRITIQUE_LEVEL: PASS\nTudo certo.")
+        state = self._base_state(None)
+        state.pop("risk_level")
+
+        agent.process(state)
+
+        agent.invoke_llm.assert_called_once()

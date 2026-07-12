@@ -100,7 +100,7 @@ class Settings(BaseSettings):
     # Configurações do Ollama
     # NOTE: do not call os.getenv() here; pydantic-settings already reads env.
     ollama_host: str = "http://ollama:11434"
-    ollama_llm: str = "qwen3:8b"
+    ollama_llm: str = "medgemma:latest"
     ollama_vlm: str = "qwen2.5vl:7b"
     embedding_model: str = "qwen3-embedding:0.6b"
 
@@ -456,7 +456,10 @@ class Settings(BaseSettings):
         """Retorna a URL do banco de dados"""
         if self.database_url:
             return self.database_url
-        return f"postgresql://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        return (
+            f"postgresql://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
 
     @property
     def ollama_base_url(self) -> str:
