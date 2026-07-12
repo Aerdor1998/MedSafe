@@ -53,6 +53,10 @@ Lição operacional: dois modelos residentes (14b + 8b) estouraram a VRAM e
 **travaram o Ollama** no meio da rodada — em GPU de 16 GB, garanta que só o
 candidato esteja carregado (`ollama ps`) antes de rodar a suíte.
 
+| Data | Baseline | Candidato | Decisão |
+|---|---|---|---|
+| 2026-07-12 | `MAX_REFLECTION_CYCLES=3` (default) — 17/17, p50 103s, máx 387s, média 132s | `MAX_REFLECTION_CYCLES=1` — 16/17 (gate binário OK, mas `clopidogrel-omeprazol` caiu para `low`; esperado ≥ `medium`), p50 112s, máx 246s, média 110s | **Mantido default 3.** Cortar reflexão só melhora a cauda (máx −37%); a mediana não muda — o custo base do pipeline sem nenhum ciclo de reflexão já é 28–94s. Latência de produção deve ser atacada no caminho base (retrieval + passes de LLM) e em UX assíncrona, não na reflexão, que é o que protege a severidade graduada. |
+
 ## Notas
 
 - Boa parte das expectativas cobre o caminho **determinístico** (CSV,
