@@ -60,6 +60,11 @@ def _serialize_checks(checks: list[CheckResult]) -> list[dict]:
     return [{"name": c.name, "passed": c.passed, "detail": c.detail} for c in checks]
 
 
+def _enum_value(v):
+    """Enums (ex.: CritiqueLevel) viram string; passthrough para o resto."""
+    return v.value if hasattr(v, "value") else v
+
+
 async def run_case(orchestrator, case: dict, timeout: float) -> dict:
     started = time.monotonic()
     try:
@@ -95,8 +100,18 @@ async def run_case(orchestrator, case: dict, timeout: float) -> dict:
             "requires_human_review": bool(result.get("requires_human_review", False)),
             "confidence_score": result.get("confidence_score"),
             "duration_seconds": round(duration, 1),
-            "refinement_cycles": result.get("refinement_cycles"),
-            "critique_level": result.get("critique_level"),
+            # run_analysis retorna o estado bruto do grafo: a chave top-level
+            # é refinement_count; refinement_cycles só existe em final_report.
+            "refinement_cycles": result.get(
+                "refinement_count",
+                (result.get("final_report") or {}).get("refinement_cycles"),
+            ),
+            "critique_level": _enum_value(
+                result.get(
+                    "critique_level",
+                    (result.get("final_report") or {}).get("critique_level"),
+                )
+            ),
         },
     }
 
