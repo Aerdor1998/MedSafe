@@ -56,6 +56,24 @@ class TestInteractionClassifierAgent:
         assert result.severity == SeverityLevel.CRITICAL
         assert "qt_prolongation" in result.matched_patterns
 
+    def test_classify_qtc_prolonging_as_critical(self, classifier):
+        """
+        Fraseado dominante no CSV DrugBank: "QTc-prolonging activities".
+        Regressão: antes do fix, classificava LOW (regex exigia
+        "prolongation" literal).
+
+        Caso real do CSV: Haloperidol + Fluoxetine (risco de torsades)
+        """
+        description = (
+            "Haloperidol may increase the QTc-prolonging activities of Fluoxetine."
+        )
+        result = classifier.classify_interaction(
+            description, "Haloperidol", "Fluoxetine"
+        )
+
+        assert result.severity == SeverityLevel.CRITICAL
+        assert "qt_prolongation" in result.matched_patterns
+
     def test_classify_av_block_as_critical(self, classifier):
         """
         Testar classificação de bloqueio AV como CRÍTICO

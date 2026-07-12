@@ -91,7 +91,10 @@ class InteractionClassifierAgent:
         # SKILL: ULTRATHINK - Padrões baseados em farmacologia clínica real
         self.critical_patterns = {
             # Cardiovasculares graves
-            "qt_prolongation": r"(?i)(QT.*prolongation|QTc.*prolongation|torsades)",
+            # "prolong" cobre "prolongation" E "QTc-prolonging activities"
+            # (fraseado dominante no CSV DrugBank — sem isso, pares de
+            # torsades como haloperidol+fluoxetina classificavam LOW)
+            "qt_prolongation": r"(?i)(QT.*prolong|torsades)",
             "av_block": r"(?i)(atrioventricular.*block|AV.*block)",
             "cardiac_arrest": r"(?i)(cardiac.*arrest|ventricular.*fibrillation)",
             # ===== CRISE HIPERTENSIVA (IMAO + ESTIMULANTE) =====

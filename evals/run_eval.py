@@ -95,6 +95,8 @@ async def run_case(orchestrator, case: dict, timeout: float) -> dict:
             "requires_human_review": bool(result.get("requires_human_review", False)),
             "confidence_score": result.get("confidence_score"),
             "duration_seconds": round(duration, 1),
+            "refinement_cycles": result.get("refinement_cycles"),
+            "critique_level": result.get("critique_level"),
         },
     }
 
