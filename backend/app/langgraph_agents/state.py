@@ -129,7 +129,7 @@ class MedSafeState(TypedDict):
     # ========================================================================
     # METADATA: Agent Ops & Observability (PDF pg 27-31)
     # ========================================================================
-    model_used: str  # "ollama/qwen3:8b"
+    model_used: str  # "ollama/medgemma:latest"
     agent_steps: List[str]  # Trace of agent execution path
     timestamps: Dict[str, datetime]  # Performance tracking
     error: Optional[str]  # Any errors encountered

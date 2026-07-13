@@ -5,7 +5,7 @@ PATTERN: Abstract base class with shared LLM integration (PDF pg 14-16)
 SKILLS: @ultrathink, @code-review-excellence, @api-design-principles
 
 All specialized agents inherit from this base to ensure:
-- Consistent LLM interaction (Ollama qwen3:8b)
+- Consistent LLM interaction (Ollama medgemma:latest)
 - Structured logging and observability
 - Error handling and retry logic
 - Prompt engineering best practices
@@ -16,8 +16,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 
 from ..utils.logging_config import get_agent_logger

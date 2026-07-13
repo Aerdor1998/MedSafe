@@ -5,7 +5,7 @@ PATTERN: Centralized configuration with type safety (PDF pg 27-31)
 SKILLS: @api-design-principles, @fastapi-templates, @ultrathink
 
 Configures:
-- Ollama qwen3:8b model integration
+- Ollama medgemma:latest model integration
 - PostgreSQL checkpointing for HITL
 - Agent Ops & Observability settings
 """
