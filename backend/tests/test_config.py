@@ -282,7 +282,7 @@ class TestOllamaConfiguration:
             clear=True,
         ):
             s = Settings()
-            assert "qwen" in s.ollama_llm.lower()
+            assert "medgemma" in s.ollama_llm.lower()
             assert "qwen" in s.ollama_vlm.lower()
             assert "embedding" in s.embedding_model.lower()
 
