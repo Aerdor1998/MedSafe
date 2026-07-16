@@ -12,12 +12,14 @@ SKILLS APLICADAS:
 - CODE-REVIEW-EXCELLENCE: Documentação clara
 """
 
+import json
 import logging
 import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from enum import Enum
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -29,6 +31,7 @@ class IdentificationMethod(Enum):
     EXACT_MATCH = "exact_match"
     REGEX_PATTERN = "regex_pattern"
     FUZZY_MATCH = "fuzzy_match"
+    ANVISA_LOOKUP = "anvisa_lookup"
     LLM_INFERENCE = "llm_inference"
     NOT_FOUND = "not_found"
 
@@ -96,6 +99,20 @@ class HybridDrugIdentifier:
         "lipitor": "atorvastatin",
         "rosuvastatina": "rosuvastatin",
         "crestor": "rosuvastatin",
+        # ===== NITRATOS / ANTIANGINOSOS =====
+        "monocordil": "isosorbide mononitrate",
+        "mononitrato de isossorbida": "isosorbide mononitrate",
+        "mononitrato de isosorbida": "isosorbide mononitrate",
+        "isossorbida": "isosorbide mononitrate",
+        "isosorbida": "isosorbide mononitrate",
+        "isosorbide mononitrate": "isosorbide mononitrate",
+        "dinitrato de isossorbida": "isosorbide dinitrate",
+        "dinitrato de isosorbida": "isosorbide dinitrate",
+        "isordil": "isosorbide dinitrate",
+        "isosorbide dinitrate": "isosorbide dinitrate",
+        "nitroglicerina": "nitroglycerin",
+        "tridil": "nitroglycerin",
+        "nitrato": "nitroglycerin",
         # ===== ANTICOAGULANTES =====
         "warfarina": "warfarin",
         "varfarina": "warfarin",
@@ -244,7 +261,14 @@ class HybridDrugIdentifier:
         "levotiroxina": "levothyroxine",
         "puran": "levothyroxine",
         "sildenafil": "sildenafil",
+        "sildenafila": "sildenafil",
         "viagra": "sildenafil",
+        "tadalafil": "tadalafil",
+        "tadalafila": "tadalafil",
+        "cialis": "tadalafil",
+        "vardenafil": "vardenafil",
+        "vardenafila": "vardenafil",
+        "levitra": "vardenafil",
     }
 
     # Padrões regex para identificação de variações
@@ -291,6 +315,12 @@ class HybridDrugIdentifier:
         """
         self.llm_client = llm_client
         self._compiled_patterns = self._compile_patterns()
+        # Base ANVISA (marca comercial BR → princípio ativo), carregada lazy
+        # a partir de data/anvisa_brands.json (gerado por scripts/import_anvisa.py)
+        self._anvisa_map: Optional[Dict[str, str]] = None
+        # Vocabulário de nomes conhecidos (sinônimos + base CSV), usado para
+        # ANCORAR o fallback LLM e impedir alucinação de fármacos inexistentes
+        self._known_drug_names: Optional[set] = None
         logger.info(f"HybridDrugIdentifier inicializado")
         logger.info(f"   - {len(self.DRUG_SYNONYMS)} sinônimos mapeados")
         logger.info(f"   - {len(self.DRUG_PATTERNS)} padrões regex")
@@ -375,6 +405,19 @@ class HybridDrugIdentifier:
                 confidence=1.0,
             )
 
+        # 1b. Identidade canônica: o nome já É um canônico conhecido
+        # (valor do dicionário de sinônimos ou nome presente na base CSV).
+        # Sem isso, "acetylsalicylic acid" — o PRÓPRIO canônico do sistema —
+        # não casava com nenhuma CHAVE do dicionário, caía no fallback LLM
+        # e podia terminar como NOT_FOUND → HITL falso-positivo.
+        if processed in self._known_drug_vocab():
+            return DrugIdentification(
+                original_name=drug_name,
+                canonical_name=processed,
+                method=IdentificationMethod.EXACT_MATCH,
+                confidence=1.0,
+            )
+
         # 2. Regex patterns
         result = self._try_regex_match(processed)
         if result:
@@ -397,6 +440,24 @@ class HybridDrugIdentifier:
                 confidence=confidence,
                 alternatives=alternatives,
             )
+
+        # 3.5. ANVISA Dados Abertos: marca comercial BR → princípio ativo,
+        # resolvido recursivamente (dict/fuzzy/LLM) para o nome canônico EN
+        anvisa_active = self._try_anvisa_lookup(processed)
+        if anvisa_active:
+            sub = self.identify(anvisa_active)
+            if sub.method != IdentificationMethod.NOT_FOUND:
+                logger.debug(
+                    f"ANVISA lookup: '{drug_name}' → '{anvisa_active}' → "
+                    f"'{sub.canonical_name}'"
+                )
+                return DrugIdentification(
+                    original_name=drug_name,
+                    canonical_name=sub.canonical_name,
+                    method=IdentificationMethod.ANVISA_LOOKUP,
+                    confidence=min(0.9, sub.confidence),
+                    alternatives=sub.alternatives,
+                )
 
         # 4. LLM fallback (se disponível)
         if self.llm_client:
@@ -457,6 +518,82 @@ class HybridDrugIdentifier:
 
         return best_match, best_ratio, alternatives
 
+    def _load_anvisa_map(self) -> Dict[str, str]:
+        """Carrega (lazy) o mapa marca→princípio ativo dos Dados Abertos ANVISA."""
+        if self._anvisa_map is None:
+            self._anvisa_map = {}
+            try:
+                path = (
+                    Path(__file__).resolve().parents[3] / "data" / "anvisa_brands.json"
+                )
+                if path.exists():
+                    with open(path, encoding="utf-8") as f:
+                        self._anvisa_map = json.load(f)
+                    logger.info(
+                        f"📋 Base ANVISA carregada: {len(self._anvisa_map)} marcas"
+                    )
+                else:
+                    logger.info(
+                        "Base ANVISA ausente — rode scripts/import_anvisa.py "
+                        "para habilitar lookup marca→princípio ativo"
+                    )
+            except Exception as e:
+                logger.warning(f"Falha ao carregar base ANVISA: {e}")
+        return self._anvisa_map
+
+    def _try_anvisa_lookup(self, name: str) -> Optional[str]:
+        """Busca a marca nos Dados Abertos ANVISA e retorna o princípio ativo (PT).
+
+        Produtos multi-ativos ("A + B") retornam apenas o primeiro componente;
+        os demais ficam registrados no log para auditoria.
+        """
+        amap = self._load_anvisa_map()
+        if not amap:
+            return None
+        ativo = amap.get(name)
+        if not ativo:
+            return None
+        parts = [p.strip() for p in ativo.split("+") if p.strip()]
+        if len(parts) > 1:
+            logger.info(
+                f"ANVISA: '{name}' é multi-ativo ({ativo}); usando '{parts[0]}'"
+            )
+        return parts[0].lower() if parts else None
+
+    def _known_drug_vocab(self) -> set:
+        """
+        Vocabulário de nomes canônicos conhecidos (lazy).
+
+        Fontes: valores de DRUG_SYNONYMS + nomes distintos da base CSV de
+        interações (data/db_drug_interactions.csv). Serve de âncora
+        anti-alucinação para o fallback LLM: se o modelo "inventar" um nome
+        que não existe em nenhuma base, tratamos como NOT_FOUND (o que
+        aciona escalonamento para revisão humana no pipeline clínico).
+        """
+        if self._known_drug_names is None:
+            vocab = {v.lower() for v in self.DRUG_SYNONYMS.values()}
+            try:
+                csv_path = (
+                    Path(__file__).resolve().parents[3]
+                    / "data"
+                    / "db_drug_interactions.csv"
+                )
+                if csv_path.exists():
+                    import csv as _csv
+
+                    with open(csv_path, encoding="utf-8", errors="replace") as f:
+                        reader = _csv.reader(f)
+                        next(reader, None)  # pular cabeçalho
+                        for row in reader:
+                            if len(row) >= 2:
+                                vocab.add(row[0].strip().lower())
+                                vocab.add(row[1].strip().lower())
+            except Exception as e:  # pragma: no cover - resiliência
+                logger.warning(f"Vocabulário CSV indisponível p/ validação LLM: {e}")
+            self._known_drug_names = vocab
+            logger.info(f"Vocabulário anti-alucinação: {len(vocab)} nomes conhecidos")
+        return self._known_drug_names
+
     def _try_llm_inference(self, original: str, processed: str) -> Optional[str]:
         """
         Usa LLM para identificar medicamentos não reconhecidos
@@ -485,7 +622,17 @@ Response (single word or compound name only):"""
 
             # Validar resposta
             if result and result != "unknown" and len(result) < 50:
-                return result
+                # ANTI-ALUCINAÇÃO: aceitar apenas nomes presentes no
+                # vocabulário conhecido. Sem isso, o LLM pode ecoar/inventar
+                # um nome (ex: "blorfazina") e a droga fictícia seguiria o
+                # pipeline como se fosse real, sem revisão humana.
+                if result in self._known_drug_vocab():
+                    return result
+                logger.warning(
+                    f"LLM sugeriu '{result}' para '{original}', mas o nome não "
+                    "existe no vocabulário conhecido — tratando como não "
+                    "identificado (escalonamento HITL)"
+                )
 
         except Exception as e:
             logger.warning(f"LLM inference falhou: {e}")

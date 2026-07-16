@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..data import (
     get_category_recommendations,
     get_critical_combinations,
+    get_critical_interactions,
     get_population_alerts,
     get_recommendation_templates,
 )
@@ -297,7 +298,12 @@ CRITICAL_DRUG_COMBINATIONS = [
     },
 ]
 
-# Interações críticas conhecidas (fallback clínico)
+# Interações críticas conhecidas (fallback clínico embutido).
+# ATENÇÃO: NÃO usar este dict diretamente para matching — as chaves NÃO são
+# canônicas ("aspirin" != saída do normalizador "acetylsalicylic acid").
+# Use get_all_critical_interaction_rules() + canonicalização no
+# DrugInteractionService, que aplica o MESMO normalizador dos medicamentos
+# do paciente (invariante que garante o matching).
 CRITICAL_INTERACTIONS = {
     ("spironolactone", "losartan"): {
         "severity": "high",
@@ -313,7 +319,119 @@ CRITICAL_INTERACTIONS = {
         "recommendation": "Avoid combination if possible",
         "category": "Coagulacao",
     },
+    # Contraindicação absoluta clássica: potencialização da via NO/GMPc
+    ("nitrate", "pde5_inhibitor"): {
+        "severity": "critical",
+        "mechanism": (
+            "Nitratos doam óxido nítrico (↑GMPc) e inibidores de PDE5 "
+            "bloqueiam a degradação do GMPc — vasodilatação potencializada"
+        ),
+        "effect": "Hipotensão grave, potencialmente fatal (colapso cardiovascular)",
+        "recommendation": (
+            "Combinação CONTRAINDICADA — não administrar; intervalo mínimo "
+            "de 24-48h entre as classes"
+        ),
+        "category": "Cardiovascular",
+    },
 }
+
+# Classes farmacológicas referenciadas por regras (ex: [warfarin, nsaid]).
+# Expandidas para membros concretos na canonicalização das regras.
+DRUG_CLASS_MEMBERS: Dict[str, List[str]] = {
+    "nsaid": [
+        "ibuprofen",
+        "naproxen",
+        "diclofenac",
+        "ketoprofen",
+        "ketorolac",
+        "piroxicam",
+        "meloxicam",
+        "indomethacin",
+        "celecoxib",
+        "etodolac",
+        "nimesulide",
+        "aspirin",
+        "acetylsalicylic acid",
+    ],
+}
+DRUG_CLASS_MEMBERS["nsaids"] = DRUG_CLASS_MEMBERS["nsaid"]
+DRUG_CLASS_MEMBERS["nitrate"] = [
+    "isosorbide mononitrate",
+    "isosorbide dinitrate",
+    "nitroglycerin",
+]
+DRUG_CLASS_MEMBERS["nitrates"] = DRUG_CLASS_MEMBERS["nitrate"]
+DRUG_CLASS_MEMBERS["pde5_inhibitor"] = [
+    "sildenafil",
+    "tadalafil",
+    "vardenafil",
+]
+DRUG_CLASS_MEMBERS["pde5_inhibitors"] = DRUG_CLASS_MEMBERS["pde5_inhibitor"]
+
+
+def get_all_critical_interaction_rules() -> List[Dict[str, Any]]:
+    """
+    Fonte ÚNICA de regras determinísticas de interação medicamentosa.
+
+    Unifica (antes havia 4 fontes independentes, 2 delas nunca consultadas):
+    1. CRITICAL_INTERACTIONS (fallback embutido acima)
+    2. YAML drug_data.yaml -> critical_combinations (severity default: high)
+    3. YAML drug_data.yaml -> critical_interactions (severity explícita)
+
+    Cada regra: {"drugs": [a, b], "severity", "mechanism", "effect",
+                 "recommendation", "category"}
+
+    A canonicalização (PT/EN/sinônimos/classes) é responsabilidade do
+    DrugInteractionService._get_canonical_critical_rules().
+    """
+    rules: List[Dict[str, Any]] = []
+
+    for (drug_a, drug_b), data in CRITICAL_INTERACTIONS.items():
+        rules.append({"drugs": [drug_a, drug_b], **data})
+
+    try:
+        for combo in get_critical_combinations():
+            drugs = combo.get("drugs") or []
+            if len(drugs) != 2:
+                continue
+            rules.append(
+                {
+                    "drugs": [str(drugs[0]), str(drugs[1])],
+                    "severity": combo.get("severity", "high"),
+                    "mechanism": combo.get("mechanism", combo.get("reason", "")),
+                    "effect": combo.get("reason", "Interação crítica conhecida"),
+                    "recommendation": combo.get(
+                        "recommendation",
+                        "Combinação de alto risco — revisar com o prescritor",
+                    ),
+                    "category": combo.get("category", "ClinicalRule"),
+                }
+            )
+
+        for _name, data in (get_critical_interactions() or {}).items():
+            drugs = data.get("drugs") or []
+            if len(drugs) != 2:
+                continue
+            rules.append(
+                {
+                    "drugs": [str(drugs[0]), str(drugs[1])],
+                    "severity": data.get("severity", "high"),
+                    "mechanism": data.get("mechanism", ""),
+                    "effect": data.get("effect", "Interação crítica conhecida"),
+                    "recommendation": data.get(
+                        "recommendation",
+                        "Combinação de alto risco — revisar com o prescritor",
+                    ),
+                    "category": data.get("category", "ClinicalRule"),
+                }
+            )
+    except Exception:  # pragma: no cover - resiliência a YAML ausente
+        logger.warning(
+            "Falha ao carregar regras críticas do YAML; usando fallback embutido",
+            exc_info=True,
+        )
+
+    return rules
 
 
 # =============================================================================

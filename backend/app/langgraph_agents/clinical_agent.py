@@ -163,6 +163,16 @@ Seja minucioso, preciso e baseado em evidências.
                 medication_text, patient_data
             )
 
+            # Step 2b: Interações CRÍTICAS com medicamentos em uso são
+            # contraindicações de bula (ex: aspirina + varfarina = uso
+            # concomitante contraindicado). Deriva entradas para que a
+            # seção de contraindicações nunca fique vazia nesses casos.
+            contraindications.extend(
+                self._derive_interaction_contraindications(
+                    interactions, contraindications
+                )
+            )
+
             # Step 3: Calculate overall risk (rule-based, doesn't need LLM)
             self.agent_logger.progress("Calculando nível de risco geral")
             risk_level = self._calculate_risk(interactions, contraindications)
@@ -199,6 +209,22 @@ Seja minucioso, preciso e baseado em evidências.
                 logger.warning(
                     f"Low-evidence escalation triggered: "
                     f"evidence_quality={evidence_quality}, high_risk_patient=True"
+                )
+
+            # Step 5b: Guardrail — medicamento não identificado nas bases.
+            # "Nenhuma interação encontrada" para droga desconhecida é
+            # falso-negativo perigoso: força revisão humana e aviso visível.
+            unidentified = self._find_unidentified_drugs(medication_text)
+            if unidentified:
+                needs_escalation = True
+                nomes = ", ".join(sorted(unidentified))
+                escalation_reasons.append(
+                    f"Medicamento(s) não identificado(s) nas bases oficiais: "
+                    f"{nomes}. A análise de interações pode estar incompleta — "
+                    "revisão humana obrigatória."
+                )
+                logger.warning(
+                    f"⚠️ HITL por medicamento não identificado: {nomes}"
                 )
 
             # Step 6: Generate structured recommendations
@@ -386,6 +412,24 @@ Seja minucioso, preciso e baseado em evidências.
 
         return False
 
+    def _canonical_dedup_name(self, name: str) -> str:
+        """
+        Nome canônico para dedup: PT/EN/marcas colapsam no mesmo identificador
+        ('varfarina', 'Marevan' e 'warfarin' → 'warfarin'). Usa a normalização
+        canônica do DrugInteractionService com fallback textual simples.
+        """
+        try:
+            canonical = self.interaction_service._normalize_drug_name(name)
+            # Type-check defensivo: se o serviço retornar algo que não é
+            # string não-vazia (mock em testes, None, objeto inesperado),
+            # cai no fallback textual em vez de propagar lixo para a chave
+            # de dedup (sorted() em não-strings levanta TypeError).
+            if isinstance(canonical, str) and canonical.strip():
+                return canonical.lower().strip()
+        except Exception:
+            pass
+        return normalize_drug_name(name or "").lower()
+
     def _deduplicate_interactions(
         self, interactions: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
@@ -395,11 +439,15 @@ Seja minucioso, preciso e baseado em evidências.
         PATTERN: Canonical deduplication with source aggregation
         SKILL: @python-performance-optimization - Efficient dedup with merge
 
-        Key formula: (normalized_drug1, normalized_drug2, mechanism_prefix)
-        - Drug names are normalized and sorted alphabetically
-        - Mechanism is truncated to first 50 chars for grouping
-        - Sources are merged from all duplicates
-        - Highest severity is preserved
+        Key formula: (canonical_drug1, canonical_drug2) — apenas o par
+        ordenado. REGRESSÃO CORRIGIDA: a chave antiga incluía o prefixo de
+        description/mechanism; como cada fonte descreve o mesmo par com texto
+        diferente, o merge "maior severidade por par" nunca acontecia e o
+        laudo mostrava a mesma interação duplicada (ex: varfarina+aspirina
+        "low" do CSV ao lado do "critical" das regras clínicas).
+        - Drug names são canonizados (PT/EN/marcas → mesma chave) e ordenados
+        - Sources são fundidas de todas as duplicatas
+        - A entrada de maior severidade define severity/description/mechanism
 
         Returns:
             List of deduplicated interactions with merged sources
@@ -411,25 +459,32 @@ Seja minucioso, preciso e baseado em evidências.
         seen: Dict[tuple, Dict[str, Any]] = {}
 
         for item in interactions:
-            # Normalize drug names
-            drug1 = normalize_drug_name(item.get("drug1", "")).lower()
-            drug2 = normalize_drug_name(item.get("drug2", "")).lower()
+            # Canonical drug names (PT/EN/brands collapse to the same key)
+            drug1 = self._canonical_dedup_name(item.get("drug1", ""))
+            drug2 = self._canonical_dedup_name(item.get("drug2", ""))
 
-            # Create canonical key (sorted drugs + mechanism prefix)
+            # Canonical key: sorted pair only (no mechanism prefix)
             drugs = tuple(sorted([drug1, drug2]))
-            mechanism = (item.get("description", "") or item.get("mechanism", ""))[:50]
-            key = (*drugs, mechanism)
+            key = drugs
 
             if key in seen:
                 existing = seen[key]
 
-                # Merge: keep highest severity
+                # Merge: a entrada mais severa define o conteúdo clínico
                 existing_sev = SEVERITY_ORDER.get(
                     existing.get("severity", "unknown"), 0
                 )
                 new_sev = SEVERITY_ORDER.get(item.get("severity", "unknown"), 0)
                 if new_sev > existing_sev:
-                    existing["severity"] = item.get("severity")
+                    for field in (
+                        "severity",
+                        "description",
+                        "mechanism",
+                        "recommendation",
+                        "source",
+                    ):
+                        if item.get(field) is not None:
+                            existing[field] = item[field]
 
                 # Merge sources
                 new_source = item.get("source", "unknown")
@@ -477,10 +532,6 @@ Seja minucioso, preciso e baseado em evidências.
 
         current_medications = patient_data.get("current_medications", [])
 
-        if not current_medications:
-            logger.info("   No current medications - no interactions to check")
-            return [], sources_used
-
         # Split medication_text if it's comma-separated (legacy format)
         medications_to_check = [
             m.strip() for m in medication_text.split(",") if m.strip()
@@ -488,8 +539,24 @@ Seja minucioso, preciso e baseado em evidências.
         if len(medications_to_check) <= 1:
             medications_to_check = [medication_text]
 
+        # ROOT CAUSE FIX: interações também devem ser checadas ENTRE os
+        # medicamentos da própria prescrição (ex: "varfarina, aspirina" no
+        # mesmo campo), não apenas contra current_medications. Antes, sem
+        # current_medications havia early-return e o par crítico
+        # varfarina+aspirina passava despercebido (risco "low").
+        def _others_for(drug: str) -> List[str]:
+            peers = [m for m in medications_to_check if m != drug]
+            return list(current_medications) + peers
+
+        if not current_medications and len(medications_to_check) <= 1:
+            logger.info(
+                "   Single medication and no current medications - "
+                "no interactions to check"
+            )
+            return [], sources_used
+
         logger.info(
-            "   Checking %d medications against %d current meds",
+            "   Checking %d medications against %d current meds (+ pairwise)",
             len(medications_to_check),
             len(current_medications),
         )
@@ -499,7 +566,7 @@ Seja minucioso, preciso e baseado em evidências.
         # 1) CSV local (rápido) - check each medication
         for drug in medications_to_check:
             csv_interactions = self.interaction_service.find_interactions(
-                drug_name=drug, other_drugs=current_medications
+                drug_name=drug, other_drugs=_others_for(drug)
             )
             if csv_interactions:
                 for i in csv_interactions:
@@ -529,23 +596,30 @@ Seja minucioso, preciso e baseado em evidências.
             if "openfda" not in sources_used:
                 sources_used.append("openfda")
 
-        # 4) Clinical rules fallback if still no interactions
-        if not interactions:
-            try:
-                fallback_results = self.interaction_service._check_known_clinical_rules(
-                    drug_name=medication_text, other_drugs=current_medications
-                )
-                if fallback_results:
-                    logger.info(
-                        f"Clinical rules found {len(fallback_results)} interactions"
+        # 4) Regras clínicas determinísticas - SEMPRE executam.
+        # ROOT CAUSE FIX: antes rodavam apenas quando nenhuma outra fonte
+        # retornava resultados; evidência fraca de RAG/OpenFDA suprimia
+        # pares críticos conhecidos (ex: varfarina+aspirina → risco "low").
+        # A deduplicação abaixo preserva a maior severidade por par.
+        try:
+            rule_results: List[Dict[str, Any]] = []
+            for drug in medications_to_check:
+                rule_results.extend(
+                    self.interaction_service._check_known_clinical_rules(
+                        drug_name=drug, other_drugs=_others_for(drug)
                     )
-                    for i in fallback_results:
-                        i["source"] = "clinical_rules"
-                    interactions.extend(fallback_results)
-                    if "clinical_rules" not in sources_used:
-                        sources_used.append("clinical_rules")
-            except Exception as e:
-                logger.warning(f"Fallback de interações falhou: {e}")
+                )
+            if rule_results:
+                logger.info(
+                    f"Clinical rules found {len(rule_results)} interactions"
+                )
+                for i in rule_results:
+                    i["source"] = "clinical_rules"
+                interactions.extend(rule_results)
+                if "clinical_rules" not in sources_used:
+                    sources_used.append("clinical_rules")
+        except Exception as e:
+            logger.warning(f"Regras clínicas determinísticas falharam: {e}")
 
         # Deduplicar com canonical key e merge de fontes
         interactions = self._deduplicate_interactions(interactions)
@@ -609,13 +683,45 @@ Seja minucioso, preciso e baseado em evidências.
             logger.warning(f"Falha ao buscar evidências RAG: {e}")
             return []
 
+        # ANTI-FANTASMA: âncora de nomes do caso (bruto + canônico EN).
+        # A busca é SEMÂNTICA: para nomes desconhecidos (ex: "Blorfazina"),
+        # ela retorna o vizinho mais próximo do corpus (Flunarizine×
+        # Valsartan) e isso virava "interação" real no laudo. Evidência RAG
+        # só é aceita se o documento mencionar explicitamente algum
+        # medicamento do caso.
+        case_names: set = set()
+        for raw in [drug_name, *other_drugs]:
+            if not raw or not str(raw).strip():
+                continue
+            case_names.add(str(raw).lower().strip())
+            try:
+                case_names.add(normalize_drug_name(raw).lower().strip())
+            except Exception:  # pragma: no cover - resiliência
+                pass
+        anchors = {n for n in case_names if len(n) >= 4}
+
         interactions = []
         for doc in evidence_docs:
             metadata = doc.get("metadata", {})
+            doc_text = (
+                f"{doc.get('content', '')} {metadata.get('drug_name', '')}"
+            ).lower()
+            if anchors and not any(n in doc_text for n in anchors):
+                logger.debug(
+                    "Evidência RAG descartada (não menciona medicamentos do caso)"
+                )
+                continue
+            # FIX (ruído): sem droga parceira identificável (metadata sem
+            # drug_name e paciente sem medicamentos em uso), o item virava
+            # uma "interação" com drug2 vazio no frontend. Evidência RAG
+            # sem par identificado não é interação — pular.
+            partner = metadata.get("drug_name") or ", ".join(other_drugs)
+            if not partner:
+                continue
             interactions.append(
                 {
                     "drug1": drug_name,
-                    "drug2": metadata.get("drug_name") or ", ".join(other_drugs),
+                    "drug2": partner,
                     "description": doc.get("content", ""),
                     "severity": metadata.get("severity", "medium"),
                     "category": metadata.get("section", "RAG"),
@@ -643,17 +749,108 @@ Seja minucioso, preciso e baseado em evidências.
         allergies = patient_data.get("allergies", [])
         pregnant = bool(patient_data.get("pregnant"))
 
-        # Use existing DrugInteractionService
-        contraindications = self.interaction_service.analyze_contraindications(
-            drug_name=medication_text,
-            patient_conditions=conditions,
-            allergies=allergies,
-            pregnant=pregnant,
-        )
+        # ROOT CAUSE FIX: dividir texto separado por vírgula antes de
+        # consultar o identificador de drogas. Antes, a string combinada
+        # inteira (ex: "varfarina, aspirina") era enviada como um único
+        # nome e falhava a identificação ("Medicamento não identificado").
+        drugs_to_check = [
+            m.strip() for m in medication_text.split(",") if m.strip()
+        ]
+        if len(drugs_to_check) <= 1:
+            drugs_to_check = [medication_text]
+
+        # Use existing DrugInteractionService (por medicamento individual)
+        contraindications: List[Dict[str, Any]] = []
+        seen: set = set()
+        for drug in drugs_to_check:
+            for c in self.interaction_service.analyze_contraindications(
+                drug_name=drug,
+                patient_conditions=conditions,
+                allergies=allergies,
+                pregnant=pregnant,
+            ):
+                key = (c.get("type", ""), c.get("description", ""))
+                if key in seen:
+                    continue
+                seen.add(key)
+                contraindications.append(c)
 
         logger.info(f"   Found {len(contraindications)} contraindications")
 
         return contraindications
+
+    def _derive_interaction_contraindications(
+        self,
+        interactions: List[Dict[str, Any]],
+        existing: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """
+        Interações CRÍTICAS com medicamentos em uso são contraindicações
+        de bula (ex: aspirina é contraindicada em uso concomitante com
+        anticoagulantes). Deriva entradas de contraindicação a partir
+        das interações críticas já identificadas, sem duplicar.
+        """
+        derived: List[Dict[str, Any]] = []
+        seen = {
+            (c.get("type", ""), c.get("description", "")) for c in existing
+        }
+        for interaction in interactions:
+            if str(interaction.get("severity", "")).lower() != "critical":
+                continue
+            drug1 = interaction.get("drug1") or "medicamento analisado"
+            drug2 = interaction.get("drug2") or "medicamento em uso"
+            entry = {
+                "type": "Uso Concomitante Contraindicado",
+                "description": (
+                    f"Uso concomitante de {drug1} com {drug2} é "
+                    f"contraindicado: interação crítica identificada"
+                ),
+                "severity": "critical",
+                "source": interaction.get("source", "Base de Interações"),
+                "recommendation": interaction.get(
+                    "recommendation",
+                    "CONTRAINDICADO - Evitar combinação; "
+                    "consultar prescritor",
+                ),
+            }
+            key = (entry["type"], entry["description"])
+            if key not in seen:
+                seen.add(key)
+                derived.append(entry)
+
+        if derived:
+            logger.info(
+                "   Derived %d contraindication(s) from critical "
+                "interactions",
+                len(derived),
+            )
+        return derived
+
+    def _find_unidentified_drugs(self, medication_text: str) -> List[str]:
+        """Nomes da prescrição que o identificador híbrido NÃO resolveu.
+
+        Uma análise "sem interações" para droga desconhecida é um
+        falso-negativo perigoso — o chamador deve escalar para HITL.
+        """
+        import re as _re
+
+        try:
+            from ..services.drug_identifier import IdentificationMethod
+
+            identifier = get_interaction_service().drug_identifier
+            names = [
+                n.strip()
+                for n in _re.split(r"[,;+\n]", medication_text or "")
+                if n.strip()
+            ]
+            return [
+                n
+                for n in names
+                if identifier.identify(n).method == IdentificationMethod.NOT_FOUND
+            ]
+        except Exception as exc:  # guardrail nunca derruba a análise
+            logger.warning(f"Guardrail de identificação falhou: {exc}")
+            return []
 
     def _calculate_risk(
         self,
@@ -1044,10 +1241,23 @@ Seja específico, prático e acionável para clínicos."""
         )  # 3+ evidence = full score
         confidence_factors.append(evidence_score * 0.2)  # 20% weight
 
-        # Factor 3: Interaction clarity
+        # Factor 3: Interaction clarity — calibrada pela FONTE da evidência.
+        # Fontes determinísticas (DB/CSV/regras clínicas) dão confiança alta;
+        # evidência probabilística isolada (RAG/OpenFDA) dá confiança menor.
+        # A confiança reportada deve refletir a base real do achado.
+        deterministic_sources = {"csv", "db", "clinical_rules"}
         if interactions:
-            # If we found interactions in our database, high confidence
-            interaction_confidence = 0.9
+
+            def _item_sources(item: Dict[str, Any]) -> set:
+                srcs = set(item.get("sources") or [])
+                if item.get("source"):
+                    srcs.add(item["source"])
+                return srcs
+
+            has_deterministic = any(
+                _item_sources(i) & deterministic_sources for i in interactions
+            )
+            interaction_confidence = 0.95 if has_deterministic else 0.75
         else:
             # No interactions found - could be truly safe or missing data
             interaction_confidence = 0.7 if has_medications else 0.5

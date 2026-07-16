@@ -91,6 +91,15 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
             start_time = datetime.now()
             self.log_step(state, "Starting safety validation")
 
+            # Normalizar risk_level: pode chegar como str após serialização
+            # de estado (API/checkpoint). Sem isso, os checks quebram em
+            # `.value` (AttributeError em str) — regressão pega em teste.
+            raw_risk = state.get("risk_level")
+            if isinstance(raw_risk, str):
+                state["risk_level"] = {r.value: r for r in RiskLevel}.get(
+                    raw_risk.lower().strip(), RiskLevel.LOW
+                )
+
             # Run safety checks
             violations = self._run_safety_checks(state)
 
@@ -132,6 +141,54 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
                     state,
                     "Escalated risk_level LOW→MEDIUM: "
                     "low confidence with findings present",
+                )
+
+            # HARD GUARDRAIL: o risco final NUNCA pode ficar abaixo da maior
+            # severidade efetivamente encontrada nos achados. Antes,
+            # RISK_INCONSISTENCY apenas registrava a violação e o laudo saía
+            # como "BAIXO" mesmo descrevendo sangramento grave
+            # (ex: varfarina+aspirina).
+            severity_to_risk = {
+                "critical": RiskLevel.CRITICAL,
+                "high": RiskLevel.HIGH,
+                "medium": RiskLevel.MEDIUM,
+            }
+            risk_order = {
+                RiskLevel.LOW: 0,
+                RiskLevel.MEDIUM: 1,
+                RiskLevel.HIGH: 2,
+                RiskLevel.CRITICAL: 3,
+            }
+            findings = list(state.get("interactions") or []) + list(
+                state.get("contraindications") or []
+            )
+            floor = None
+            for finding in findings:
+                mapped = severity_to_risk.get(
+                    str(finding.get("severity", "")).lower()
+                )
+                if mapped and (
+                    floor is None or risk_order[mapped] > risk_order[floor]
+                ):
+                    floor = mapped
+
+            current_risk = updates.get("risk_level", state.get("risk_level"))
+            if isinstance(current_risk, str):
+                current_risk = {r.value: r for r in RiskLevel}.get(
+                    current_risk, RiskLevel.LOW
+                )
+            if floor and risk_order.get(current_risk, 0) < risk_order[floor]:
+                updates["risk_level"] = floor
+                updates["requires_human_review"] = True
+                escalation_reasons.append(
+                    "Guardrail de consistência: risco elevado de "
+                    f"{getattr(current_risk, 'value', current_risk)} para "
+                    f"{floor.value} (maior severidade encontrada nos achados)"
+                )
+                self.log_step(
+                    state,
+                    f"Escalated risk_level to {floor.value}: "
+                    "findings severity floor guardrail",
                 )
 
             # Update timestamps - ensure timestamps dict exists in updates
@@ -393,6 +450,18 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
         SKILL: @debugging-strategies - Clear escalation criteria
         """
         escalation_reasons = []
+
+        # Rule 0: preservar escalonamento de agentes anteriores (ex:
+        # clinical_agent marca HITL quando um medicamento não é identificado
+        # nas bases). Antes, este método recalculava do zero e SOBRESCREVIA
+        # o flag no estado — o laudo final saía sem revisão humana mesmo com
+        # o guardrail disparado a montante.
+        prior_reasons = list(state.get("escalation_reasons") or [])
+        if state.get("requires_human_review") and not prior_reasons:
+            prior_reasons = ["Escalonado por agente anterior (guardrail clínico)"]
+        for reason in prior_reasons:
+            if reason not in escalation_reasons:
+                escalation_reasons.append(reason)
 
         # Rule 1: Always escalate CRITICAL risk
         if state.get("risk_level") == RiskLevel.CRITICAL:
