@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL com pgvector
   db:
@@ -57,6 +55,12 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: medsafe_ollama
+    # DESATIVADO por padrão: Docker no WSL sem nvidia-container-toolkit (runtime "nvidia" indisponível)
+    # e sudo interativo necessário para instalar. A stack usa o Ollama NATIVO do host (GPU),
+    # que escuta em 172.17.0.1:11434 (docker0), acessível via host.docker.internal.
+    # Para voltar ao container: instalar nvidia-container-toolkit, `nvidia-ctk runtime configure
+    # --runtime=docker`, reiniciar o docker e subir com `--profile gpu-container`.
+    profiles: ["gpu-container"]
     environment:
       - OLLAMA_HOST=0.0.0.0
     volumes:
@@ -91,12 +95,16 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: medsafe_api
+    # host-gateway → IP do docker0 (172.17.0.1), onde o Ollama nativo do host escuta
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - DEBUG=false
       # SECURITY: Passwords via env vars - no defaults in production
       - DATABASE_URL=postgresql://${POSTGRES_USER:-medsafe}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-medsafe}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-      - OLLAMA_HOST=http://ollama:11434
+      # Ollama nativo do host (GPU via WSL) — ver comentário no serviço "ollama"
+      - OLLAMA_HOST=http://host.docker.internal:11434
       - OLLAMA_LLM=${OLLAMA_LLM:-medgemma:latest}
       - OLLAMA_VLM=${OLLAMA_VLM:-qwen2.5vl:7b}
       - SECRET_KEY=${SECRET_KEY}
@@ -139,8 +147,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      ollama:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/healthz"]
       interval: 30s
@@ -164,12 +170,16 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: medsafe_worker
+    # host-gateway → IP do docker0 (172.17.0.1), onde o Ollama nativo do host escuta
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: ["python", "-m", "backend.app.workers.analysis_worker"]
     environment:
       - DEBUG=false
       - DATABASE_URL=postgresql://${POSTGRES_USER:-medsafe}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-medsafe}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-      - OLLAMA_HOST=http://ollama:11434
+      # Ollama nativo do host (GPU via WSL) — ver comentário no serviço "ollama"
+      - OLLAMA_HOST=http://host.docker.internal:11434
       - OLLAMA_LLM=${OLLAMA_LLM:-medgemma:latest}
       - OLLAMA_VLM=${OLLAMA_VLM:-qwen2.5vl:7b}
       - SECRET_KEY=${SECRET_KEY}
@@ -190,8 +200,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      ollama:
-        condition: service_healthy
+    # FIX: sobrescreve o HEALTHCHECK do Dockerfile (curl :9000/healthz),
+    # que só faz sentido para a API — o worker não expõe HTTP.
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q analysis_worker /proc/1/cmdline || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
     networks:
       - medsafe_network
     restart: unless-stopped
@@ -218,7 +234,9 @@ services:
     depends_on:
       - api
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      # FIX: usar 127.0.0.1 — "localhost" resolve para ::1 (IPv6) no container,
+      # mas o nginx escuta apenas em IPv4 (0.0.0.0), causando healthcheck unhealthy.
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
