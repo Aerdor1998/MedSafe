@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from backend.app.langgraph_agents.state import CritiqueLevel
+from backend.app.langgraph_agents.state import CritiqueLevel, RiskLevel
 
 
 def _make_agent():
@@ -192,6 +192,58 @@ class TestSafeDefault:
         assert agent._should_refine(state, reflection) is True
 
 
+class TestRiskCeilingEarlyExit:
+    """Risco já CRITICAL (teto) não deve gastar ciclos de refinamento.
+
+    Escalar não tem para onde subir e o HITL revisa o caso de qualquer
+    forma; profiling mostrou ~75s desperdiçados nesses ciclos. A única
+    exceção é critique CRITICAL — análise criticamente falha ainda refina.
+    """
+
+    @pytest.mark.parametrize(
+        "critique",
+        [CritiqueLevel.HIGH, CritiqueLevel.MEDIUM, CritiqueLevel.LOW],
+    )
+    def test_critical_risk_skips_refinement(self, critique):
+        agent = _make_agent()
+        reflection = {"critique_level": critique}
+        state = {"refinement_count": 0, "risk_level": RiskLevel.CRITICAL}
+
+        assert agent._should_refine(state, reflection) is False
+
+    def test_critical_risk_as_string_also_skips(self):
+        """Estado serializado (checkpoint) guarda o enum como string."""
+        agent = _make_agent()
+        reflection = {"critique_level": CritiqueLevel.HIGH}
+        state = {"refinement_count": 0, "risk_level": RiskLevel.CRITICAL.value}
+
+        assert agent._should_refine(state, reflection) is False
+
+    def test_critical_critique_still_refines_at_critical_risk(self):
+        """Análise criticamente falha refina mesmo com risco no teto."""
+        agent = _make_agent()
+        reflection = {"critique_level": CritiqueLevel.CRITICAL}
+        state = {"refinement_count": 0, "risk_level": RiskLevel.CRITICAL}
+
+        assert agent._should_refine(state, reflection) is True
+
+    def test_non_critical_risk_keeps_refining(self):
+        """Risco abaixo do teto mantém o comportamento atual."""
+        agent = _make_agent()
+        reflection = {"critique_level": CritiqueLevel.HIGH}
+        state = {"refinement_count": 0, "risk_level": RiskLevel.HIGH}
+
+        assert agent._should_refine(state, reflection) is True
+
+    def test_missing_risk_level_keeps_refining(self):
+        """Estado sem risk_level (início do fluxo) não sofre early-exit."""
+        agent = _make_agent()
+        reflection = {"critique_level": CritiqueLevel.HIGH}
+        state = {"refinement_count": 0}
+
+        assert agent._should_refine(state, reflection) is True
+
+
 class TestPromptRequestsStructuredTag:
     """O prompt de reflexão deve exigir a linha CRITIQUE_LEVEL."""
 
@@ -220,3 +272,71 @@ class TestPromptRequestsStructuredTag:
 
         assert "CRITIQUE_LEVEL" in captured["prompt"]
         assert critique["critique_level"] == CritiqueLevel.PASS
+
+
+class TestLowRiskReflectionGate:
+    """Risco LOW não deve pagar o custo de uma rodada de reflexão.
+
+    Profiling (Fase 3) mostrou que casos benignos gastavam ciclos de
+    LLM sem alterar o desfecho — o HITL nunca é acionado para LOW e a
+    crítica raramente muda o resultado. O gate pula a reflexão inteira
+    e marca a análise como aprovada, preservando o fluxo para riscos
+    MEDIUM ou acima.
+    """
+
+    def _base_state(self, risk):
+        # Precisa de ao menos uma interação: sem análise clínica o
+        # process() retorna antes de chegar no gate de risco.
+        return {
+            "medication_text": "dipirona",
+            "patient_data": {"conditions": []},
+            "interactions": [
+                {"drug1": "a", "drug2": "b", "severity": "low", "description": "x"}
+            ],
+            "contraindications": [],
+            "risk_level": risk,
+            "confidence_score": 0.9,
+            "refinement_count": 0,
+        }
+
+    def test_low_risk_skips_llm_entirely(self):
+        agent = _make_agent()
+        agent.invoke_llm = MagicMock()
+        state = self._base_state(RiskLevel.LOW)
+
+        result = agent.process(state)
+
+        agent.invoke_llm.assert_not_called()
+        assert result["critique_level"] == CritiqueLevel.PASS
+
+    def test_low_risk_as_string_also_skips(self):
+        """Estado vindo de checkpoint serializa o enum como string."""
+        agent = _make_agent()
+        agent.invoke_llm = MagicMock()
+        state = self._base_state(RiskLevel.LOW.value)
+
+        result = agent.process(state)
+
+        agent.invoke_llm.assert_not_called()
+        assert result["critique_level"] == CritiqueLevel.PASS
+
+    def test_medium_risk_still_reflects(self):
+        agent = _make_agent()
+        agent.invoke_llm = MagicMock(return_value="CRITIQUE_LEVEL: PASS\nTudo certo.")
+        state = self._base_state(RiskLevel.MEDIUM)
+
+        result = agent.process(state)
+
+        agent.invoke_llm.assert_called_once()
+        assert result["critique_level"] == CritiqueLevel.PASS
+
+    def test_missing_risk_level_still_reflects(self):
+        """Sem risk_level no estado, o gate não pode assumir benignidade."""
+        agent = _make_agent()
+        agent.invoke_llm = MagicMock(return_value="CRITIQUE_LEVEL: PASS\nTudo certo.")
+        state = self._base_state(None)
+        state.pop("risk_level")
+
+        agent.process(state)
+
+        agent.invoke_llm.assert_called_once()

@@ -16,21 +16,18 @@ REFERENCE: Antonio Gulli "Agentic Design Patterns" Chapter 14 (RAG)
 import hashlib
 import json
 import logging
-from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+import re
+from typing import Any, Dict, List, Optional
 
 from langchain_core.documents import Document as LangChainDocument
 from langchain_ollama import OllamaEmbeddings
 from langchain_postgres.vectorstores import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from sqlalchemy import func, select, text
-from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from ..config import settings
 from ..utils.cache import rag_search_cache
 from .database import engine, get_db_context
-from .models import Document, Embedding
 
 logger = logging.getLogger(__name__)
 
@@ -298,6 +295,41 @@ class MedicalVectorStore:
             # Fallback to semantic only (don't cache errors)
             return self.semantic_search(query, k=k, filter_dict=filter_dict)
 
+    def _expand_query_for_fts(self, query: str) -> str:
+        """
+        Expande query pt-BR com nomes canônicos de fármacos em inglês.
+
+        O corpus DrugBank ingerido é em inglês ("Drug interaction between
+        Warfarin and ..."), então termos pt-BR como "varfarina" nunca casam
+        no full-text search. Usa o dicionário de sinônimos do
+        HybridDrugIdentifier (pt-BR → inglês científico) para anexar os
+        nomes canônicos à query, mantendo o texto original.
+        """
+        try:
+            from ..services.drug_identifier import HybridDrugIdentifier
+
+            q_lower = query.lower()
+            extras: List[str] = []
+            for synonym, canonical in HybridDrugIdentifier.DRUG_SYNONYMS.items():
+                if canonical.lower() in q_lower:
+                    continue  # nome canônico já presente na query
+                if re.search(rf"\b{re.escape(synonym)}\b", q_lower):
+                    extras.append(canonical)
+
+            if not extras:
+                return query
+
+            # Dedup preservando ordem
+            seen: set = set()
+            unique = [t for t in extras if not (t in seen or seen.add(t))]
+            expanded = f"{query} {' '.join(unique)}"
+            logger.debug(f"FTS query expandida: '{query}' → '{expanded}'")
+            return expanded
+
+        except Exception as e:
+            logger.debug(f"Expansão de query FTS ignorada: {e}")
+            return query
+
     def _keyword_search(
         self, query: str, k: int = 5, filter_dict: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
@@ -307,6 +339,14 @@ class MedicalVectorStore:
         PATTERN: Sparse retrieval (BM25-like)
         """
         try:
+            # O corpus (DrugBank) é em inglês; queries pt-BR precisam de
+            # expansão com nomes canônicos EN para gerar hits no FTS
+            # (ex.: "varfarina" nunca casa com o lexema "warfarin").
+            expanded_query = self._expand_query_for_fts(query)
+            or_query = " OR ".join(
+                t for t in re.findall(r"[\wÀ-ÿ-]+", expanded_query) if len(t) > 2
+            )
+
             with get_db_context() as db:
                 # Build filter conditions SAFELY (no string interpolation).
                 #
@@ -324,7 +364,11 @@ class MedicalVectorStore:
                 }
 
                 where_clauses: list[str] = []
-                params: Dict[str, Any] = {"query": query, "k": k}
+                params: Dict[str, Any] = {
+                    "query": expanded_query,
+                    "query_or": or_query,
+                    "k": k,
+                }
 
                 if filter_dict:
                     for idx, (raw_key, raw_value) in enumerate(filter_dict.items()):
@@ -346,14 +390,22 @@ class MedicalVectorStore:
                     (" AND " + " AND ".join(where_clauses)) if where_clauses else ""
                 )
 
-                # Full-text search query
+                # Full-text search query.
+                # Combina AND estrito (plainto_tsquery: todos os termos) com
+                # OR amplo (websearch_to_tsquery: qualquer termo) via operador
+                # `||` de tsquery. ts_rank naturalmente ranqueia documentos
+                # que casam mais lexemas acima dos que casam apenas um.
                 query_sql = f"""
+                    WITH tsq AS (
+                        SELECT plainto_tsquery('portuguese', :query)
+                               || websearch_to_tsquery('portuguese', :query_or) AS q
+                    )
                     SELECT
                         document,
                         cmetadata as metadata,
-                        ts_rank(to_tsvector('english', document), plainto_tsquery('english', :query)) as score
-                    FROM langchain_pg_embedding
-                    WHERE to_tsvector('english', document) @@ plainto_tsquery('english', :query)
+                        ts_rank(to_tsvector('portuguese', document), tsq.q) as score
+                    FROM langchain_pg_embedding, tsq
+                    WHERE to_tsvector('portuguese', document) @@ tsq.q
                     {where_clause}
                     ORDER BY score DESC
                     LIMIT :k
@@ -421,12 +473,20 @@ class MedicalVectorStore:
         # Sort by combined score
         combined = sorted(score_map.values(), key=lambda x: x["score"], reverse=True)
 
-        # Return documents with updated scores
+        # Normalize to 0-1: raw RRF scores are tiny (max = 1/(k+1) ≈ 0.016
+        # with k=60), which breaks downstream consumers calibrated for
+        # cosine-like scores (e.g. document_agent.min_relevance_score=0.15
+        # would discard ALL hybrid results). After normalization:
+        #   - rank 1 em ambas as listas  -> 1.0
+        #   - rank 1 apenas na semântica -> semantic_weight (0.7)
+        #   - rank 1 apenas no keyword   -> keyword_weight (0.3)
+        max_rrf = 1.0 / (k + 1)
+
         return [
             {
                 **item["doc"],
-                "score": item["score"],
-                "relevance": self._score_to_relevance(item["score"]),
+                "score": item["score"] / max_rrf,
+                "relevance": self._score_to_relevance(item["score"] / max_rrf),
             }
             for item in combined
         ]

@@ -5,7 +5,7 @@ PATTERN: Centralized configuration with type safety (PDF pg 27-31)
 SKILLS: @api-design-principles, @fastapi-templates, @ultrathink
 
 Configures:
-- Ollama qwen3:8b model integration
+- Ollama medgemma:latest model integration
 - PostgreSQL checkpointing for HITL
 - Agent Ops & Observability settings
 """
@@ -26,7 +26,7 @@ class LangGraphSettings(BaseSettings):
     """
 
     # ========================================================================
-    # OLLAMA MODEL CONFIGURATION (qwen3:8b)
+    # OLLAMA MODEL CONFIGURATION (medgemma:latest)
     # ========================================================================
     # SKILL: @debugging-strategies - Use environment variables for Docker compatibility
     # SKILL: @python-performance-optimization - Increased timeouts for GPU processing
@@ -36,16 +36,18 @@ class LangGraphSettings(BaseSettings):
     # Cloud is OPT-IN: only used when OLLAMA_CLOUD is set (non-empty) AND an API key is provided.
     # Default is local-only to avoid accidental cloud spend.
     ollama_model: str = os.getenv("OLLAMA_CLOUD", "").strip() or os.getenv(
-        "OLLAMA_LLM", "qwen3:8b"
+        "OLLAMA_LLM", "medgemma:latest"
     )
     ollama_local_model: str = os.getenv(
-        "OLLAMA_LLM", "qwen3:8b"
+        "OLLAMA_LLM", "medgemma:latest"
     )  # Local model (also fallback)
     ollama_api_key: Optional[str] = os.getenv(
         "OLLAMA_API_KEY", None
     )  # API key for cloud models
     ollama_temperature: float = 0.1  # Low temp for medical accuracy
-    ollama_max_tokens: int = 2048
+    # Cap de tokens de saída (fase 4): env-overridable — geração de tokens
+    # é 94-97% da latência do pipeline (evals/profile_pipeline.py).
+    ollama_max_tokens: int = int(os.getenv("OLLAMA_MAX_TOKENS", "2048"))
     ollama_timeout: int = 300  # 5 minutes for complex multi-agent analysis
 
     @property
