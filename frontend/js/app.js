@@ -15,9 +15,14 @@ class MedSafeApp {
         // SKILL: debugging-strategies
         // FIX: Porta mudada 8000 → 9000 → 9001 devido a conflitos
         // Ver PORT_CONFLICT_FIX.md para detalhes
-        this.apiUrl = window.location.hostname.includes('hf.space')
-            ? `https://medsafe-mvp.hf.space` // Hugging Face Space
-            : 'http://localhost:9001'; // Porta do backend FastAPI (Docker)
+        const hostname = window.location.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            this.apiUrl = 'http://localhost:9001'; // Porta do backend FastAPI (Docker)
+        } else if (hostname.includes('hf.space')) {
+            this.apiUrl = `https://medsafe-mvp.hf.space`; // Hugging Face Space
+        } else {
+            this.apiUrl = ''; // Same-origin (Vercel + rewrite proxy)
+        }
         
         this.init();
     }

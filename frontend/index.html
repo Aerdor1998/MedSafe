@@ -654,9 +654,14 @@
         // MedSafe Frontend - Refined Edition
         // =============================================================================
 
-        const API_URL = window.location.hostname.includes('hf.space')
-            ? 'https://medsafe-mvp.hf.space'
-            : (window.location.protocol === 'https:' ? window.location.origin : 'http://localhost:9001');
+        // Detecção de API: localhost → backend dev direto; hf.space → Space;
+        // qualquer outro host (Vercel) → '' = same-origin, proxied pelo rewrite
+        // de /api/* e /healthz em vercel.json (sem CORS).
+        const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+            ? 'http://localhost:9001'
+            : (window.location.hostname.includes('hf.space')
+                ? 'https://medsafe-mvp.hf.space'
+                : '');
 
         let patientData = {};
         let currentMedications = [];

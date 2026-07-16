@@ -20,16 +20,17 @@ class MedSafeAPI {
     }
 
     detectApiUrl() {
+        const hostname = window.location.hostname;
+        // Desenvolvimento local
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            return 'http://localhost:9001';
+        }
         // Hugging Face Space
-        if (window.location.hostname.includes('hf.space')) {
+        if (hostname.includes('hf.space')) {
             return 'https://medsafe-mvp.hf.space';
         }
-        // Produção com Nginx
-        if (window.location.protocol === 'https:') {
-            return window.location.origin;
-        }
-        // Desenvolvimento local
-        return 'http://localhost:9001';
+        // Qualquer outro host (Vercel): same-origin, rewrite faz proxy
+        return '';
     }
 
     /**

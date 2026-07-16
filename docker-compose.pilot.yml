@@ -1,0 +1,45 @@
+# =============================================================================
+# Override de PILOTO: api/worker em container usando o Ollama NATIVO do host
+# (WSL2), em vez do container ollama (que exige runtime nvidia + re-pull ~5GB).
+#
+# Requisitos no host:
+#   - Ollama nativo escutando em 0.0.0.0:11434 (OLLAMA_HOST=0.0.0.0 ollama serve)
+#   - modelos: medgemma:latest (e VLM configurado, se usado)
+#
+# Uso:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.pilot.yml \
+#     up -d db redis api worker
+#
+# `depends_on: !override` remove a dependência do serviço ollama (senão o
+# compose subiria o container ollama mesmo sem listá-lo no `up`).
+# =============================================================================
+services:
+  api:
+    environment:
+      - OLLAMA_HOST=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on: !override
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    environment:
+      - OLLAMA_HOST=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on: !override
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # FIX: o healthcheck herdado do prod (curl :9000/healthz) é da API — o worker
+    # não serve HTTP e ficava "unhealthy" para sempre. Sem pgrep na imagem,
+    # verificamos via /proc que o PID 1 ainda é o analysis_worker.
+    healthcheck: !override
+      test: ["CMD-SHELL", "grep -q analysis_worker /proc/1/cmdline"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

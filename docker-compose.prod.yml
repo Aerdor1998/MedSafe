@@ -103,6 +103,8 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       # SECURITY: ALLOWED_ORIGINS must be explicit - wildcard rejected in production
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:?ALLOWED_ORIGINS must be set explicitly (no wildcard)}
+      # SECURITY: TrustedHostMiddleware — hosts externos (ex: túnel Cloudflare) devem ser explícitos
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ENABLE_METRICS=true
       - METRICS_PORT=9090
