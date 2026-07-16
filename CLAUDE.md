@@ -274,3 +274,6 @@ src/
 3. Sort imports: `isort --check-only .`
 4. Run linting: `flake8`
 5. Run type checking: `mypy src/`
+## Regras Operacionais (aprendidas em sessão)
+
+- **Segurança em produção (2026-07-16)**: NUNCA aplicar mudança que afrouxe autenticação/autorização em produção (ex.: `ALLOW_ANONYMOUS_ANALYSIS=true`) sem autorização explícita do usuário no turno atual. Propor a mudança, explicar o trade-off e aplicar somente após confirmação. Reverter imediatamente se aplicada sem confirmação.
