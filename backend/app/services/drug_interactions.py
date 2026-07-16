@@ -18,12 +18,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ..data import get_drug_synonyms
 from ..db.database import get_db_context
 from ..db.models import DrugInteraction
 from .clinical_rules import (
-    CRITICAL_INTERACTIONS,
+    DRUG_CLASS_MEMBERS,
     POPULATION_DRUG_ALERTS,
     PopulationRisk,
+    get_all_critical_interaction_rules,
 )
 from .drug_identifier import (
     HybridDrugIdentifier,
@@ -413,6 +415,9 @@ class DrugInteractionService:
             / "db_drug_interactions.csv"
         )
         self._interactions_cache = None
+        # Caches lazy: regras críticas canônicas e mapa reverso de aliases
+        self._canonical_rules_cache: Optional[Dict[frozenset, Dict[str, Any]]] = None
+        self._alias_reverse_cache: Optional[Dict[str, set]] = None
         self.classifier_agent = get_classifier_agent()  # Agente especializado
         self.openfda_service = OpenFDAService()
 
@@ -573,8 +578,16 @@ class DrugInteractionService:
             if other and other.strip():
                 other_normalized_map[other] = self._normalize_drug_name(other)
 
-        # Build set of normalized names for fast lookup
-        search_drugs = {drug_normalized} | set(other_normalized_map.values())
+        # Build search variants for the fast filter: raw + canônico + aliases.
+        # ROOT CAUSE FIX: o filtro rápido compara contra o texto CRU do CSV;
+        # usar só o nome canônico ("acetylsalicylic acid") pulava linhas
+        # escritas com sinônimos ("Aspirin") antes da checagem detalhada.
+        search_drugs: set = set()
+        for raw, norm in [(drug_name, drug_normalized)] + list(
+            other_normalized_map.items()
+        ):
+            search_drugs |= self._get_search_variants(raw, norm)
+        search_drugs.discard("")
 
         # LGPD/PHI: avoid logging medication names in plaintext
         logger.info(
@@ -795,35 +808,141 @@ class DrugInteractionService:
             logger.warning(f"OpenFDA validation failed: {e}")
             return []
 
+    def _expand_rule_drug(self, name: str) -> set:
+        """
+        Expandir um lado de uma regra para nomes canônicos.
+
+        Classes farmacológicas (ex: 'nsaid') expandem para todos os membros;
+        nomes simples passam pelo MESMO normalizador usado nos medicamentos
+        do paciente — invariante que garante o matching canônico.
+        """
+        token = (name or "").lower().strip()
+        if not token:
+            return set()
+        if token in DRUG_CLASS_MEMBERS:
+            return {
+                (self._normalize_drug_name(m) or m.lower().strip())
+                for m in DRUG_CLASS_MEMBERS[token]
+            }
+        return {self._normalize_drug_name(token) or token}
+
+    def _get_canonical_critical_rules(self) -> Dict[frozenset, Dict[str, Any]]:
+        """
+        Regras críticas com chaves canônicas (cache lazy).
+
+        ROOT CAUSE FIX: as chaves cruas ('aspirin') nunca casavam com a
+        saída do normalizador ('acetylsalicylic acid'), então NENHUMA regra
+        crítica disparava. Agora ambos os lados passam pelo mesmo
+        normalizador e classes (nsaid) são expandidas. Em colisão de pares,
+        prevalece a maior severidade.
+        """
+        if self._canonical_rules_cache is not None:
+            return self._canonical_rules_cache
+
+        severity_order = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+        canonical: Dict[frozenset, Dict[str, Any]] = {}
+
+        for rule in get_all_critical_interaction_rules():
+            drug_a, drug_b = rule["drugs"]
+            for ca in self._expand_rule_drug(drug_a):
+                for cb in self._expand_rule_drug(drug_b):
+                    if not ca or not cb or ca == cb:
+                        continue
+                    key = frozenset((ca, cb))
+                    existing = canonical.get(key)
+                    if existing is None or severity_order.get(
+                        rule.get("severity", ""), 0
+                    ) > severity_order.get(existing.get("severity", ""), 0):
+                        canonical[key] = rule
+
+        self._canonical_rules_cache = canonical
+        logger.info(f"Regras clínicas canônicas carregadas: {len(canonical)} pares")
+        return canonical
+
+    def _get_alias_reverse_map(self) -> Dict[str, set]:
+        """
+        Mapa nome -> grupo de aliases equivalentes (service + YAML), lazy.
+        Usado pelo filtro rápido do CSV para não perder linhas com sinônimos.
+        """
+        if self._alias_reverse_cache is not None:
+            return self._alias_reverse_cache
+
+        reverse: Dict[str, set] = {}
+
+        def _add_group(group: set) -> None:
+            for member in group:
+                reverse.setdefault(member, set()).update(group)
+
+        for synonym, canonical in self.DRUG_SYNONYMS.items():
+            _add_group({synonym.lower().strip(), canonical.lower().strip()})
+
+        try:
+            for canonical, syns in (get_drug_synonyms() or {}).items():
+                group = {canonical.lower().strip()} | {
+                    str(s).lower().strip() for s in (syns or [])
+                }
+                _add_group(group)
+        except Exception:
+            logger.debug("Sinônimos YAML indisponíveis para o filtro rápido")
+
+        self._alias_reverse_cache = reverse
+        return reverse
+
+    def _get_search_variants(self, raw: str, canonical: str) -> set:
+        """Variantes de busca (cru + canônico + aliases) para o fast filter."""
+        variants: set = set()
+        aliases = self._get_alias_reverse_map()
+        if raw and raw.strip():
+            raw_lower = raw.lower().strip()
+            variants.add(raw_lower)
+            variants |= aliases.get(raw_lower, set())
+        if canonical:
+            canon = canonical.lower().strip()
+            variants.add(canon)
+            variants |= aliases.get(canon, set())
+        return variants
+
     def _check_known_clinical_rules(
         self, drug_name: str, other_drugs: List[str]
     ) -> List[Dict[str, Any]]:
         """
-        Última camada: regras clínicas críticas conhecidas
+        Camada determinística: regras clínicas críticas conhecidas.
+
+        Matching canônico bilateral — 'aspirina'+'varfarina', 'AAS'+'Marevan'
+        e 'aspirin'+'warfarin' casam com a mesma regra. Esta camada SEMPRE
+        deve ser consultada pelo pipeline (não apenas como fallback).
         """
         results: List[Dict[str, Any]] = []
-        primary = self._normalize_drug_name(drug_name)
+        primary = self._normalize_drug_name(drug_name) or (
+            (drug_name or "").lower().strip()
+        )
+        if not primary:
+            return results
+
+        rules = self._get_canonical_critical_rules()
 
         for other in other_drugs:
             if not other or not other.strip():
                 continue
-            other_norm = self._normalize_drug_name(other)
-
-            for (drug_a, drug_b), data in CRITICAL_INTERACTIONS.items():
-                if {primary, other_norm} == {drug_a, drug_b}:
-                    results.append(
-                        {
-                            "drug1": drug_name,
-                            "drug2": other,
-                            "description": data.get(
-                                "effect", "Interação clínica conhecida"
-                            ),
-                            "severity": data.get("severity", "high"),
-                            "category": data.get("category", "ClinicalRule"),
-                            "mechanism": data.get("mechanism"),
-                            "recommendation": data.get("recommendation"),
-                        }
-                    )
+            other_norm = self._normalize_drug_name(other) or other.lower().strip()
+            pair = frozenset((primary, other_norm))
+            if len(pair) < 2:
+                continue
+            data = rules.get(pair)
+            if data:
+                results.append(
+                    {
+                        "drug1": drug_name,
+                        "drug2": other,
+                        "description": data.get(
+                            "effect", "Interação clínica conhecida"
+                        ),
+                        "severity": data.get("severity", "high"),
+                        "category": data.get("category", "ClinicalRule"),
+                        "mechanism": data.get("mechanism"),
+                        "recommendation": data.get("recommendation"),
+                    }
+                )
 
         if results:
             logger.info(f"Regras clínicas retornaram {len(results)} interações")
@@ -1224,8 +1343,34 @@ def normalize_drug_name(drug_name: str) -> str:
 
 
 def get_interaction_service() -> DrugInteractionService:
-    """Obter instância do serviço de interações"""
+    """Obter instância do serviço de interações.
+
+    O identificador híbrido recebe um LLM local como fallback (etapa 4)
+    para nomes comerciais fora dos dicionários/base ANVISA — antes o
+    fallback existia mas nunca era ligado em produção.
+    """
     global _interaction_service
     if _interaction_service is None:
-        _interaction_service = DrugInteractionService()
+        llm_client = None
+        try:
+            from langchain_ollama import ChatOllama
+
+            from ..langgraph_agents.config import get_settings
+
+            s = get_settings()
+            llm_client = ChatOllama(
+                base_url=s.ollama_base_url,
+                model=s.ollama_local_model,
+                temperature=0.0,
+                num_predict=30,
+                client_kwargs={
+                    "timeout": min(30, getattr(s, "ollama_timeout", 30) or 30)
+                },
+            )
+            logger.info(
+                f"🔮 LLM fallback do identificador habilitado ({s.ollama_local_model})"
+            )
+        except Exception as e:
+            logger.warning(f"LLM fallback do identificador indisponível: {e}")
+        _interaction_service = DrugInteractionService(llm_client=llm_client)
     return _interaction_service

@@ -214,7 +214,11 @@ async def test_query_openfda_detects_other_drug_and_sets_severity(monkeypatch):
 
 def test_check_known_clinical_rules_hits_at_least_one_pair(monkeypatch):
     mod, svc = _make_service(monkeypatch)
-    (a, b), data = next(iter(mod.CRITICAL_INTERACTIONS.items()))
+    # Regras críticas migraram para clinical_rules.py (fonte única);
+    # drug_interactions.py não expõe mais CRITICAL_INTERACTIONS.
+    from backend.app.services.clinical_rules import CRITICAL_INTERACTIONS
+
+    (a, b), data = next(iter(CRITICAL_INTERACTIONS.items()))
     monkeypatch.setattr(
         svc, "_normalize_drug_name", lambda s: (s or "").lower().strip(), raising=True
     )
