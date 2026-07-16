@@ -3,651 +3,1125 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MedSafe - Análise Inteligente de Medicamentos</title>
+    <title>MedSafe · Análise inteligente de interações medicamentosas</title>
+    <meta name="description" content="O MedSafe cruza o novo medicamento com o perfil do paciente e a medicação em uso — bases ANVISA e OMS, IA multi-agente — e devolve um relatório de risco em português claro.">
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f4f0">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0e0f">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f766e'/%3E%3Cpath d='M10 34h12l4-12 8 22 6-16 3 6h11' fill='none' stroke='white' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 
-    <!-- Dependencies -->
+    <!-- Tema antes do primeiro paint (evita flash) -->
+    <script>
+        (function () {
+            try {
+                var saved = localStorage.getItem('medsafe-theme');
+                if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.classList.add('dark');
+                }
+            } catch (e) { /* localStorage indisponível */ }
+        })();
+    </script>
+
+    <!-- Fontes: Bricolage Grotesque (display) · Instrument Sans (texto) · IBM Plex Mono (dados) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    
-    <!-- Distinctive Typography: Outfit + DM Sans -->
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-
-    <!-- Tailwind Config -->
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
                     fontFamily: {
-                        display: ['Outfit', 'sans-serif'],
-                        body: ['DM Sans', 'sans-serif'],
+                        display: ['"Bricolage Grotesque"', 'ui-sans-serif', 'sans-serif'],
+                        sans: ['"Instrument Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                        mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
                     },
                     colors: {
-                        surface: {
-                            900: '#0c1015',
-                            800: '#111820',
-                            700: '#171f2a',
-                            600: '#1e2836',
-                            500: '#2a3647',
-                        },
+                        // Cores dirigidas por CSS vars: os MESMOS utilitários que o
+                        // script da aplicação gera dinamicamente (text-slate-*,
+                        // bg-brand-*/15, violet-*, red-*) mudam junto com o tema.
                         brand: {
-                            cyan: '#22d3ee',
-                            teal: '#14b8a6',
-                            emerald: '#10b981',
-                            amber: '#f59e0b',
-                            rose: '#f43f5e',
-                        }
+                            DEFAULT: 'rgb(var(--c-teal) / <alpha-value>)',
+                            teal: 'rgb(var(--c-teal) / <alpha-value>)',
+                            cyan: 'rgb(var(--c-cyan) / <alpha-value>)',
+                            emerald: 'rgb(var(--c-emerald) / <alpha-value>)',
+                            amber: 'rgb(var(--c-amber) / <alpha-value>)',
+                            rose: 'rgb(var(--c-rose) / <alpha-value>)',
+                        },
+                        violet: {
+                            400: 'rgb(var(--c-violet-400) / <alpha-value>)',
+                            500: 'rgb(var(--c-violet-500) / <alpha-value>)',
+                        },
+                        red: {
+                            400: 'rgb(var(--c-red-400) / <alpha-value>)',
+                            500: 'rgb(var(--c-red-500) / <alpha-value>)',
+                        },
+                        slate: {
+                            200: 'rgb(var(--tx-1) / <alpha-value>)',
+                            300: 'rgb(var(--tx-2) / <alpha-value>)',
+                            400: 'rgb(var(--tx-3) / <alpha-value>)',
+                            500: 'rgb(var(--tx-4) / <alpha-value>)',
+                            600: 'rgb(var(--tx-5) / <alpha-value>)',
+                        },
+                        surface: {
+                            DEFAULT: 'rgb(var(--sf-1) / <alpha-value>)',
+                            600: 'rgb(var(--sf-3) / <alpha-value>)',
+                            700: 'rgb(var(--sf-2) / <alpha-value>)',
+                        },
                     },
                 }
             }
-        }
+        };
     </script>
 
     <style>
-        * { box-sizing: border-box; }
-        
+        /* =====================================================================
+           MedSafe Design Tokens — "receituário moderno"
+           Claro: papel clínico quente + tinta teal. Escuro: verde-negro profundo.
+           Todos os valores são triplets RGB para funcionar com <alpha-value>.
+           ===================================================================== */
+        :root {
+            --bg: 246 244 240;
+            --sf-1: 255 255 255;
+            --sf-2: 238 235 229;
+            --sf-3: 228 224 216;
+            --ln: 25 37 34;
+            --tx-1: 24 36 33;
+            --tx-2: 47 61 57;
+            --tx-3: 92 106 102;
+            --tx-4: 124 137 133;
+            --tx-5: 152 163 159;
+            --c-teal: 15 118 110;
+            --c-cyan: 14 116 144;
+            --c-emerald: 5 150 105;
+            --c-amber: 217 119 6;
+            --c-rose: 225 29 72;
+            --c-violet-400: 124 58 237;
+            --c-violet-500: 109 40 217;
+            --c-red-400: 220 38 38;
+            --c-red-500: 185 28 28;
+            --btn-tx: 255 255 255;
+            --glow: 15 118 110;
+            --card-shadow: 0 1px 2px rgb(25 37 34 / .05), 0 12px 32px -16px rgb(25 37 34 / .14);
+        }
+        .dark {
+            --bg: 10 14 15;
+            --sf-1: 19 26 27;
+            --sf-2: 27 36 37;
+            --sf-3: 36 47 48;
+            --ln: 226 236 233;
+            --tx-1: 233 238 236;
+            --tx-2: 202 211 208;
+            --tx-3: 146 159 155;
+            --tx-4: 108 121 117;
+            --tx-5: 82 94 91;
+            --c-teal: 45 212 191;
+            --c-cyan: 34 211 238;
+            --c-emerald: 52 211 153;
+            --c-amber: 251 191 36;
+            --c-rose: 251 113 133;
+            --c-violet-400: 167 139 250;
+            --c-violet-500: 139 92 246;
+            --c-red-400: 248 113 113;
+            --c-red-500: 239 68 68;
+            --btn-tx: 6 24 22;
+            --glow: 45 212 191;
+            --card-shadow: 0 1px 2px rgb(0 0 0 / .35), 0 16px 40px -20px rgb(0 0 0 / .55);
+        }
+
+        html { color-scheme: light; }
+        html.dark { color-scheme: dark; }
+
         body {
-            font-family: 'DM Sans', sans-serif;
-            background: linear-gradient(145deg, #0c1015 0%, #111820 40%, #171f2a 100%);
-            color: #e2e8f0;
-            min-height: 100vh;
+            background-color: rgb(var(--bg));
+            color: rgb(var(--tx-2));
+            font-family: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+            transition: background-color .3s ease, color .3s ease;
         }
 
-        h1, h2, h3, h4, h5, h6 {
-            font-family: 'Outfit', sans-serif;
-        }
+        ::selection { background: rgb(var(--c-teal) / .25); }
+        :focus-visible { outline: 2px solid rgb(var(--c-teal) / .7); outline-offset: 2px; border-radius: 4px; }
 
-        /* Glass morphism */
-        .glass {
-            background: rgba(17, 24, 32, 0.7);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(34, 211, 238, 0.08);
+        /* --- Fundo: papel milimetrado + auroras discretas ------------------- */
+        .decor { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+        .decor::before {
+            content: '';
+            position: absolute; inset: 0;
+            background-image:
+                linear-gradient(rgb(var(--ln) / .045) 1px, transparent 1px),
+                linear-gradient(90deg, rgb(var(--ln) / .045) 1px, transparent 1px);
+            background-size: 32px 32px;
+            -webkit-mask-image: linear-gradient(to bottom, black, transparent 75%);
+            mask-image: linear-gradient(to bottom, black, transparent 75%);
         }
+        .dark .decor::before { opacity: .55; }
+        .decor-blob { position: absolute; border-radius: 9999px; filter: blur(90px); opacity: .16; }
+        .dark .decor-blob { opacity: .13; }
+        .blob-a { width: 480px; height: 480px; top: -160px; right: -100px; background: radial-gradient(circle, rgb(var(--c-teal)), transparent 70%); }
+        .blob-b { width: 420px; height: 420px; top: 140px; left: -160px; background: radial-gradient(circle, rgb(var(--c-cyan)), transparent 70%); }
 
+        /* --- Superfícies ----------------------------------------------------- */
         .glass-card {
-            background: rgba(23, 31, 42, 0.6);
+            background: rgb(var(--sf-1) / .8);
+            border: 1px solid rgb(var(--ln) / .09);
             backdrop-filter: blur(12px);
-            border: 1px solid rgba(34, 211, 238, 0.1);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: var(--card-shadow);
         }
-
-        /* Brand gradient */
-        .gradient-text {
-            background: linear-gradient(135deg, #22d3ee 0%, #14b8a6 50%, #10b981 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        /* Glow effects */
-        .glow-cyan { box-shadow: 0 0 24px rgba(34, 211, 238, 0.25); }
-        .glow-emerald { box-shadow: 0 0 24px rgba(16, 185, 129, 0.25); }
-        .glow-rose { box-shadow: 0 0 24px rgba(244, 63, 94, 0.25); }
-
-        /* Navigation */
-        .nav-item {
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-            border-left: 3px solid transparent;
-        }
-        .nav-item.active {
-            background: linear-gradient(90deg, rgba(34, 211, 238, 0.12) 0%, transparent 100%);
-            border-left-color: #22d3ee;
-        }
-        .nav-item:hover:not(.active) {
-            background: rgba(34, 211, 238, 0.04);
-        }
-
-        /* Input styles */
-        .input-field {
-            background: rgba(23, 31, 42, 0.8);
-            border: 1px solid rgba(34, 211, 238, 0.15);
-            transition: all 0.2s;
-        }
-        .input-field:focus {
-            border-color: #22d3ee;
-            box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.1);
-            outline: none;
-        }
-        .input-field::placeholder { color: #64748b; }
-
-        /* Button gradient */
-        .btn-primary {
-            background: linear-gradient(135deg, #22d3ee 0%, #14b8a6 100%);
-            color: #0c1015;
-            font-weight: 600;
-            transition: all 0.25s;
-        }
-        .btn-primary:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(34, 211, 238, 0.3);
-        }
-        .btn-primary:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        /* Scrollbar */
-        .custom-scroll::-webkit-scrollbar { width: 5px; }
-        .custom-scroll::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); border-radius: 10px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: rgba(34, 211, 238, 0.3); border-radius: 10px; }
-
-        /* Animations */
-        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(12px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* Progress ring */
-        .progress-ring { transform: rotate(-90deg); }
-
-        /* Severity indicators */
-        .severity-low { border-left: 3px solid #10b981; background: rgba(16, 185, 129, 0.08); }
-        .severity-medium { border-left: 3px solid #f59e0b; background: rgba(245, 158, 11, 0.08); }
-        .severity-high { border-left: 3px solid #f43f5e; background: rgba(244, 63, 94, 0.08); }
-        .severity-critical { border-left: 3px solid #dc2626; background: rgba(220, 38, 38, 0.1); }
-
-        /* Step visibility */
-        .step-content { display: none; }
-        .step-content.block { display: block; }
-
-        /* Radio buttons */
-        .radio-card input:checked + div {
-            background: linear-gradient(135deg, #22d3ee 0%, #14b8a6 100%);
-            color: #0c1015;
-            border-color: transparent;
-        }
-
-        /* Med item */
-        .med-item { transition: all 0.2s; }
-        .med-item:hover { transform: translateX(4px); }
-
-        /* Result card */
         .result-card {
-            background: rgba(23, 31, 42, 0.5);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 16px;
+            background: rgb(var(--sf-1) / .85);
+            border: 1px solid rgb(var(--ln) / .09);
+            border-radius: 1rem;
             overflow: hidden;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: var(--card-shadow);
         }
         .result-card-header {
-            padding: 12px 16px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex; align-items: center; gap: .65rem;
+            padding: .7rem 1rem;
+            border-bottom: 1px solid rgb(var(--ln) / .07);
+        }
+
+        /* --- Navegação do wizard --------------------------------------------- */
+        .nav-item {
+            display: flex; align-items: center; gap: .7rem; width: 100%;
+            padding: .6rem .7rem; border-radius: .9rem;
+            border: 1px solid transparent; background: transparent;
+            text-align: left; cursor: pointer;
+            transition: background .2s ease, border-color .2s ease;
+        }
+        .nav-item:hover { background: rgb(var(--sf-2) / .55); }
+        .nav-item.active { background: rgb(var(--c-teal) / .09); border-color: rgb(var(--c-teal) / .25); }
+        .step-num {
+            width: 1.9rem; height: 1.9rem; border-radius: .65rem; flex: none;
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: .8rem;
+            background: rgb(var(--sf-2) / .8); color: rgb(var(--tx-3));
+            border: 1px solid rgb(var(--ln) / .1);
+            transition: background .2s ease, color .2s ease, box-shadow .2s ease;
+        }
+        .nav-item.active .step-num {
+            background: linear-gradient(135deg, rgb(var(--c-teal)), rgb(var(--c-cyan)));
+            color: rgb(var(--btn-tx)); border-color: transparent;
+            box-shadow: 0 4px 14px -4px rgb(var(--glow) / .5);
+        }
+        .nav-title { color: rgb(var(--tx-2)); }
+        .nav-item.active .nav-title { color: rgb(var(--tx-1)); }
+        .status-text { color: rgb(var(--tx-4)); }
+
+        /* --- Steps (contrato do app: .step-content / .block / .fade-in) ------ */
+        .step-content { display: none; }
+        .step-content.block { display: block; }
+        .fade-in { animation: fadeUp .45s cubic-bezier(.16, 1, .3, 1) both; }
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: none; }
+        }
+        .reveal { opacity: 0; animation: fadeUp .6s cubic-bezier(.16, 1, .3, 1) forwards; animation-delay: calc(var(--d, 0) * 80ms); }
+
+        /* --- Botões ----------------------------------------------------------- */
+        .btn-primary {
+            background: linear-gradient(135deg, rgb(var(--c-teal)), rgb(var(--c-cyan)));
+            color: rgb(var(--btn-tx));
+            font-weight: 700;
+            box-shadow: 0 6px 20px -8px rgb(var(--glow) / .55), inset 0 1px 0 rgb(255 255 255 / .18);
+            transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+        }
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.06);
+            box-shadow: 0 10px 26px -8px rgb(var(--glow) / .6), inset 0 1px 0 rgb(255 255 255 / .18);
+        }
+        .btn-primary:active { transform: translateY(0); }
+        .btn-ghost {
+            border: 1px solid rgb(var(--ln) / .14);
+            background: rgb(var(--sf-1) / .6);
+            color: rgb(var(--tx-2));
+            font-weight: 600;
+            transition: background .18s ease, border-color .18s ease;
+        }
+        .btn-ghost:hover { background: rgb(var(--sf-2) / .7); }
+
+        /* --- Formulário -------------------------------------------------------- */
+        .field-label {
+            display: block; font-size: .7rem; font-weight: 700;
+            letter-spacing: .07em; text-transform: uppercase;
+            color: rgb(var(--tx-3)); margin-bottom: .45rem;
+        }
+        .input-field {
+            background: rgb(var(--sf-1) / .75);
+            border: 1px solid rgb(var(--ln) / .13);
+            color: rgb(var(--tx-1));
+            transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+        }
+        .input-field::placeholder { color: rgb(var(--tx-4)); }
+        .input-field:focus {
+            outline: none;
+            border-color: rgb(var(--c-teal) / .6);
+            box-shadow: 0 0 0 3px rgb(var(--c-teal) / .14);
+            background: rgb(var(--sf-1));
+        }
+        .radio-card {
+            display: flex; align-items: center; justify-content: center; gap: .5rem;
+            padding: .65rem .75rem; border-radius: .8rem;
+            border: 1px solid rgb(var(--ln) / .14);
+            background: rgb(var(--sf-2) / .4);
+            font-size: .85rem; font-weight: 600; color: rgb(var(--tx-3));
+            transition: border-color .15s ease, background .15s ease, color .15s ease;
+        }
+        input[type="radio"]:checked + .radio-card {
+            border-color: rgb(var(--c-teal) / .55);
+            background: rgb(var(--c-teal) / .1);
+            color: rgb(var(--tx-1));
+            box-shadow: inset 0 0 0 1px rgb(var(--c-teal) / .35);
+        }
+        input[type="radio"]:focus-visible + .radio-card {
+            outline: 2px solid rgb(var(--c-teal) / .7); outline-offset: 2px;
+        }
+        .count-badge {
+            font-family: 'IBM Plex Mono', monospace;
+            background: rgb(var(--c-teal) / .12); color: rgb(var(--c-teal));
+            padding: .05rem .55rem; border-radius: 999px;
+            font-size: .72rem; font-weight: 600;
+        }
+        .upload-area {
+            border: 1.5px dashed rgb(var(--ln) / .2);
+            border-radius: 1rem; padding: 1.6rem; text-align: center; cursor: pointer;
+            background: rgb(var(--sf-2) / .3);
+            transition: border-color .2s ease, background .2s ease;
+        }
+        .upload-area:hover { border-color: rgb(var(--c-cyan) / .5); background: rgb(var(--c-cyan) / .05); }
+
+        /* --- Severidade (classes geradas pelo app) ---------------------------- */
+        .severity-high { background: rgb(var(--c-rose) / .06); border: 1px solid rgb(var(--c-rose) / .16); }
+        .severity-critical { background: rgb(var(--c-red-400) / .07); border: 1px solid rgb(var(--c-red-400) / .18); }
+        .severity-medium { background: rgb(var(--c-amber) / .07); border: 1px solid rgb(var(--c-amber) / .16); }
+        .severity-low { background: rgb(var(--c-emerald) / .06); border: 1px solid rgb(var(--c-emerald) / .16); }
+
+        .med-item { transition: transform .15s ease; }
+        .med-item:hover { transform: translateX(2px); }
+
+        /* --- Detalhes ----------------------------------------------------------- */
+        .gradient-text {
+            background: linear-gradient(100deg, rgb(var(--c-teal)), rgb(var(--c-cyan)) 60%, rgb(var(--c-emerald)));
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent; color: transparent;
+        }
+        .progress-ring { transform: rotate(-90deg); }
+        #risk-circle { transition: stroke-dashoffset 1s cubic-bezier(.16, 1, .3, 1), stroke .4s ease; }
+
+        .chip {
+            display: inline-flex; align-items: center; gap: .45rem;
+            padding: .35rem .8rem; border-radius: 999px;
+            border: 1px solid rgb(var(--ln) / .12);
+            background: rgb(var(--sf-1) / .7);
+            font-size: .72rem; font-weight: 600; color: rgb(var(--tx-3));
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+        }
+        .hint-card {
+            display: flex; gap: .65rem; align-items: flex-start;
+            padding: .8rem .95rem; border-radius: .9rem;
+            background: rgb(var(--c-teal) / .07);
+            border: 1px solid rgb(var(--c-teal) / .16);
+            font-size: .78rem; line-height: 1.55; color: rgb(var(--tx-2));
+        }
+        .hint-card i { color: rgb(var(--c-teal)); margin-top: .15rem; flex: none; }
+        .legend-dot { width: .7rem; height: .7rem; border-radius: 999px; flex: none; margin-top: .25rem; }
+
+        .theme-toggle {
+            width: 2.4rem; height: 2.4rem; border-radius: .8rem;
+            border: 1px solid rgb(var(--ln) / .13);
+            background: rgb(var(--sf-1) / .7); color: rgb(var(--tx-2));
+            display: inline-flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: background .18s ease, transform .18s ease;
+        }
+        .theme-toggle:hover { background: rgb(var(--sf-2) / .8); transform: rotate(12deg); }
+
+        /* --- Assinatura: linha de vida (ECG) ----------------------------------- */
+        .ecg-track { stroke: rgb(var(--tx-5) / .35); }
+        .ecg-pulse {
+            stroke: rgb(var(--c-teal));
+            filter: drop-shadow(0 0 6px rgb(var(--glow) / .6));
+            stroke-dasharray: 90 510;
+            animation: ecgflow 3s linear infinite;
+        }
+        .ecg-fast .ecg-pulse { animation-duration: 1.3s; stroke: rgb(var(--c-cyan)); }
+        @keyframes ecgflow {
+            from { stroke-dashoffset: 600; }
+            to { stroke-dashoffset: 0; }
+        }
+
+        /* Pipeline de agentes (didático, step 3) */
+        .stage-dot {
+            width: .5rem; height: .5rem; border-radius: 999px; flex: none;
+            background: rgb(var(--c-teal));
+            animation: stagePulse 1.8s ease-in-out infinite;
+            animation-delay: var(--d, 0s);
+        }
+        @keyframes stagePulse {
+            0%, 100% { opacity: .25; transform: scale(.85); }
+            50% { opacity: 1; transform: scale(1.15); }
+        }
+
+        /* --- Scrollbar ----------------------------------------------------------- */
+        .custom-scroll { scrollbar-width: thin; scrollbar-color: rgb(var(--tx-5) / .45) transparent; }
+        .custom-scroll::-webkit-scrollbar { width: 8px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: rgb(var(--tx-5) / .45); border-radius: 999px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: rgb(var(--tx-4) / .6); }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: .01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: .01ms !important;
+            }
         }
     </style>
 </head>
 
-<body class="flex items-center justify-center p-4 md:p-6">
+<body class="min-h-screen antialiased">
+    <noscript>
+        <p style="padding:1rem;text-align:center">O MedSafe precisa de JavaScript para funcionar.</p>
+    </noscript>
 
-    <main class="glass w-full max-w-[1440px] min-h-[90vh] rounded-2xl flex overflow-hidden relative">
+    <!-- Fundo decorativo -->
+    <div class="decor" aria-hidden="true">
+        <div class="decor-blob blob-a"></div>
+        <div class="decor-blob blob-b"></div>
+    </div>
 
-        <!-- Header -->
-        <header class="absolute top-0 left-0 right-0 h-14 px-5 flex items-center justify-between z-20 glass border-b border-brand-cyan/10">
-            <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-cyan to-brand-teal flex items-center justify-center glow-cyan">
-                    <i class="fas fa-heartbeat text-surface-900"></i>
-                </div>
-                <div>
-                    <h1 class="font-display font-bold text-lg gradient-text tracking-tight">MedSafe</h1>
-                    <span class="text-[9px] text-slate-500 font-medium uppercase tracking-widest">Análise IA</span>
-                </div>
+    <!-- ===================== TOPBAR ===================== -->
+    <header class="max-w-7xl mx-auto px-5 pt-5 pb-2 flex items-center justify-between gap-4 reveal" style="--d:0">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-lg"
+                 style="background: linear-gradient(135deg, rgb(var(--c-teal)), rgb(var(--c-cyan))); box-shadow: 0 6px 18px -6px rgb(var(--glow) / .55);">
+                <i class="fas fa-heart-pulse text-lg" aria-hidden="true"></i>
+            </div>
+            <div>
+                <p class="font-display font-bold text-lg leading-none text-slate-200">MedSafe</p>
+                <p class="text-[11px] text-slate-500 mt-0.5">interações medicamentosas com IA</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2.5">
+            <div id="api-status" class="chip" aria-live="polite">
+                <div class="w-1.5 h-1.5 bg-brand-amber rounded-full animate-pulse"></div>
+                <span class="text-brand-amber">Verificando…</span>
+            </div>
+            <div id="auth-chip"></div>
+            <button onclick="toggleTheme()" class="theme-toggle" aria-label="Alternar entre tema claro e escuro" title="Tema claro / escuro">
+                <i class="fas fa-moon dark:hidden" aria-hidden="true"></i>
+                <i class="fas fa-sun hidden dark:inline" aria-hidden="true"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- ===================== HERO ===================== -->
+    <section class="max-w-7xl mx-auto px-5 pt-8 pb-6 reveal" style="--d:1">
+        <p class="text-[11px] font-bold uppercase tracking-[.18em] text-brand-teal mb-3">
+            <i class="fas fa-wave-square mr-1.5" aria-hidden="true"></i>Segurança medicamentosa com IA
+        </p>
+        <h1 class="font-display font-extrabold tracking-tight text-slate-200 max-w-3xl"
+            style="font-size: clamp(1.7rem, 3.4vw, 2.7rem); line-height: 1.12;">
+            Misturar remédios não deveria ser<br class="hidden sm:block">
+            um <span class="gradient-text">jogo de adivinhação</span>.
+        </h1>
+        <p class="mt-3 max-w-2xl text-sm sm:text-[15px] leading-relaxed text-slate-400">
+            O MedSafe cruza o novo medicamento com o perfil do paciente e a medicação em uso —
+            consultando bases <strong class="text-slate-300 font-semibold">ANVISA</strong> e
+            <strong class="text-slate-300 font-semibold">OMS</strong> com um time de agentes de IA —
+            e devolve um relatório de risco em português claro.
+        </p>
+        <div class="flex flex-wrap gap-2 mt-5">
+            <span class="chip"><i class="fas fa-shield-halved text-brand-teal" aria-hidden="true"></i>Bases ANVISA · OMS</span>
+            <span class="chip"><i class="fas fa-diagram-project text-brand-cyan" aria-hidden="true"></i>IA multi-agente com revisão crítica</span>
+            <span class="chip"><i class="fas fa-lock text-brand-emerald" aria-hidden="true"></i>Dados tratados conforme LGPD</span>
+            <span class="chip"><i class="fas fa-user-doctor text-brand-amber" aria-hidden="true"></i>Para pacientes e profissionais</span>
+        </div>
+        <!-- Assinatura: linha de vida -->
+        <svg class="w-full mt-6" height="44" viewBox="0 0 600 44" preserveAspectRatio="none" aria-hidden="true">
+            <path class="ecg-track" fill="none" stroke-width="1.5"
+                  d="M0 26 H150 L162 26 L170 10 L180 40 L188 18 L194 26 H340 L352 26 L360 10 L370 40 L378 18 L384 26 H600"/>
+            <path class="ecg-pulse" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" pathLength="600"
+                  d="M0 26 H150 L162 26 L170 10 L180 40 L188 18 L194 26 H340 L352 26 L360 10 L370 40 L378 18 L384 26 H600"/>
+        </svg>
+    </section>
+
+    <!-- ===================== APP ===================== -->
+    <main class="max-w-7xl mx-auto px-5 pb-14 grid lg:grid-cols-[264px_1fr] gap-5 items-start">
+
+        <!-- Sidebar: passos -->
+        <aside class="space-y-3 reveal lg:sticky lg:top-5" style="--d:2">
+            <nav class="glass-card rounded-2xl p-2.5 grid grid-cols-4 gap-1 lg:grid-cols-1 lg:gap-1" aria-label="Etapas da análise">
+                <button id="nav-step-1" class="nav-item active" onclick="goToStep(1)">
+                    <span class="step-num">1</span>
+                    <span class="flex-1 min-w-0 hidden sm:block">
+                        <span class="nav-title block text-sm font-semibold truncate">Paciente</span>
+                        <span class="status-text block text-[10px] truncate">Em preenchimento</span>
+                    </span>
+                </button>
+                <button id="nav-step-2" class="nav-item" onclick="goToStep(2)">
+                    <span class="step-num">2</span>
+                    <span class="flex-1 min-w-0 hidden sm:block">
+                        <span class="nav-title block text-sm font-semibold truncate">Medicamento</span>
+                        <span class="status-text block text-[10px] truncate">Pendente</span>
+                    </span>
+                </button>
+                <button id="nav-step-3" class="nav-item opacity-50 pointer-events-none">
+                    <span class="step-num">3</span>
+                    <span class="flex-1 min-w-0 hidden sm:block">
+                        <span class="nav-title block text-sm font-semibold truncate">Análise</span>
+                        <span class="status-text block text-[10px] truncate">Aguardando</span>
+                    </span>
+                </button>
+                <button id="nav-step-4" class="nav-item opacity-50 pointer-events-none">
+                    <span class="step-num">4</span>
+                    <span class="flex-1 min-w-0 hidden sm:block">
+                        <span class="nav-title block text-sm font-semibold truncate">Relatório</span>
+                        <span class="status-text block text-[10px] truncate">---</span>
+                    </span>
+                </button>
+            </nav>
+
+            <div class="hint-card hidden lg:flex">
+                <i class="fas fa-circle-info" aria-hidden="true"></i>
+                <span><strong class="font-semibold text-slate-200">Como funciona?</strong>
+                Você descreve o paciente, informa o medicamento e três agentes de IA analisam
+                contraindicações, interações e reações — com revisão crítica antes do laudo.</span>
             </div>
 
-            <div class="flex items-center gap-3">
-                <div id="api-status" class="flex items-center gap-2 text-xs px-3 py-1.5 rounded-full glass-card">
-                    <div class="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></div>
-                    <span class="text-slate-400">Verificando</span>
-                </div>
-                <div class="flex items-center gap-2 px-2 py-1 rounded-full glass-card">
-                    <div class="w-7 h-7 rounded-full bg-gradient-to-br from-brand-cyan to-brand-emerald flex items-center justify-center text-surface-900 text-[10px] font-bold">
-                        MD
-                    </div>
-                    <span class="text-xs font-medium text-slate-300 hidden md:block">Dr. Silva</span>
-                </div>
-            </div>
-        </header>
-
-        <!-- Sidebar -->
-        <aside class="w-64 pt-16 pb-4 px-3 border-r border-brand-cyan/5 flex flex-col gap-3 custom-scroll overflow-y-auto">
-
-            <div class="flex flex-col gap-1.5 mt-2" id="nav-steps">
-                <!-- Step 1 -->
-                <div class="nav-item active p-2.5 rounded-xl cursor-pointer" onclick="goToStep(1)" id="nav-step-1">
-                    <div class="flex items-center gap-3">
-                        <div class="w-9 h-9 rounded-lg bg-brand-cyan/15 text-brand-cyan flex items-center justify-center">
-                            <i class="fas fa-user text-sm"></i>
-                        </div>
-                        <div class="flex-1">
-                            <h3 class="font-display font-semibold text-sm text-slate-200">Paciente</h3>
-                            <p class="text-[10px] text-slate-500 status-text">Em preenchimento</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Step 2 -->
-                <div class="nav-item p-2.5 rounded-xl cursor-pointer" onclick="goToStep(2)" id="nav-step-2">
-                    <div class="flex items-center gap-3">
-                        <div class="w-9 h-9 rounded-lg bg-surface-600 text-slate-500 flex items-center justify-center">
-                            <i class="fas fa-pills text-sm"></i>
-                        </div>
-                        <div class="flex-1">
-                            <h3 class="font-display font-semibold text-sm text-slate-200">Medicamentos</h3>
-                            <p class="text-[10px] text-slate-500 status-text">Pendente</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Step 3 -->
-                <div class="nav-item p-2.5 rounded-xl pointer-events-none opacity-50" id="nav-step-3">
-                    <div class="flex items-center gap-3">
-                        <div class="w-9 h-9 rounded-lg bg-surface-600 text-slate-500 flex items-center justify-center">
-                            <i class="fas fa-brain text-sm"></i>
-                        </div>
-                        <div class="flex-1">
-                            <h3 class="font-display font-semibold text-sm text-slate-200">Análise IA</h3>
-                            <p class="text-[10px] text-slate-500 status-text">Aguardando</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Step 4 -->
-                <div class="nav-item p-2.5 rounded-xl pointer-events-none opacity-50" id="nav-step-4">
-                    <div class="flex items-center gap-3">
-                        <div class="w-9 h-9 rounded-lg bg-surface-600 text-slate-500 flex items-center justify-center">
-                            <i class="fas fa-chart-bar text-sm"></i>
-                        </div>
-                        <div class="flex-1">
-                            <h3 class="font-display font-semibold text-sm text-slate-200">Resultado</h3>
-                            <p class="text-[10px] text-slate-500 status-text">---</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Agents Section -->
-            <div class="mt-4">
-                <h4 class="text-[9px] uppercase tracking-widest text-slate-600 font-semibold mb-2 px-2">Agentes Ativos</h4>
-                <div class="space-y-1.5">
-                    <div class="glass-card p-2 rounded-lg flex items-center gap-2">
-                        <div class="w-7 h-7 rounded bg-violet-500/15 text-violet-400 flex items-center justify-center text-xs">
-                            <i class="fas fa-brain"></i>
-                        </div>
-                        <div>
-                            <p class="text-[11px] font-medium text-slate-300">Clínico</p>
-                            <p class="text-[9px] text-slate-500">Análise</p>
-                        </div>
-                    </div>
-                    <div class="glass-card p-2 rounded-lg flex items-center gap-2">
-                        <div class="w-7 h-7 rounded bg-brand-teal/15 text-brand-teal flex items-center justify-center text-xs">
-                            <i class="fas fa-filter"></i>
-                        </div>
-                        <div>
-                            <p class="text-[11px] font-medium text-slate-300">Triagem</p>
-                            <p class="text-[9px] text-slate-500">Classificação</p>
-                        </div>
-                    </div>
-                    <div class="glass-card p-2 rounded-lg flex items-center gap-2">
-                        <div class="w-7 h-7 rounded bg-brand-rose/15 text-brand-rose flex items-center justify-center text-xs">
-                            <i class="fas fa-shield-alt"></i>
-                        </div>
-                        <div>
-                            <p class="text-[11px] font-medium text-slate-300">Segurança</p>
-                            <p class="text-[9px] text-slate-500">Guardrails</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Info Card -->
-            <div class="mt-auto glass-card p-3 rounded-xl relative overflow-hidden">
-                <div class="absolute top-0 right-0 w-16 h-16 bg-brand-cyan rounded-full blur-3xl -mr-8 -mt-8 opacity-15"></div>
-                <h4 class="font-display font-semibold text-xs text-slate-300 mb-1">Base ANVISA</h4>
-                <p class="text-[10px] text-slate-500 leading-relaxed mb-2">
-                    Protocolos atualizados com diretrizes OMS
-                </p>
-                <div class="flex items-center gap-1.5 text-[9px] font-medium text-brand-cyan">
-                    <i class="fas fa-sync fa-spin"></i>
-                    <span id="sync-status">Sincronizado</span>
-                </div>
+            <div class="hidden lg:flex items-center justify-between px-2 text-[10px] text-slate-500">
+                <span><i class="fas fa-rotate mr-1" aria-hidden="true"></i><span id="sync-status">—</span></span>
+                <span class="font-mono">v2 · beta</span>
             </div>
         </aside>
 
-        <!-- Main Content -->
-        <section class="flex-1 pt-16 px-5 pb-5 overflow-y-auto custom-scroll relative">
+        <!-- Conteúdo dos passos -->
+        <section class="min-w-0 reveal" style="--d:3">
 
-            <div class="max-w-3xl mx-auto h-full flex flex-col">
-
-                <!-- Step 1: Paciente -->
-                <div id="step-1" class="step-content block fade-in">
-                    <div class="mb-5">
-                        <h2 class="font-display text-xl font-bold gradient-text mb-1">Dados do Paciente</h2>
-                        <p class="text-slate-500 text-sm">Informações para calibração da análise</p>
+            <!-- ========== STEP 1 · Paciente ========== -->
+            <div id="step-1" class="step-content block">
+                <div class="glass-card rounded-3xl p-6 sm:p-8">
+                    <div class="mb-6">
+                        <h2 class="font-display text-xl font-bold text-slate-200">Quem vai tomar o medicamento?</h2>
+                        <p class="text-[13px] text-slate-400 mt-1">A mesma dose pode ser segura para uma pessoa e arriscada para outra.</p>
                     </div>
 
-                    <div class="grid md:grid-cols-2 gap-5">
-                        <div class="space-y-4">
+                    <div class="grid sm:grid-cols-2 gap-5">
+                        <div class="space-y-5">
                             <div class="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1 ml-1">Idade</label>
-                                    <input type="number" id="age" value="45" class="w-full px-3 py-2.5 rounded-lg input-field text-sm font-medium text-slate-200">
+                                    <label for="age" class="field-label">Idade</label>
+                                    <div class="relative">
+                                        <input id="age" type="number" min="0" max="120" value="45"
+                                               class="input-field font-mono w-full rounded-xl px-3.5 py-2.5 text-sm pr-12">
+                                        <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 pointer-events-none">anos</span>
+                                    </div>
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1 ml-1">Peso (kg)</label>
-                                    <input type="number" id="weight" value="78" class="w-full px-3 py-2.5 rounded-lg input-field text-sm font-medium text-slate-200">
+                                    <label for="weight" class="field-label">Peso</label>
+                                    <div class="relative">
+                                        <input id="weight" type="number" min="0" max="300" step="0.1" value="78"
+                                               class="input-field font-mono w-full rounded-xl px-3.5 py-2.5 text-sm pr-10">
+                                        <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 pointer-events-none">kg</span>
+                                    </div>
                                 </div>
                             </div>
 
                             <div>
-                                <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1 ml-1">Sexo Biológico</label>
+                                <span class="field-label">Sexo biológico</span>
                                 <div class="grid grid-cols-2 gap-2">
-                                    <label class="radio-card cursor-pointer">
-                                        <input type="radio" name="gender" value="masculino" class="hidden" checked>
-                                        <div class="px-3 py-2.5 rounded-lg glass-card text-center font-medium text-sm text-slate-300">Masculino</div>
+                                    <label class="cursor-pointer">
+                                        <input type="radio" name="gender" value="feminino" class="sr-only" checked>
+                                        <span class="radio-card"><i class="fas fa-venus" aria-hidden="true"></i>Feminino</span>
                                     </label>
-                                    <label class="radio-card cursor-pointer">
-                                        <input type="radio" name="gender" value="feminino" class="hidden">
-                                        <div class="px-3 py-2.5 rounded-lg glass-card text-center font-medium text-sm text-slate-300">Feminino</div>
+                                    <label class="cursor-pointer">
+                                        <input type="radio" name="gender" value="masculino" class="sr-only">
+                                        <span class="radio-card"><i class="fas fa-mars" aria-hidden="true"></i>Masculino</span>
                                     </label>
                                 </div>
                             </div>
 
                             <div>
-                                <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1 ml-1">Condições Pré-existentes</label>
-                                <textarea id="conditions" class="w-full px-3 py-2.5 rounded-lg input-field text-sm min-h-[80px] text-slate-200" placeholder="Ex: Diabetes Tipo 2, Hipertensão">Hipertensão arterial sistêmica</textarea>
+                                <label for="conditions" class="field-label">Condições de saúde</label>
+                                <textarea id="conditions" rows="2" class="input-field w-full rounded-xl px-3.5 py-2.5 text-sm resize-none"
+                                          placeholder="ex.: hipertensão, diabetes tipo 2, gestação…"></textarea>
                             </div>
 
                             <div>
-                                <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1 ml-1">Alergias Conhecidas</label>
-                                <textarea id="allergies" class="w-full px-3 py-2.5 rounded-lg input-field text-sm min-h-[50px] text-slate-200" placeholder="Ex: Penicilina, Sulfa"></textarea>
+                                <label for="allergies" class="field-label">Alergias conhecidas</label>
+                                <textarea id="allergies" rows="2" class="input-field w-full rounded-xl px-3.5 py-2.5 text-sm resize-none"
+                                          placeholder="ex.: dipirona, penicilina…"></textarea>
+                                <p class="text-[10px] text-slate-500 mt-1.5">Separe itens por vírgula ou por linha.</p>
                             </div>
                         </div>
 
-                        <!-- Visual Card -->
-                        <div class="glass-card p-5 flex flex-col items-center justify-center min-h-[280px] rounded-xl">
-                            <div class="relative">
-                                <svg class="w-32 h-32 progress-ring">
-                                    <circle cx="64" cy="64" r="56" stroke="rgba(34, 211, 238, 0.1)" stroke-width="6" fill="none"/>
-                                    <circle cx="64" cy="64" r="56" stroke="url(#grad1)" stroke-width="6" fill="none" stroke-dasharray="352" stroke-dashoffset="88" stroke-linecap="round"/>
+                        <div class="flex flex-col">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="field-label mb-0">Medicamentos em uso</span>
+                                <span id="current-meds-count" class="count-badge">0</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <input id="current-med-input" class="input-field flex-1 rounded-xl px-3.5 py-2.5 text-sm"
+                                       placeholder="ex.: losartana 50mg"
+                                       onkeydown="if(event.key==='Enter'){event.preventDefault();addCurrentMed();}">
+                                <button onclick="addCurrentMed()" class="btn-primary px-4 rounded-xl" aria-label="Adicionar medicamento à lista">
+                                    <i class="fas fa-plus" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                            <div id="current-meds-list" class="mt-3 space-y-2 overflow-y-auto custom-scroll max-h-56 flex-1">
+                                <p class="text-[11px] text-slate-500 text-center py-3">Nenhum medicamento adicionado</p>
+                            </div>
+
+                            <div class="hint-card mt-4">
+                                <i class="fas fa-lightbulb" aria-hidden="true"></i>
+                                <span><strong class="font-semibold text-slate-200">Por que pedimos isso?</strong>
+                                Idade, peso, condições e o que você já toma mudam como o corpo processa cada
+                                remédio — é esse cruzamento que revela interações invisíveis na bula.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end mt-7 pt-5" style="border-top: 1px solid rgb(var(--ln) / .08);">
+                        <button onclick="nextStep(2)" class="btn-primary px-6 py-2.5 rounded-xl text-sm flex items-center gap-2">
+                            Continuar <i class="fas fa-arrow-right text-xs" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== STEP 2 · Medicamento ========== -->
+            <div id="step-2" class="step-content">
+                <div class="glass-card rounded-3xl p-6 sm:p-8">
+                    <div class="mb-6">
+                        <h2 class="font-display text-xl font-bold text-slate-200">Qual medicamento você quer checar?</h2>
+                        <p class="text-[13px] text-slate-400 mt-1">Vamos analisá-lo contra o perfil e a medicação em uso.</p>
+                    </div>
+
+                    <label for="medication-search" class="field-label">Novo medicamento</label>
+                    <div class="relative">
+                        <i class="fas fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm" aria-hidden="true"></i>
+                        <input id="medication-search"
+                               class="input-field w-full rounded-2xl pl-11 pr-4 py-3.5 text-base font-medium"
+                               placeholder="ex.: sertralina, ibuprofeno, AAS…">
+                    </div>
+
+                    <div class="flex items-center gap-3 my-6" aria-hidden="true">
+                        <div class="flex-1 h-px" style="background: rgb(var(--ln) / .1);"></div>
+                        <span class="text-[11px] uppercase tracking-wider font-semibold text-slate-500">ou identifique pela embalagem</span>
+                        <div class="flex-1 h-px" style="background: rgb(var(--ln) / .1);"></div>
+                    </div>
+
+                    <div id="image-upload-area" class="upload-area" role="button" tabindex="0" aria-label="Enviar foto da embalagem do medicamento">
+                        <div class="w-11 h-11 mx-auto mb-3 rounded-xl flex items-center justify-center"
+                             style="background: rgb(var(--c-cyan) / .1); color: rgb(var(--c-cyan));">
+                            <i class="fas fa-camera" aria-hidden="true"></i>
+                        </div>
+                        <p class="text-sm font-semibold text-slate-300">Arraste uma foto da caixa ou clique para enviar</p>
+                        <p class="text-[11px] text-slate-500 mt-1">Nossa IA lê o nome do medicamento para você · JPG ou PNG · até 10MB</p>
+                    </div>
+                    <input type="file" id="image-upload" accept="image/png,image/jpeg,image/jpg" class="hidden" aria-hidden="true">
+
+                    <div id="image-preview" class="hidden mt-4 glass-card rounded-xl p-3 flex items-center gap-3">
+                        <img id="preview-img" alt="Pré-visualização da embalagem enviada" class="w-16 h-16 object-cover rounded-lg flex-none">
+                        <p id="ocr-result" class="text-xs text-slate-400 leading-relaxed" aria-live="polite"></p>
+                    </div>
+
+                    <div class="hint-card mt-5">
+                        <i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>
+                        <span><strong class="font-semibold text-slate-200">Dica:</strong> não sabe o nome exato?
+                        Fotografe a embalagem — o reconhecimento por imagem (OCR) identifica o medicamento
+                        e preenche o campo automaticamente.</span>
+                    </div>
+
+                    <div class="flex items-center justify-between mt-7 pt-5" style="border-top: 1px solid rgb(var(--ln) / .08);">
+                        <button onclick="goToStep(1)" class="btn-ghost px-5 py-2.5 rounded-xl text-sm flex items-center gap-2">
+                            <i class="fas fa-arrow-left text-xs" aria-hidden="true"></i> Voltar
+                        </button>
+                        <button onclick="startAnalysis()" class="btn-primary px-6 py-2.5 rounded-xl text-sm flex items-center gap-2">
+                            <i class="fas fa-shield-heart text-xs" aria-hidden="true"></i> Analisar segurança
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== STEP 3 · Análise em andamento ========== -->
+            <div id="step-3" class="step-content">
+                <div class="glass-card rounded-3xl p-8 sm:p-12 text-center max-w-2xl mx-auto">
+                    <svg class="w-full max-w-sm mx-auto ecg-fast" height="52" viewBox="0 0 600 52" preserveAspectRatio="none" aria-hidden="true">
+                        <path class="ecg-track" fill="none" stroke-width="1.5"
+                              d="M0 30 H150 L162 30 L170 10 L180 46 L188 20 L194 30 H340 L352 30 L360 10 L370 46 L378 20 L384 30 H600"/>
+                        <path class="ecg-pulse" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" pathLength="600"
+                              d="M0 30 H150 L162 30 L170 10 L180 46 L188 20 L194 30 H340 L352 30 L360 10 L370 46 L378 20 L384 30 H600"/>
+                    </svg>
+
+                    <h2 class="font-display text-xl font-bold text-slate-200 mt-6 mb-1.5">Processando análise</h2>
+                    <p class="text-sm text-slate-400" id="loading-text" aria-live="polite">Conectando com LLM...</p>
+                    <p class="text-[11px] text-slate-500 mt-2" id="loading-time">Tempo estimado: 30 a 60 segundos</p>
+
+                    <div class="mt-6 p-4 glass-card rounded-2xl max-w-sm mx-auto">
+                        <p class="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1">Analisando</p>
+                        <p id="analyzing-med" class="font-display font-bold text-brand-cyan text-base">---</p>
+                        <p id="analyzing-vs" class="text-[11px] text-slate-500 mt-1"></p>
+                    </div>
+
+                    <!-- Pipeline didático: quem está trabalhando agora -->
+                    <div class="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 mt-7">
+                        <span class="flex items-center gap-2 text-[11px] font-semibold text-slate-400">
+                            <span class="stage-dot" style="--d:0s"></span> Farmacologista IA
+                        </span>
+                        <i class="fas fa-angle-right text-[10px] text-slate-600" aria-hidden="true"></i>
+                        <span class="flex items-center gap-2 text-[11px] font-semibold text-slate-400">
+                            <span class="stage-dot" style="--d:.6s"></span> Revisor crítico
+                        </span>
+                        <i class="fas fa-angle-right text-[10px] text-slate-600" aria-hidden="true"></i>
+                        <span class="flex items-center gap-2 text-[11px] font-semibold text-slate-400">
+                            <span class="stage-dot" style="--d:1.2s"></span> Relator clínico
+                        </span>
+                    </div>
+                    <p class="text-[10px] text-slate-500 mt-3 max-w-sm mx-auto">
+                        Cada análise passa por um agente especialista, um revisor que questiona as
+                        conclusões e um relator que redige o laudo final.
+                    </p>
+                </div>
+            </div>
+
+            <!-- ========== STEP 4 · Relatório ========== -->
+            <div id="step-4" class="step-content">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+                    <!-- Resultados principais -->
+                    <div class="lg:col-span-2 space-y-4 overflow-y-auto custom-scroll max-h-[70vh] pr-1">
+
+                        <div class="flex items-center justify-between mb-1">
+                            <h2 class="font-display text-lg font-bold gradient-text">Relatório de Segurança</h2>
+                            <span id="risk-badge" class="px-3 py-1 rounded-full text-[10px] font-bold glass-card text-slate-400" aria-live="polite">
+                                <i class="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i> Carregando
+                            </span>
+                        </div>
+
+                        <!-- Contraindicações -->
+                        <!-- Guardrail: revisão humana -->
+                        <div id="human-review-banner" class="hidden result-card border border-brand-amber/40">
+                            <div class="p-4 flex items-start gap-3">
+                                <div class="w-7 h-7 rounded-lg bg-brand-amber/15 text-brand-amber flex items-center justify-center text-xs shrink-0">
+                                    <i class="fas fa-user-shield" aria-hidden="true"></i>
+                                </div>
+                                <div>
+                                    <p class="font-display font-semibold text-slate-200 text-sm">Revisão humana necessária</p>
+                                    <ul id="human-review-reasons" class="mt-1 space-y-1 text-[11px] text-slate-400"></ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="contraindications-section" class="result-card">
+                            <div class="result-card-header bg-brand-rose/5">
+                                <div class="w-7 h-7 rounded-lg bg-brand-rose/15 text-brand-rose flex items-center justify-center text-xs">
+                                    <i class="fas fa-ban" aria-hidden="true"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <h3 class="font-display font-semibold text-slate-200 text-sm leading-tight">Contraindicações</h3>
+                                    <p class="text-[10px] text-slate-500">Situações em que este medicamento não deve ser usado</p>
+                                </div>
+                                <span id="contraindication-count" class="ml-auto text-[9px] bg-brand-rose/15 text-brand-rose px-2 py-0.5 rounded-full font-semibold">0</span>
+                            </div>
+                            <div id="contraindications-list" class="p-4">
+                                <p class="text-slate-500 text-sm">Nenhuma contraindicação identificada</p>
+                            </div>
+                        </div>
+
+                        <!-- Interações -->
+                        <div id="interactions-section" class="result-card">
+                            <div class="result-card-header bg-brand-amber/5">
+                                <div class="w-7 h-7 rounded-lg bg-brand-amber/15 text-brand-amber flex items-center justify-center text-xs">
+                                    <i class="fas fa-exchange-alt" aria-hidden="true"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <h3 class="font-display font-semibold text-slate-200 text-sm leading-tight">Interações Medicamentosas</h3>
+                                    <p class="text-[10px] text-slate-500">Como este medicamento conversa com os que já estão em uso</p>
+                                </div>
+                                <span id="interaction-count" class="ml-auto text-[9px] bg-brand-amber/15 text-brand-amber px-2 py-0.5 rounded-full font-semibold">0</span>
+                            </div>
+                            <div id="interactions-list" class="p-4">
+                                <p class="text-slate-500 text-sm">Nenhuma interação significativa</p>
+                            </div>
+                        </div>
+
+                        <!-- Reações adversas -->
+                        <div id="adverse-section" class="result-card">
+                            <div class="result-card-header bg-violet-500/5">
+                                <div class="w-7 h-7 rounded-lg bg-violet-500/15 text-violet-400 flex items-center justify-center text-xs">
+                                    <i class="fas fa-allergies" aria-hidden="true"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <h3 class="font-display font-semibold text-slate-200 text-sm leading-tight">Reações Adversas Potenciais</h3>
+                                    <p class="text-[10px] text-slate-500">Efeitos indesejados possíveis para este perfil</p>
+                                </div>
+                                <span id="adverse-count" class="ml-auto text-[9px] bg-violet-500/15 text-violet-400 px-2 py-0.5 rounded-full font-semibold">0</span>
+                            </div>
+                            <div id="adverse-reactions-list" class="p-4">
+                                <p class="text-slate-500 text-sm">Perfil de segurança favorável</p>
+                            </div>
+                        </div>
+
+                        <!-- Recomendações -->
+                        <div id="recommendations-section" class="result-card">
+                            <div class="result-card-header bg-brand-cyan/5">
+                                <div class="w-7 h-7 rounded-lg bg-brand-cyan/15 text-brand-cyan flex items-center justify-center text-xs">
+                                    <i class="fas fa-user-md" aria-hidden="true"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <h3 class="font-display font-semibold text-slate-200 text-sm leading-tight">Recomendações Clínicas</h3>
+                                    <p class="text-[10px] text-slate-500">O que fazer com essas informações</p>
+                                </div>
+                                <span id="recommendation-count" class="ml-auto text-[9px] bg-brand-cyan/15 text-brand-cyan px-2 py-0.5 rounded-full font-semibold">0</span>
+                            </div>
+                            <div id="recommendations-list" class="p-4">
+                                <p class="text-slate-500 text-sm">Aguardando análise</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Coluna lateral do relatório -->
+                    <div class="space-y-4">
+                        <!-- Risco combinado -->
+                        <div class="glass-card p-4 rounded-2xl">
+                            <h4 class="font-display font-semibold text-slate-200 text-sm mb-3 text-center">Risco Combinado</h4>
+                            <div class="relative w-28 h-28 mx-auto">
+                                <svg class="w-full h-full progress-ring" role="img" aria-label="Indicador de risco combinado">
+                                    <circle cx="56" cy="56" r="48" style="stroke: rgb(var(--tx-5) / .25);" stroke-width="8" fill="none"/>
+                                    <circle id="risk-circle" cx="56" cy="56" r="48" stroke="url(#riskGrad)" stroke-width="8" fill="none"
+                                            stroke-dasharray="302" stroke-dashoffset="240" stroke-linecap="round"/>
                                     <defs>
-                                        <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-                                            <stop offset="0%" stop-color="#22d3ee"/>
-                                            <stop offset="100%" stop-color="#10b981"/>
+                                        <linearGradient id="riskGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" stop-color="#10b981"/>
+                                            <stop offset="100%" stop-color="#22d3ee"/>
                                         </linearGradient>
                                     </defs>
                                 </svg>
                                 <div class="absolute inset-0 flex flex-col items-center justify-center">
-                                    <i class="fas fa-user text-2xl text-brand-cyan mb-1"></i>
-                                    <span class="text-[10px] text-slate-500">Perfil</span>
+                                    <span id="risk-score" class="font-mono text-2xl font-semibold text-slate-200">--</span>
+                                    <span id="risk-label" class="text-[9px] text-brand-emerald uppercase font-bold mt-0.5 px-2 py-0.5 bg-brand-emerald/10 rounded-full">Calculando</span>
                                 </div>
                             </div>
-                            <p class="text-xs text-slate-500 mt-4 text-center">Complete os dados para prosseguir</p>
+                            <div class="grid grid-cols-2 gap-2 mt-4">
+                                <div class="p-2 rounded-lg glass-card">
+                                    <p class="text-[8px] text-slate-500 uppercase font-semibold text-center mb-1">Confiabilidade</p>
+                                    <p id="confidence-value" class="font-display font-bold text-brand-cyan text-sm text-center">--%</p>
+                                    <div class="mt-1.5 h-1 bg-surface-700 rounded-full overflow-hidden">
+                                        <div id="confidence-bar" class="h-full bg-brand-cyan rounded-full transition-all duration-500" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                <div class="text-center p-2 rounded-lg glass-card">
+                                    <p class="text-[8px] text-slate-500 uppercase font-semibold">Modelo</p>
+                                    <p id="model-used" class="font-display font-bold text-slate-200 text-[10px] mt-1">--</p>
+                                </div>
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="mt-5 flex justify-end">
-                        <button onclick="nextStep(2)" class="btn-primary px-6 py-2.5 rounded-lg font-display font-semibold flex items-center gap-2 text-sm">
-                            Próxima Etapa <i class="fas fa-arrow-right text-xs"></i>
+                        <!-- Resumo -->
+                        <div class="glass-card p-4 rounded-2xl">
+                            <h4 class="font-display font-semibold text-sm text-slate-200 mb-2">Resumo</h4>
+                            <p id="agent-summary" class="text-[11px] text-slate-400 leading-relaxed">
+                                Aguardando análise...
+                            </p>
+                            <div class="flex items-center gap-2 mt-3">
+                                <div class="w-5 h-5 rounded bg-violet-500/15 flex items-center justify-center text-[9px] text-violet-400">
+                                    <i class="fas fa-robot" aria-hidden="true"></i>
+                                </div>
+                                <span id="agent-model" class="text-[9px] text-slate-500">LangGraph Multi-Agent</span>
+                            </div>
+                        </div>
+
+                        <!-- Didático: como ler o risco -->
+                        <div class="glass-card p-4 rounded-2xl">
+                            <h4 class="font-display font-semibold text-sm text-slate-200 mb-3">Como ler o risco</h4>
+                            <ul class="space-y-2.5 text-[11px] leading-snug text-slate-400">
+                                <li class="flex gap-2.5">
+                                    <span class="legend-dot bg-brand-emerald"></span>
+                                    <span><strong class="text-slate-300 font-semibold">Baixo</strong> — sem sinais relevantes; mantenha o acompanhamento de rotina.</span>
+                                </li>
+                                <li class="flex gap-2.5">
+                                    <span class="legend-dot bg-brand-amber"></span>
+                                    <span><strong class="text-slate-300 font-semibold">Moderado</strong> — monitore sintomas e confirme doses com quem prescreveu.</span>
+                                </li>
+                                <li class="flex gap-2.5">
+                                    <span class="legend-dot bg-brand-rose"></span>
+                                    <span><strong class="text-slate-300 font-semibold">Alto</strong> — converse com médico ou farmacêutico antes de usar.</span>
+                                </li>
+                                <li class="flex gap-2.5">
+                                    <span class="legend-dot bg-red-500"></span>
+                                    <span><strong class="text-slate-300 font-semibold">Crítico</strong> — combinação potencialmente perigosa; procure orientação imediata.</span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <!-- Ações -->
+                        <button onclick="resetAnalysis()" class="w-full py-2.5 rounded-xl glass-card text-slate-300 font-semibold hover:bg-surface-600/50 transition flex items-center justify-center gap-2 text-sm">
+                            <i class="fas fa-redo text-slate-500 text-xs" aria-hidden="true"></i> Nova Análise
+                        </button>
+                        <button onclick="downloadReport()" class="w-full py-2.5 rounded-xl btn-primary flex items-center justify-center gap-2 text-sm">
+                            <i class="fas fa-file-arrow-down text-xs" aria-hidden="true"></i> Exportar laudo (JSON)
                         </button>
                     </div>
                 </div>
-
-                <!-- Step 2: Medicamentos -->
-                <div id="step-2" class="step-content">
-                    <div class="mb-5">
-                        <h2 class="font-display text-xl font-bold gradient-text mb-1">Triagem Medicamentosa</h2>
-                        <p class="text-slate-500 text-sm">Informe os medicamentos em uso e o novo medicamento</p>
-                    </div>
-
-                    <div class="grid lg:grid-cols-2 gap-5">
-                        <!-- Medicamentos em Uso -->
-                        <div class="glass-card p-4 rounded-xl">
-                            <div class="flex items-center justify-between mb-3">
-                                <h3 class="font-display font-semibold text-slate-200 flex items-center gap-2 text-sm">
-                                    <i class="fas fa-pills text-brand-teal text-xs"></i>
-                                    Medicamentos em Uso
-                                </h3>
-                                <span id="current-meds-count" class="text-[9px] bg-brand-teal/15 text-brand-teal px-2 py-0.5 rounded-full font-semibold">0</span>
-                            </div>
-                            <p class="text-[11px] text-slate-500 mb-3">Medicamentos que o paciente já utiliza</p>
-
-                            <div class="flex gap-2 mb-3">
-                                <input type="text" id="current-med-input" class="flex-1 px-3 py-2 rounded-lg input-field text-sm text-slate-200" placeholder="Ex: Losartana 50mg" onkeypress="if(event.key==='Enter')addCurrentMed()">
-                                <button onclick="addCurrentMed()" class="px-3 py-2 rounded-lg bg-brand-teal/15 text-brand-teal hover:bg-brand-teal/25 transition text-sm">
-                                    <i class="fas fa-plus"></i>
-                                </button>
-                            </div>
-
-                            <div id="current-meds-list" class="space-y-1.5 max-h-40 overflow-y-auto custom-scroll">
-                                <p class="text-[11px] text-slate-500 text-center py-3">Nenhum medicamento adicionado</p>
-                            </div>
-                        </div>
-
-                        <!-- Novo Medicamento -->
-                        <div class="glass-card p-4 rounded-xl border border-brand-cyan/20 relative overflow-hidden">
-                            <div class="absolute top-0 right-0 w-24 h-24 bg-brand-cyan rounded-full blur-3xl -mr-12 -mt-12 opacity-10"></div>
-
-                            <div class="flex items-center justify-between mb-3">
-                                <h3 class="font-display font-semibold text-slate-200 flex items-center gap-2 text-sm">
-                                    <i class="fas fa-search text-brand-cyan text-xs"></i>
-                                    Medicamento a Analisar
-                                </h3>
-                                <span class="text-[9px] bg-brand-cyan text-surface-900 px-2 py-0.5 rounded-full font-bold">NOVO</span>
-                            </div>
-                            <p class="text-[11px] text-slate-500 mb-3">Medicamento que deseja ADICIONAR</p>
-
-                            <input type="text" id="medication-search" class="w-full px-3 py-3 rounded-lg input-field text-base font-medium mb-3 text-slate-200" placeholder="Ex: Ibuprofeno, Dipirona...">
-
-                            <!-- Upload Area -->
-                            <div id="image-upload-area" class="glass-card p-4 flex flex-col items-center justify-center text-center cursor-pointer hover:border-brand-cyan/30 transition rounded-lg border border-dashed border-brand-cyan/15">
-                                <div class="w-10 h-10 rounded-lg bg-brand-cyan/10 text-brand-cyan flex items-center justify-center mb-2">
-                                    <i class="fas fa-camera"></i>
-                                </div>
-                                <p class="font-semibold text-slate-300 text-xs mb-0.5">Escanear Receita</p>
-                                <p class="text-[9px] text-slate-500">Arraste ou clique para upload</p>
-                                <input type="file" id="image-upload" accept="image/*" class="hidden">
-                            </div>
-
-                            <div id="image-preview" class="hidden mt-3">
-                                <img id="preview-img" class="w-full h-24 object-cover rounded-lg mb-2">
-                                <div id="ocr-result" class="p-2 glass-card rounded-lg text-xs text-brand-emerald"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Info Box -->
-                    <div class="mt-4 p-3 rounded-lg glass-card border border-brand-amber/15 bg-brand-amber/5">
-                        <div class="flex gap-3">
-                            <i class="fas fa-info-circle text-brand-amber mt-0.5 text-sm"></i>
-                            <div class="text-xs text-slate-400">
-                                <strong class="text-slate-300">A IA irá analisar:</strong>
-                                <ul class="mt-1 space-y-0.5 list-disc ml-4">
-                                    <li>Interações com os medicamentos em uso</li>
-                                    <li>Contraindicações com as condições do paciente</li>
-                                    <li>Ajustes de dose necessários</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="flex justify-between items-center mt-5">
-                        <button onclick="goToStep(1)" class="text-slate-500 font-medium hover:text-slate-300 transition px-3 py-2 flex items-center gap-2 text-sm">
-                            <i class="fas fa-arrow-left text-xs"></i> Voltar
-                        </button>
-                        <button onclick="startAnalysis()" id="analyze-btn" class="btn-primary px-6 py-2.5 rounded-lg font-display font-semibold flex items-center gap-2 text-sm">
-                            <i class="fas fa-brain text-xs"></i> Iniciar Análise
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Step 3: Loading -->
-                <div id="step-3" class="step-content">
-                    <div class="flex flex-col items-center justify-center min-h-[55vh]">
-                        <div class="relative w-28 h-28 mb-6">
-                            <svg class="w-full h-full progress-ring animate-spin" style="animation-duration: 2.5s;">
-                                <circle cx="56" cy="56" r="48" stroke="rgba(34, 211, 238, 0.1)" stroke-width="6" fill="none"/>
-                                <circle cx="56" cy="56" r="48" stroke="url(#grad2)" stroke-width="6" fill="none" stroke-dasharray="302" stroke-dashoffset="75" stroke-linecap="round"/>
-                                <defs>
-                                    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
-                                        <stop offset="0%" stop-color="#22d3ee"/>
-                                        <stop offset="50%" stop-color="#14b8a6"/>
-                                        <stop offset="100%" stop-color="#10b981"/>
-                                    </linearGradient>
-                                </defs>
-                            </svg>
-                            <div class="absolute inset-0 flex items-center justify-center">
-                                <i class="fas fa-dna text-2xl text-brand-cyan animate-pulse"></i>
-                            </div>
-                        </div>
-                        <h2 class="font-display text-lg font-bold text-slate-200 mb-2">Processando Análise</h2>
-                        <p class="text-slate-500 text-sm" id="loading-text">Conectando com LLM...</p>
-                        <p class="text-[10px] text-slate-600 mt-3" id="loading-time">Tempo estimado: 30 a 60 segundos</p>
-
-                        <div class="mt-5 p-3 glass-card rounded-xl max-w-sm text-center">
-                            <p class="text-[9px] text-slate-500 uppercase font-semibold mb-1">Analisando</p>
-                            <p id="analyzing-med" class="font-display font-bold text-brand-cyan text-sm">---</p>
-                            <p id="analyzing-vs" class="text-[10px] text-slate-500 mt-1"></p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Step 4: Resultados -->
-                <div id="step-4" class="step-content">
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-
-                        <!-- Main Results -->
-                        <div class="lg:col-span-2 space-y-4 overflow-y-auto custom-scroll max-h-[70vh]">
-
-                            <div class="flex items-center justify-between mb-2">
-                                <h2 class="font-display text-lg font-bold gradient-text">Relatório de Segurança</h2>
-                                <span id="risk-badge" class="px-3 py-1 rounded-full text-[10px] font-bold glass-card text-slate-400">
-                                    <i class="fas fa-spinner fa-spin mr-1"></i> Carregando
-                                </span>
-                            </div>
-
-                            <!-- Contraindicações -->
-                            <div id="contraindications-section" class="result-card">
-                                <div class="result-card-header bg-brand-rose/5">
-                                    <div class="w-7 h-7 rounded bg-brand-rose/15 text-brand-rose flex items-center justify-center text-xs">
-                                        <i class="fas fa-ban"></i>
-                                    </div>
-                                    <h3 class="font-display font-semibold text-slate-200 text-sm">Contraindicações</h3>
-                                    <span id="contraindication-count" class="ml-auto text-[9px] bg-brand-rose/15 text-brand-rose px-2 py-0.5 rounded-full font-semibold">0</span>
-                                </div>
-                                <div id="contraindications-list" class="p-4">
-                                    <p class="text-slate-500 text-sm">Nenhuma contraindicação identificada</p>
-                                </div>
-                            </div>
-
-                            <!-- Interações -->
-                            <div id="interactions-section" class="result-card">
-                                <div class="result-card-header bg-brand-amber/5">
-                                    <div class="w-7 h-7 rounded bg-brand-amber/15 text-brand-amber flex items-center justify-center text-xs">
-                                        <i class="fas fa-exchange-alt"></i>
-                                    </div>
-                                    <h3 class="font-display font-semibold text-slate-200 text-sm">Interações Medicamentosas</h3>
-                                    <span id="interaction-count" class="ml-auto text-[9px] bg-brand-amber/15 text-brand-amber px-2 py-0.5 rounded-full font-semibold">0</span>
-                                </div>
-                                <div id="interactions-list" class="p-4">
-                                    <p class="text-slate-500 text-sm">Nenhuma interação significativa</p>
-                                </div>
-                            </div>
-
-                            <!-- Reações Adversas -->
-                            <div id="adverse-section" class="result-card">
-                                <div class="result-card-header bg-violet-500/5">
-                                    <div class="w-7 h-7 rounded bg-violet-500/15 text-violet-400 flex items-center justify-center text-xs">
-                                        <i class="fas fa-allergies"></i>
-                                    </div>
-                                    <h3 class="font-display font-semibold text-slate-200 text-sm">Reações Adversas Potenciais</h3>
-                                    <span id="adverse-count" class="ml-auto text-[9px] bg-violet-500/15 text-violet-400 px-2 py-0.5 rounded-full font-semibold">0</span>
-                                </div>
-                                <div id="adverse-reactions-list" class="p-4">
-                                    <p class="text-slate-500 text-sm">Perfil de segurança favorável</p>
-                                </div>
-                            </div>
-
-                            <!-- Recomendações -->
-                            <div id="recommendations-section" class="result-card">
-                                <div class="result-card-header bg-brand-cyan/5">
-                                    <div class="w-7 h-7 rounded bg-brand-cyan/15 text-brand-cyan flex items-center justify-center text-xs">
-                                        <i class="fas fa-user-md"></i>
-                                    </div>
-                                    <h3 class="font-display font-semibold text-slate-200 text-sm">Recomendações Clínicas</h3>
-                                    <span id="recommendation-count" class="ml-auto text-[9px] bg-brand-cyan/15 text-brand-cyan px-2 py-0.5 rounded-full font-semibold">0</span>
-                                </div>
-                                <div id="recommendations-list" class="p-4">
-                                    <p class="text-slate-500 text-sm">Aguardando análise</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Sidebar Results -->
-                        <div class="space-y-4">
-                            <!-- Risk Score Card -->
-                            <div class="glass-card p-4 rounded-xl">
-                                <h4 class="font-display font-semibold text-slate-200 text-sm mb-3 text-center">Risco Combinado</h4>
-                                <div class="relative w-28 h-28 mx-auto">
-                                    <svg class="w-full h-full progress-ring">
-                                        <circle cx="56" cy="56" r="48" stroke="rgba(34, 211, 238, 0.1)" stroke-width="8" fill="none"/>
-                                        <circle id="risk-circle" cx="56" cy="56" r="48" stroke="url(#riskGrad)" stroke-width="8" fill="none" stroke-dasharray="302" stroke-dashoffset="30" stroke-linecap="round"/>
-                                        <defs>
-                                            <linearGradient id="riskGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                                <stop offset="0%" stop-color="#10b981"/>
-                                                <stop offset="100%" stop-color="#22d3ee"/>
-                                            </linearGradient>
-                                        </defs>
-                                    </svg>
-                                    <div class="absolute inset-0 flex flex-col items-center justify-center">
-                                        <span id="risk-score" class="font-display text-2xl font-bold text-slate-200">--</span>
-                                        <span id="risk-label" class="text-[9px] text-brand-emerald uppercase font-bold mt-0.5 px-2 py-0.5 bg-brand-emerald/10 rounded-full">Calculando</span>
-                                    </div>
-                                </div>
-                                <div class="grid grid-cols-2 gap-2 mt-4">
-                                    <div class="p-2 rounded-lg glass-card">
-                                        <p class="text-[8px] text-slate-500 uppercase font-semibold text-center mb-1">Confiabilidade</p>
-                                        <p id="confidence-value" class="font-display font-bold text-brand-cyan text-sm text-center">--%</p>
-                                        <div class="mt-1.5 h-1 bg-surface-700 rounded-full overflow-hidden">
-                                            <div id="confidence-bar" class="h-full bg-brand-cyan rounded-full transition-all duration-500" style="width: 0%"></div>
-                                        </div>
-                                    </div>
-                                    <div class="text-center p-2 rounded-lg glass-card">
-                                        <p class="text-[8px] text-slate-500 uppercase font-semibold">Modelo</p>
-                                        <p id="model-used" class="font-display font-bold text-slate-200 text-[10px]">--</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Summary Card -->
-                            <div class="glass-card p-4 rounded-xl">
-                                <h4 class="font-display font-semibold text-sm text-slate-200 mb-2">Resumo</h4>
-                                <p id="agent-summary" class="text-[11px] text-slate-400 leading-relaxed">
-                                    Aguardando análise...
-                                </p>
-                                <div class="flex items-center gap-2 mt-3">
-                                    <div class="w-5 h-5 rounded bg-violet-500/15 flex items-center justify-center text-[9px] text-violet-400">
-                                        <i class="fas fa-robot"></i>
-                                    </div>
-                                    <span id="agent-model" class="text-[9px] text-slate-500">LangGraph Multi-Agent</span>
-                                </div>
-                            </div>
-
-                            <!-- Action Buttons -->
-                            <button onclick="resetAnalysis()" class="w-full py-2.5 rounded-lg glass-card text-slate-300 font-semibold hover:bg-surface-600/50 transition flex items-center justify-center gap-2 text-sm">
-                                <i class="fas fa-redo text-slate-500 text-xs"></i> Nova Análise
-                            </button>
-                            <button onclick="downloadReport()" class="w-full py-2.5 rounded-lg btn-primary flex items-center justify-center gap-2 text-sm">
-                                <i class="fas fa-file-pdf text-xs"></i> Exportar Laudo
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
             </div>
-        </section>
 
+        </section>
     </main>
+
+    <!-- ===================== RODAPÉ ===================== -->
+    <footer class="max-w-7xl mx-auto px-5 pb-8">
+        <div class="glass-card rounded-2xl px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6">
+            <i class="fas fa-staff-snake text-brand-teal text-lg flex-none" aria-hidden="true"></i>
+            <p class="text-[11px] leading-relaxed text-slate-500 flex-1">
+                O MedSafe é uma ferramenta de <strong class="text-slate-400 font-semibold">apoio à decisão</strong> baseada
+                em IA e bases públicas (ANVISA, OMS). Ele <strong class="text-slate-400 font-semibold">não substitui</strong>
+                a avaliação de um médico ou farmacêutico. Em caso de emergência, procure atendimento imediatamente.
+            </p>
+            <p class="text-[10px] text-slate-500 whitespace-nowrap font-mono">© 2026 MedSafe</p>
+        </div>
+    </footer>
+
+    <!-- ===================== LOGIN ===================== -->
+    <div id="auth-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+        <div onclick="Auth.closeModal()" class="absolute inset-0" style="background: rgb(var(--ln) / .45); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);"></div>
+        <div class="glass-card rounded-3xl p-7 w-full max-w-sm relative">
+            <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white mb-4"
+                 style="background: linear-gradient(135deg, rgb(var(--c-teal)), rgb(var(--c-cyan))); box-shadow: 0 6px 18px -6px rgb(var(--glow) / .55);">
+                <i class="fas fa-user-lock" aria-hidden="true"></i>
+            </div>
+            <h2 id="auth-title" class="font-display text-lg font-bold text-slate-200">Entrar no MedSafe</h2>
+            <p class="text-[12px] text-slate-400 mt-1 mb-5 leading-relaxed">
+                A análise exige uma conta autorizada.
+                Não tem acesso? Fale com o administrador do sistema.
+            </p>
+            <label for="auth-email" class="field-label">E-mail</label>
+            <input id="auth-email" type="email" autocomplete="email"
+                   class="input-field w-full rounded-xl px-3.5 py-2.5 text-sm mb-3" placeholder="voce@exemplo.com">
+            <label for="auth-password" class="field-label">Senha</label>
+            <input id="auth-password" type="password" autocomplete="current-password"
+                   class="input-field w-full rounded-xl px-3.5 py-2.5 text-sm" placeholder="••••••••"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();Auth.submit();}">
+            <p id="auth-error" class="hidden text-[11px] text-brand-rose mt-2.5" role="alert"></p>
+            <div class="flex items-center gap-2 mt-5">
+                <button onclick="Auth.closeModal()" class="btn-ghost flex-1 py-2.5 rounded-xl text-sm">Cancelar</button>
+                <button id="auth-submit" onclick="Auth.submit()" class="btn-primary flex-1 py-2.5 rounded-xl text-sm">Entrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tema + Sessão (camada independente do script da aplicação) -->
+    <script>
+        function toggleTheme() {
+            var dark = document.documentElement.classList.toggle('dark');
+            try { localStorage.setItem('medsafe-theme', dark ? 'dark' : 'light'); } catch (e) { /* ok */ }
+        }
+
+        // =====================================================================
+        // Auth — sessão JWT (login, refresh com rotação, fetch autenticado)
+        // Endpoints: /api/v2/auth/{login,refresh,logout,me} (Bearer)
+        // =====================================================================
+        const Auth = {
+            access: null,
+            refresh: null,
+            email: null,
+            _onSuccess: null,
+            _refreshing: null,
+
+            load() {
+                try {
+                    const raw = localStorage.getItem('medsafe-auth');
+                    if (raw) {
+                        const s = JSON.parse(raw);
+                        this.access = s.access || null;
+                        this.refresh = s.refresh || null;
+                        this.email = s.email || null;
+                    }
+                } catch (e) { /* storage indisponível */ }
+                this.renderChip();
+                if (this.access) this.validateSession();
+            },
+
+            save() {
+                try {
+                    localStorage.setItem('medsafe-auth', JSON.stringify({
+                        access: this.access, refresh: this.refresh, email: this.email
+                    }));
+                } catch (e) { /* ok */ }
+            },
+
+            clear() {
+                this.access = null; this.refresh = null; this.email = null;
+                try { localStorage.removeItem('medsafe-auth'); } catch (e) { /* ok */ }
+                this.renderChip();
+            },
+
+            hasSession() { return !!this.access; },
+
+            async validateSession() {
+                try {
+                    const resp = await fetch(`${API_URL}/api/v2/auth/me`, {
+                        headers: { 'Authorization': `Bearer ${this.access}` }
+                    });
+                    if (resp.status === 401) {
+                        const ok = await this.tryRefresh();
+                        if (!ok) this.clear();
+                    }
+                } catch (e) { /* offline: mantém sessão local */ }
+                this.renderChip();
+            },
+
+            tryRefresh() {
+                if (!this.refresh) return Promise.resolve(false);
+                if (this._refreshing) return this._refreshing; // single-flight
+                this._refreshing = (async () => {
+                    try {
+                        const resp = await fetch(`${API_URL}/api/v2/auth/refresh`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ refresh_token: this.refresh })
+                        });
+                        if (!resp.ok) return false;
+                        const tok = await resp.json();
+                        this.access = tok.access_token;
+                        if (tok.refresh_token) this.refresh = tok.refresh_token; // rotação
+                        this.save();
+                        return true;
+                    } catch (e) {
+                        return false;
+                    } finally {
+                        const self = this;
+                        setTimeout(function () { self._refreshing = null; }, 0);
+                    }
+                })();
+                return this._refreshing;
+            },
+
+            // fetch autenticado: injeta Bearer; em 401 tenta refresh 1x e repete.
+            async fetch(url, options = {}) {
+                if (!this.access) {
+                    this.openModal();
+                    throw new Error('AUTH_REQUIRED');
+                }
+                const withAuth = () => ({
+                    ...options,
+                    headers: { ...(options.headers || {}), 'Authorization': `Bearer ${this.access}` }
+                });
+                let resp = await fetch(url, withAuth());
+                if (resp.status === 401) {
+                    const ok = await this.tryRefresh();
+                    if (!ok) {
+                        this.clear();
+                        this.openModal();
+                        throw new Error('AUTH_REQUIRED');
+                    }
+                    resp = await fetch(url, withAuth());
+                }
+                return resp;
+            },
+
+            openModal(onSuccess) {
+                this._onSuccess = onSuccess || null;
+                document.getElementById('auth-error').classList.add('hidden');
+                document.getElementById('auth-modal').classList.remove('hidden');
+                setTimeout(() => document.getElementById('auth-email').focus(), 60);
+            },
+
+            closeModal() {
+                document.getElementById('auth-modal').classList.add('hidden');
+                this._onSuccess = null;
+            },
+
+            async submit() {
+                const email = document.getElementById('auth-email').value.trim();
+                const password = document.getElementById('auth-password').value;
+                const errEl = document.getElementById('auth-error');
+                const btn = document.getElementById('auth-submit');
+                if (!email || !password) {
+                    errEl.textContent = 'Informe e-mail e senha.';
+                    errEl.classList.remove('hidden');
+                    return;
+                }
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                try {
+                    const resp = await fetch(`${API_URL}/api/v2/auth/login`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: email, password: password })
+                    });
+                    if (!resp.ok) {
+                        const err = await resp.json().catch(() => ({}));
+                        const msgs = {
+                            401: 'E-mail ou senha incorretos.',
+                            403: 'Conta bloqueada por tentativas seguidas. Aguarde 30 minutos.',
+                            429: 'Muitas tentativas. Aguarde um instante e tente de novo.'
+                        };
+                        throw new Error(msgs[resp.status] || err.detail || 'Falha no login.');
+                    }
+                    const tok = await resp.json();
+                    this.access = tok.access_token;
+                    this.refresh = tok.refresh_token || null;
+                    this.email = email;
+                    this.save();
+                    this.renderChip();
+                    document.getElementById('auth-password').value = '';
+                    const cb = this._onSuccess;
+                    this.closeModal();
+                    if (cb) cb();
+                } catch (e) {
+                    errEl.textContent = (e && e.message) || 'Falha no login.';
+                    errEl.classList.remove('hidden');
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = 'Entrar';
+                }
+            },
+
+            async logout() {
+                const refresh = this.refresh;
+                const access = this.access;
+                this.clear();
+                if (!refresh) return;
+                try {
+                    await fetch(`${API_URL}/api/v2/auth/logout`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${access}`
+                        },
+                        body: JSON.stringify({ refresh_token: refresh })
+                    });
+                } catch (e) { /* revogação best-effort */ }
+            },
+
+            renderChip() {
+                const el = document.getElementById('auth-chip');
+                if (!el) return;
+                if (this.access) {
+                    const shown = String(this.email || 'sessão').split('@')[0].replace(/[<>&"']/g, '');
+                    el.innerHTML = '<span class="chip">' +
+                        '<i class="fas fa-circle-user text-brand-teal" aria-hidden="true"></i>' +
+                        '<span class="max-w-[110px] truncate">' + shown + '</span>' +
+                        '<button onclick="Auth.logout()" class="ml-1 hover:text-brand-rose transition" aria-label="Sair da conta" title="Sair">' +
+                        '<i class="fas fa-arrow-right-from-bracket" aria-hidden="true"></i></button></span>';
+                } else {
+                    el.innerHTML = '<button onclick="Auth.openModal()" class="chip hover:border-brand-teal/40 transition" aria-label="Entrar na conta">' +
+                        '<i class="fas fa-circle-user text-brand-teal" aria-hidden="true"></i> Entrar</button>';
+                }
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', function () { Auth.load(); });
+        document.addEventListener('keydown', function (e) {
+            const modal = document.getElementById('auth-modal');
+            if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) Auth.closeModal();
+        });
+    </script>
 
     <script>
         // =============================================================================
@@ -657,7 +1131,7 @@
         // Detecção de API: localhost → backend dev direto; hf.space → Space;
         // qualquer outro host (Vercel) → '' = same-origin, proxied pelo rewrite
         // de /api/* e /healthz em vercel.json (sem CORS).
-        const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        const API_URL = ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.protocol === 'http:')
             ? 'http://localhost:9001'
             : (window.location.hostname.includes('hf.space')
                 ? 'https://medsafe-mvp.hf.space'
@@ -1044,7 +1518,7 @@
                 const formData = new FormData();
                 formData.append('file', file);
 
-                const response = await fetch(`${API_URL}/api/v2/vision/analyze`, {
+                const response = await Auth.fetch(`${API_URL}/api/v2/vision/analyze`, {
                     method: 'POST',
                     body: formData
                 });
@@ -1061,7 +1535,11 @@
                 }
 
             } catch (error) {
-                ocrResult.innerHTML = '<i class="fas fa-exclamation-triangle mr-2 text-brand-rose"></i>Erro ao processar imagem';
+                if (error && error.message === 'AUTH_REQUIRED') {
+                    ocrResult.innerHTML = '<i class="fas fa-user-lock mr-2 text-brand-amber"></i>Entre na sua conta para usar o reconhecimento de imagem';
+                } else {
+                    ocrResult.innerHTML = '<i class="fas fa-exclamation-triangle mr-2 text-brand-rose"></i>Erro ao processar imagem';
+                }
             }
         }
 
@@ -1078,7 +1556,7 @@
                     throw new Error('Análise excedeu o tempo limite. Tente novamente.');
                 }
 
-                const resp = await fetch(`${API_URL}/api/v2/status/${encodeURIComponent(sessionId)}`, { method: 'GET' });
+                const resp = await Auth.fetch(`${API_URL}/api/v2/status/${encodeURIComponent(sessionId)}`, { method: 'GET' });
                 if (!resp.ok) {
                     const err = await resp.json().catch(() => ({}));
                     throw new Error(err.detail || `Erro ao consultar status: ${resp.status}`);
@@ -1104,6 +1582,9 @@
         }
 
         async function startAnalysis() {
+            // Análise exige conta autorizada: abre login e retoma ao autenticar.
+            if (!Auth.hasSession()) { Auth.openModal(function () { startAnalysis(); }); return; }
+
             const medicationText = document.getElementById('medication-search').value.trim();
 
             if (!medicationText) {
@@ -1148,7 +1629,7 @@
                     save_to_db: true
                 };
 
-                const response = await fetch(`${API_URL}/api/v2/analyze`, {
+                const response = await Auth.fetch(`${API_URL}/api/v2/analyze`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     body: JSON.stringify(payload)
@@ -1175,6 +1656,7 @@
 
             } catch (error) {
                 clearInterval(interval);
+                if (error && error.message === 'AUTH_REQUIRED') { goToStep(2); return; }
                 let errorMsg = 'Erro ao analisar medicamento';
                 if (error.name === 'AbortError') {
                     errorMsg = 'Análise excedeu o tempo limite. Verifique se o Ollama está rodando.';
@@ -1195,6 +1677,20 @@
 
             const riskLevel = analysisResult.risk_level || 'low';
             updateRiskDisplay(riskLevel);
+
+            // Guardrail: revisão humana obrigatória (ex.: medicamento não identificado)
+            const hrBanner = document.getElementById('human-review-banner');
+            if (hrBanner) {
+                const hrReasons = analysisResult.escalation_reasons || [];
+                const needsReview = analysisResult.requires_human_review || hrReasons.length > 0;
+                hrBanner.classList.toggle('hidden', !needsReview);
+                const hrList = document.getElementById('human-review-reasons');
+                if (hrList) {
+                    hrList.innerHTML = hrReasons.length
+                        ? hrReasons.map(r => `<li>• ${sanitizeText(String(r))}</li>`).join('')
+                        : '<li>• Resultado requer validação por profissional de saúde.</li>';
+                }
+            }
 
             // Get calibrated accuracy from backend (includes anamnesis completeness, critique, etc.)
             const accuracy = (analysisResult.accuracy_score !== undefined && analysisResult.accuracy_score !== null)
