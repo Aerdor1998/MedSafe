@@ -58,7 +58,16 @@ class User(Base):
 
     # Campos de autorização
     role = Column(
-        Enum(UserRole, name="user_role_enum", create_constraint=True),
+        Enum(
+            UserRole,
+            name="user_role_enum",
+            create_constraint=True,
+            # CRITICAL: o enum do Postgres usa os VALORES minúsculos
+            # ("admin", "physician", ...). Sem values_callable, SQLAlchemy
+            # persiste os NOMES ("ADMIN", ...) e quebra INSERT (register)
+            # e SELECT (LookupError ao ler usuários existentes).
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
         default=UserRole.READONLY,
         nullable=False,
         index=True,

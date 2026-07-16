@@ -52,7 +52,7 @@ class Triage(Base):
     id = Column(
         UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36),
         primary_key=True,
-        default=uuid.uuid4 if not USE_POSTGRES else None,
+        default=uuid.uuid4,
     )
     user_id = Column(String, nullable=True, index=True)
 
@@ -101,7 +101,7 @@ class Report(Base):
     id = Column(
         UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36),
         primary_key=True,
-        default=uuid.uuid4 if not USE_POSTGRES else None,
+        default=uuid.uuid4,
     )
     triage_id = Column(
         UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36),
@@ -288,7 +288,7 @@ class AnalysisJob(Base):
     id = Column(
         UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36),
         primary_key=True,
-        default=uuid.uuid4 if not USE_POSTGRES else None,
+        default=uuid.uuid4,
     )
 
     # Identifiers
@@ -335,7 +335,7 @@ class HITLReview(Base):
     id = Column(
         UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36),
         primary_key=True,
-        default=uuid.uuid4 if not USE_POSTGRES else None,
+        default=uuid.uuid4,
     )
 
     session_id = Column(String, nullable=False, index=True)
@@ -380,7 +380,7 @@ class DrugInteraction(Base):
     id = Column(
         UUID(as_uuid=True) if POSTGRES_AVAILABLE else String(36),
         primary_key=True,
-        default=uuid.uuid4 if not USE_POSTGRES else None,
+        default=uuid.uuid4,
     )
 
     drug_a = Column(String, nullable=False)
