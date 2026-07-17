@@ -1,0 +1,12 @@
+{
+  "name": "medsafe-e2e-playwright",
+  "private": true,
+  "type": "module",
+  "description": "Suite E2E de frontend do MedSafe (18 testes) — Playwright + Chromium headless",
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.61.1"
+  }
+}
