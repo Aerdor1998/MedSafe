@@ -485,6 +485,14 @@
                         <span class="status-text block text-[10px] truncate">---</span>
                     </span>
                 </button>
+                <button id="nav-hitl" class="nav-item hidden" onclick="goToHitl()">
+                    <span class="step-num"><i class="fas fa-user-check text-xs" aria-hidden="true"></i></span>
+                    <span class="flex-1 min-w-0 hidden sm:block">
+                        <span class="nav-title block text-sm font-semibold truncate">Revisão HITL</span>
+                        <span class="status-text block text-[10px] truncate">Fila do revisor</span>
+                    </span>
+                    <span id="hitl-count" class="hidden ml-auto text-[10px] font-bold bg-rose-500/20 text-rose-300 rounded-full px-1.5 py-0.5"></span>
+                </button>
             </nav>
 
             <div class="hint-card hidden lg:flex">
@@ -870,6 +878,26 @@
                 </div>
             </div>
 
+            <!-- ========== HITL · Revisão Humana ========== -->
+            <div id="step-hitl" class="step-content">
+                <div class="glass-card rounded-3xl p-6 sm:p-8">
+                    <div class="mb-6 flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                            <h2 class="text-xl font-bold text-slate-100">Revisão Humana (HITL)</h2>
+                            <p class="text-sm text-slate-400 mt-1">Análises de alto risco aguardando decisão do profissional de saúde.</p>
+                        </div>
+                        <button onclick="loadHitlQueue()" class="btn-ghost px-4 py-2 rounded-xl text-sm flex items-center gap-2">
+                            <i class="fas fa-rotate text-xs" aria-hidden="true"></i> Atualizar
+                        </button>
+                    </div>
+                    <div id="hitl-empty" class="hidden text-sm text-slate-400 py-8 text-center">
+                        <i class="fas fa-circle-check text-emerald-400 mr-2" aria-hidden="true"></i>Nenhuma análise aguardando revisão.
+                    </div>
+                    <div id="hitl-error" class="hidden text-sm text-rose-300 py-4" role="alert"></div>
+                    <ul id="hitl-list" class="space-y-3" aria-label="Fila de revisão humana"></ul>
+                </div>
+            </div>
+
         </section>
     </main>
 
@@ -1002,10 +1030,16 @@
             },
 
             // fetch autenticado: injeta Bearer; em 401 tenta refresh 1x e repete.
+            // Sem sessão: tenta anônimo (backend decide via ALLOW_ANONYMOUS_ANALYSIS);
+            // se o backend exigir auth (401), o modal abre como antes.
             async fetch(url, options = {}) {
                 if (!this.access) {
-                    this.openModal();
-                    throw new Error('AUTH_REQUIRED');
+                    const anonResp = await fetch(url, options);
+                    if (anonResp.status === 401) {
+                        this.openModal();
+                        throw new Error('AUTH_REQUIRED');
+                    }
+                    return anonResp;
                 }
                 const withAuth = () => ({
                     ...options,
@@ -1116,7 +1150,7 @@
             }
         };
 
-        document.addEventListener('DOMContentLoaded', function () { Auth.load(); });
+        document.addEventListener('DOMContentLoaded', function () { Auth.load(); initHitl(); });
         document.addEventListener('keydown', function (e) {
             const modal = document.getElementById('auth-modal');
             if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) Auth.closeModal();
@@ -1424,6 +1458,101 @@
         function nextStep(step) {
             if (step === 2) collectPatientData();
             goToStep(step);
+        }
+
+        // ===================== HITL (Human-in-the-Loop) =====================
+        // Nav visível apenas quando o backend reporta hitl_enabled em /health.
+        async function initHitl() {
+            try {
+                const resp = await fetch(`${API_URL}/api/v2/health`);
+                const h = await resp.json();
+                if (h && h.hitl_enabled) document.getElementById('nav-hitl').classList.remove('hidden');
+            } catch (e) { /* backend indisponível: mantém oculto */ }
+        }
+
+        function goToHitl() {
+            document.querySelectorAll('.step-content').forEach(el => el.classList.remove('block', 'fade-in'));
+            document.getElementById('step-hitl').classList.add('block', 'fade-in');
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            document.getElementById('nav-hitl').classList.add('active');
+            loadHitlQueue();
+        }
+
+        function escapeHtml(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        async function loadHitlQueue() {
+            const list = document.getElementById('hitl-list');
+            const empty = document.getElementById('hitl-empty');
+            const errEl = document.getElementById('hitl-error');
+            errEl.classList.add('hidden');
+            empty.classList.add('hidden');
+            list.innerHTML = '<li class="text-sm text-slate-400 py-4"><i class="fas fa-spinner fa-spin mr-2" aria-hidden="true"></i>Carregando fila…</li>';
+            try {
+                const resp = await Auth.fetch(`${API_URL}/api/v2/triages?status=awaiting_review&per_page=20`, { method: 'GET' });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                const items = (data.triages || []).filter(t => t.session_id);
+                const badge = document.getElementById('hitl-count');
+                badge.textContent = items.length;
+                badge.classList.toggle('hidden', items.length === 0);
+                list.innerHTML = '';
+                empty.classList.toggle('hidden', items.length > 0);
+                items.forEach(t => {
+                    const li = document.createElement('li');
+                    li.className = 'glass-card rounded-2xl p-4';
+                    const meds = (t.meds_in_use || []).map(escapeHtml).join(', ') || '—';
+                    const when = escapeHtml((t.created_at || '').slice(0, 16).replace('T', ' '));
+                    li.innerHTML = `
+                        <div class="flex flex-wrap items-center gap-2 text-sm text-slate-200">
+                            <span class="font-semibold"><i class="fas fa-pills text-xs mr-1.5" aria-hidden="true"></i>${meds}</span>
+                            <span class="text-slate-400 text-xs">· ${t.age ?? '?'} anos${t.weight ? ` · ${t.weight} kg` : ''}</span>
+                            <span class="ml-auto text-[10px] text-slate-500 font-mono">${when}</span>
+                        </div>
+                        <textarea class="hitl-notes w-full mt-3 rounded-xl bg-surface-600/40 border border-white/5 text-sm text-slate-200 p-3" rows="2" placeholder="Notas do revisor (opcional)"></textarea>
+                        <div class="flex gap-2 mt-3">
+                            <button class="btn-ghost flex-1 py-2.5 rounded-xl text-sm" onclick="hitlDecide(this, '${escapeHtml(t.session_id)}', false)"><i class="fas fa-xmark mr-1.5" aria-hidden="true"></i>Rejeitar</button>
+                            <button class="btn-primary flex-1 py-2.5 rounded-xl text-sm" onclick="hitlDecide(this, '${escapeHtml(t.session_id)}', true)"><i class="fas fa-check mr-1.5" aria-hidden="true"></i>Aprovar</button>
+                        </div>`;
+                    list.appendChild(li);
+                });
+            } catch (e) {
+                list.innerHTML = '';
+                if (e.message !== 'AUTH_REQUIRED') {
+                    errEl.textContent = `Falha ao carregar fila: ${e.message}`;
+                    errEl.classList.remove('hidden');
+                }
+            }
+        }
+
+        async function hitlDecide(btn, sessionId, approved) {
+            const card = btn.closest('li');
+            const notes = card.querySelector('.hitl-notes').value.trim() || null;
+            const prevHtml = btn.innerHTML;
+            card.querySelectorAll('button').forEach(b => b.disabled = true);
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i>';
+            try {
+                const resp = await Auth.fetch(`${API_URL}/api/v2/hitl/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: sessionId, approved: approved, physician_notes: notes })
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || `HTTP ${resp.status}`);
+                }
+                card.innerHTML = `<div class="text-sm py-1 ${approved ? 'text-emerald-300' : 'text-rose-300'}"><i class="fas ${approved ? 'fa-check-circle' : 'fa-ban'} mr-2" aria-hidden="true"></i>${approved ? 'Aprovado' : 'Rejeitado'} — workflow retomado.</div>`;
+                setTimeout(loadHitlQueue, 1500);
+            } catch (e) {
+                card.querySelectorAll('button').forEach(b => b.disabled = false);
+                btn.innerHTML = prevHtml;
+                if (e.message !== 'AUTH_REQUIRED') {
+                    const errEl = document.getElementById('hitl-error');
+                    errEl.textContent = `Falha ao enviar decisão: ${e.message}`;
+                    errEl.classList.remove('hidden');
+                }
+            }
         }
 
         function collectPatientData() {

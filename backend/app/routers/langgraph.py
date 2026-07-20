@@ -677,6 +677,10 @@ async def list_triages(
             triages_data = [
                 {
                     "id": str(t.id),
+                    # Triage.job_id stores the LangGraph session_id (set in
+                    # create_analysis_job); exposed so the HITL UI can call
+                    # POST /hitl/approve which requires session_id.
+                    "session_id": t.job_id,
                     "status": t.status,
                     "age": t.age,
                     "weight": t.weight,

@@ -129,6 +129,8 @@ services:
       - LOG_DEPRECATED_USAGE=${LOG_DEPRECATED_USAGE:-true}
       # Demo/dev convenience (keep false in production)
       - ALLOW_ANONYMOUS_ANALYSIS=${ALLOW_ANONYMOUS_ANALYSIS:-false}
+      # HITL (LangGraph human-in-the-loop; requer PostgresSaver p/ resume cross-process)
+      - MEDSAFE_ENABLE_HITL=${MEDSAFE_ENABLE_HITL:-true}
       # Rate Limiting
       - RATE_LIMIT_STORAGE=${RATE_LIMIT_STORAGE:-memory://}
       # Cache (optional)
@@ -204,6 +206,8 @@ services:
       # Feature flags
       - ENABLE_LEGACY_V1=${ENABLE_LEGACY_V1:-true}
       - LEGACY_V1_SUNSET_DATE=${LEGACY_V1_SUNSET_DATE:-2025-03-01}
+      # HITL (deve espelhar o serviço api — worker executa o grafo que interrompe)
+      - MEDSAFE_ENABLE_HITL=${MEDSAFE_ENABLE_HITL:-true}
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data

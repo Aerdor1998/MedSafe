@@ -126,6 +126,8 @@ services:
       - LEGACY_V1_SUNSET_DATE=${LEGACY_V1_SUNSET_DATE:-2025-03-01}
       # SECURITY: keep false unless explicitly required
       - ALLOW_ANONYMOUS_ANALYSIS=${ALLOW_ANONYMOUS_ANALYSIS:-false}
+      # HITL (LangGraph human-in-the-loop; resume cross-process via PostgresSaver)
+      - MEDSAFE_ENABLE_HITL=${MEDSAFE_ENABLE_HITL:-true}
     # PRODUCTION: No bind-mounts for code - use immutable image only
     # Only mount data directories that need persistence
     volumes:
@@ -192,6 +194,8 @@ services:
       - SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE:-0.0}
       - ENABLE_LEGACY_V1=${ENABLE_LEGACY_V1:-false}
       - LEGACY_V1_SUNSET_DATE=${LEGACY_V1_SUNSET_DATE:-2025-03-01}
+      # HITL (deve espelhar o serviço api — worker executa o grafo que interrompe)
+      - MEDSAFE_ENABLE_HITL=${MEDSAFE_ENABLE_HITL:-true}
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data
