@@ -1,7 +1,8 @@
 // =============================================================================
 // MedSafe — Suite E2E de frontend (Playwright + Chromium headless)
-// 18 testes: auth, wizard, análise crítica (nitrato×PDE5), guardrail HITL,
-// export de laudo, tema, logout, responsivo (390×844) e a11y básico.
+// 21 testes: auth, wizard, análise crítica (nitrato×PDE5), guardrail HITL,
+// export de laudo, tema, logout, responsivo (390×844), a11y básico e
+// fila HITL (nav gated por hitl_enabled, listagem e aprovação → resume).
 //
 // Recriação versionada da suite validada em 2026-07-16 (18/18 PASS), que
 // vivia em /tmp/medsafe_e2e e foi perdida. Lições preservadas:
@@ -148,7 +149,12 @@ async function main() {
   // --- Wizard: análise crítica (nitrato × PDE5) ----------------------------
   test('T07', 'Step 1: perfil do paciente + medicamento em uso', async () => {
     await page.fill('#age', '68');
-    await page.fill('#weight', '82');
+    // Peso único por run: o backend deduplica análises por hash do payload
+    // (medication+age+weight+meds+conditions). Payload repetido devolve o
+    // resultado cacheado SEM criar triage nova — e T20/T21 dependem de a
+    // fila HITL receber cards novos neste run.
+    const uniqueWeight = (70 + (Date.now() % 30000) / 1000).toFixed(3);
+    await page.fill('#weight', uniqueWeight);
     await page.fill('#conditions', 'hipertensão arterial; angina estável');
     await page.fill('#current-med-input', 'Monocordil 20mg');
     await page.press('#current-med-input', 'Enter');
@@ -266,6 +272,74 @@ async function main() {
       return out;
     });
     assert(missing.length === 0, `violações: ${missing.join('; ')}`);
+  });
+
+  // --- Fila HITL (UI de revisão humana) ------------------------------------
+  test('T19', 'Re-login e nav "Revisão HITL" visível (hitl_enabled)', async () => {
+    await page.click('#auth-chip button');
+    await waitVisible(page, '#auth-modal');
+    await page.fill('#auth-email', EMAIL);
+    await page.fill('#auth-password', PASSWORD);
+    await page.click('#auth-submit');
+    await waitFor(async () => {
+      const modalHidden = !(await isVisible(page, '#auth-modal'));
+      const hasLogout = await page.evaluate(() =>
+        !!document.querySelector('#auth-chip [aria-label="Sair da conta"]'));
+      return modalHidden && hasLogout;
+    }, { label: 'sessão restabelecida para a fila HITL' });
+    await waitFor(() => isVisible(page, '#nav-hitl'),
+      { label: '#nav-hitl visível (backend com hitl_enabled)' });
+  });
+
+  test('T20', 'Fila HITL abre e lista pendência com notas + ações', async () => {
+    await page.click('#nav-hitl');
+    await waitVisible(page, '#step-hitl');
+    // T14 deixou uma análise awaiting_review (Blorfazina) — a fila não pode
+    // estar vazia neste ponto do run. IMPORTANTE: contar apenas cards REAIS
+    // (com .hitl-notes) — o <li> "Carregando fila…" é placeholder.
+    await waitFor(() => page.evaluate(() =>
+      document.querySelectorAll('#hitl-list li .hitl-notes').length >= 1),
+      { timeout: 20_000, label: '≥1 card pendente (real) na fila HITL' });
+    const badge = parseInt(await text(page, '#hitl-count'), 10);
+    assert(badge >= 1, `badge #hitl-count deveria ser ≥1, obtive "${badge}"`);
+    const hasActions = await page.evaluate(() => {
+      const li = document.querySelector('#hitl-list li');
+      return !!li?.querySelector('.hitl-notes') && li.querySelectorAll('button').length >= 2;
+    });
+    assert(hasActions, 'card sem textarea de notas ou sem botões Aprovar/Rejeitar');
+  });
+
+  test('T21', 'Aprovar pendência retoma o workflow e atualiza a fila', async () => {
+    // Conta apenas cards reais (placeholder "Carregando fila…" não tem notas).
+    const countCards = () => page.evaluate(() =>
+      document.querySelectorAll('#hitl-list li .hitl-notes').length);
+    const before = await countCards();
+    assert(before >= 1, 'fila sem cards reais no início do T21');
+    // Aprova o card MAIS RECENTE (o gerado pelo T14 neste run): cards antigos
+    // de stacks anteriores podem não ter checkpoint p/ retomar o workflow.
+    const idx = await page.evaluate(() => {
+      const cards = [...document.querySelectorAll('#hitl-list li')]
+        .filter((li) => li.querySelector('.hitl-notes'));
+      let best = 0, bestWhen = '';
+      cards.forEach((li, i) => {
+        const when = li.querySelector('.font-mono')?.textContent || '';
+        if (when > bestWhen) { bestWhen = when; best = i; }
+      });
+      return best;
+    });
+    const card = `#hitl-list li:nth-child(${idx + 1})`;
+    await page.fill(`${card} .hitl-notes`, 'Aprovado via suite E2E');
+    await page.click(`${card} .btn-primary`);
+    await waitFor(() => page.evaluate((sel) =>
+      /workflow retomado/i.test(document.querySelector(sel)?.textContent || ''),
+      // O approve re-executa o grafo (Clinical+Safety+HITL) de forma síncrona:
+      // 21–60s observados. 120s dá folga sem mascarar travamento real.
+      card), { timeout: 120_000, label: 'confirmação "workflow retomado" no card' });
+    // Refresh automático (1,5s) remove o card resolvido.
+    await waitFor(async () => {
+      const n = await countCards();
+      return n < before || (before === 1 && (await isVisible(page, '#hitl-empty')));
+    }, { timeout: 20_000, label: `fila reduzida para < ${before} cards` });
   });
 
   // --- Execução -------------------------------------------------------------
