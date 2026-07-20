@@ -1,0 +1,101 @@
+{
+ "metadata": {
+  "timestamp_utc": "2026-07-17T02:51:31.157517+00:00",
+  "ollama": "http://host.docker.internal:11434",
+  "temperature": 0.1,
+  "protocol": "VisionAgent /api/generate"
+ },
+ "models": {
+  "qwen2.5vl:7b": {
+   "cases": [
+    {
+     "drugs_found": 2,
+     "drugs_expected": 2,
+     "strengths_found": 2,
+     "hallucinated": false,
+     "ok": true,
+     "id": "receita-varfarina-aas",
+     "latency_s": 20.9,
+     "raw_head": "```json\n{\n  \"drug_name\": [\"Varfarina Sódica\", \"Acido Acetilsalicilico (AAS)\"],\n  \"strength\": [\"5mg\", \"100mg\"],\n  \"form\": [\"comprimido\", \"comprimido\"],\n  \"all_drugs\": [\"Varfarina Sódica\", \"Acido Acetilsalicilico (AAS)\"],\n  \"confidence\": 0.9\n}\n```"
+    },
+    {
+     "drugs_found": 1,
+     "drugs_expected": 1,
+     "strengths_found": 1,
+     "hallucinated": false,
+     "ok": true,
+     "id": "rotulo-sinvastatina",
+     "latency_s": 2.4,
+     "raw_head": "{\n  \"drug_name\": [\"SINVASTATINA\"],\n  \"strength\": \"40mg\",\n  \"form\": \"comprimidos revestidos\",\n  \"all_drugs\": [\"SINVASTATINA\"],\n  \"confidence\": 1.0\n}"
+    },
+    {
+     "drugs_found": 0,
+     "drugs_expected": 0,
+     "strengths_found": 0,
+     "hallucinated": false,
+     "ok": true,
+     "id": "negativo-receita-bolo",
+     "latency_s": 2.1,
+     "raw_head": "```json\n{\n  \"drug_name\": null,\n  \"strength\": null,\n  \"form\": null,\n  \"all_drugs\": [],\n  \"confidence\": 0.1\n}\n```"
+    }
+   ],
+   "latency_s": [
+    20.9,
+    2.4,
+    2.1
+   ],
+   "score": 3,
+   "max_score": 3,
+   "clinical_recall": 1.0,
+   "hallucination": false,
+   "latency_p50": 2.4
+  },
+  "medgemma:latest": {
+   "cases": [
+    {
+     "drugs_found": 2,
+     "drugs_expected": 2,
+     "strengths_found": 2,
+     "hallucinated": false,
+     "ok": true,
+     "id": "receita-varfarina-aas",
+     "latency_s": 47.6,
+     "raw_head": "```json\n{\n  \"drug_name\": [\n    \"Varfarina Sódica\",\n    \"Ácido Acetilsalicílico (AAS)\"\n  ],\n  \"strength\": [\n    \"5mg\",\n    \"100mg\"\n  ],\n  \"form\": [\n    \"comprimido\",\n    \"comprimidos\"\n  ],\n  \"all_drugs\": [\n    \"Varfarina Sódica\",\n    \"Ácido Acetilsalicílico (AAS)\"\n  ],\n  \"confidence\": 1.0\n}\n```"
+    },
+    {
+     "drugs_found": 1,
+     "drugs_expected": 1,
+     "strengths_found": 1,
+     "hallucinated": false,
+     "ok": true,
+     "id": "rotulo-sinvastatina",
+     "latency_s": 39.6,
+     "raw_head": "```json\n{\n  \"drug_name\": \"SINVASTATINA\",\n  \"strength\": \"40mg\",\n  \"form\": \"comprimidos revestidos\",\n  \"all_drugs\": [\"SINVASTATINA\"],\n  \"confidence\": 1.0\n}\n```"
+    },
+    {
+     "drugs_found": 0,
+     "drugs_expected": 0,
+     "strengths_found": 0,
+     "hallucinated": false,
+     "ok": true,
+     "id": "negativo-receita-bolo",
+     "latency_s": 39.6,
+     "raw_head": "```json\n{\n  \"drug_name\": \"Não encontrado\",\n  \"strength\": \"Não encontrado\",\n  \"form\": \"Não encontrado\",\n  \"all_drugs\": [],\n  \"confidence\": 0.5,\n  \"reason\": \"A imagem contém uma receita de bolo e não informações sobre medicamentos.\"\n}\n```"
+    }
+   ],
+   "latency_s": [
+    47.6,
+    39.6,
+    39.6
+   ],
+   "score": 3,
+   "max_score": 3,
+   "clinical_recall": 1.0,
+   "hallucination": false,
+   "latency_p50": 39.6
+  }
+ },
+ "gate": {
+  "migrate_to_medgemma": true
+ }
+}
