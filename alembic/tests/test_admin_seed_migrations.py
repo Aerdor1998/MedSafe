@@ -6,6 +6,7 @@ default). Compatível com pytest e executável direto:
 
     python3 alembic/tests/test_admin_seed_migrations.py
 """
+
 import importlib.util
 import os
 import sys
@@ -66,28 +67,47 @@ def _raises_runtime_error(fn) -> bool:
 
 
 def test_006_password_required():
-    assert _with_env(None, lambda: _raises_runtime_error(MIG_006._get_admin_initial_password))
-    assert _with_env("", lambda: _raises_runtime_error(MIG_006._get_admin_initial_password))
-    assert _with_env("   ", lambda: _raises_runtime_error(MIG_006._get_admin_initial_password))
+    assert _with_env(
+        None, lambda: _raises_runtime_error(MIG_006._get_admin_initial_password)
+    )
+    assert _with_env(
+        "", lambda: _raises_runtime_error(MIG_006._get_admin_initial_password)
+    )
+    assert _with_env(
+        "   ", lambda: _raises_runtime_error(MIG_006._get_admin_initial_password)
+    )
 
 
 def test_006_password_returned_when_set():
-    assert _with_env("S3nh@Forte!", MIG_006._get_admin_initial_password) == "S3nh@Forte!"
+    assert (
+        _with_env("S3nh@Forte!", MIG_006._get_admin_initial_password) == "S3nh@Forte!"
+    )
 
 
 def test_008_password_required():
-    assert _with_env(None, lambda: _raises_runtime_error(MIG_008._get_admin_initial_password))
-    assert _with_env("", lambda: _raises_runtime_error(MIG_008._get_admin_initial_password))
+    assert _with_env(
+        None, lambda: _raises_runtime_error(MIG_008._get_admin_initial_password)
+    )
+    assert _with_env(
+        "", lambda: _raises_runtime_error(MIG_008._get_admin_initial_password)
+    )
 
 
 def test_008_detects_default_hash():
     assert MIG_008._needs_rotation(MIG_008.DEFAULT_SEEDED_HASH) is True
-    assert MIG_008._needs_rotation("$2b$12$outrohashqualquerxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx") is False
+    assert (
+        MIG_008._needs_rotation(
+            "$2b$12$outrohashqualquerxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        )
+        is False
+    )
     assert MIG_008._needs_rotation("") is False
 
 
 def test_006_no_longer_contains_default_hash():
-    source = (VERSIONS_DIR / "20260114_0900_006_add_users_and_audit.py").read_text(encoding="utf-8")
+    source = (VERSIONS_DIR / "20260114_0900_006_add_users_and_audit.py").read_text(
+        encoding="utf-8"
+    )
     assert MIG_008.DEFAULT_SEEDED_HASH not in source
 
 
