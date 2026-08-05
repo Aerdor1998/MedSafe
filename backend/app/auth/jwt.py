@@ -8,9 +8,10 @@ SKILLS: @api-design-principles, @secrets-management
 
 import hashlib
 import logging
+import os
 import uuid
 from datetime import datetime, timedelta
-from typing import Optional, Set, Tuple
+from typing import NoReturn, Optional, Tuple
 
 import redis.asyncio as redis
 from fastapi import Depends, HTTPException, status
@@ -41,6 +42,11 @@ async def _get_redis_client() -> Optional[redis.Redis]:
     """
     Obter cliente Redis para token revocation (lazy init)
 
+    SECURITY FIX: Cliente construído a partir da REDIS_URL injetada no
+    ambiente (inclui senha em produção), em vez de host/porta hardcoded
+    sem autenticação — que falhava silenciosamente contra Redis com
+    `--requirepass`.
+
     Returns:
         Redis client ou None se não configurado/disponível
     """
@@ -50,11 +56,14 @@ async def _get_redis_client() -> Optional[redis.Redis]:
         return None
 
     if _redis_client is None:
+        redis_url = os.getenv("REDIS_URL")
+        if not redis_url:
+            logger.warning("REDIS_URL not set; cannot connect for JWT revocation")
+            return None
+
         try:
-            _redis_client = redis.Redis(
-                host="redis",
-                port=6379,
-                db=0,
+            _redis_client = redis.from_url(
+                redis_url,
                 decode_responses=True,
                 socket_connect_timeout=2,
             )
@@ -66,6 +75,22 @@ async def _get_redis_client() -> Optional[redis.Redis]:
             _redis_client = None
 
     return _redis_client
+
+
+def _fail_closed_revocation_unavailable() -> NoReturn:
+    """
+    Fail-closed: recusar o token quando a checagem de revogação está
+    indisponível em produção.
+
+    Raises:
+        HTTPException: sempre (503), para que um token revogado jamais
+            seja aceito silenciosamente.
+    """
+    logger.error("Revocation backend unavailable in production; failing closed")
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Token revocation check unavailable",
+    )
 
 
 async def revoke_token(jti: str, exp: datetime) -> bool:
@@ -109,14 +134,26 @@ async def is_token_revoked(jti: str) -> bool:
 
     FASE 1.1: Token revocation check
 
+    SECURITY FIX: Fail-closed em produção. Se a revogação está habilitada
+    mas o backend Redis está indisponível, NUNCA responder "não revogado"
+    silenciosamente — levanta HTTP 503 para que um token revogado jamais
+    seja aceito. Fora de produção mantém o comportamento permissivo para
+    não quebrar dev/test.
+
     Args:
         jti: JWT ID do token
 
     Returns:
         True se revogado, False caso contrário
+
+    Raises:
+        HTTPException: 503 em produção quando o backend de revogação
+            está indisponível
     """
     client = await _get_redis_client()
     if client is None:
+        if settings.jwt_enable_revocation and settings.is_production:
+            _fail_closed_revocation_unavailable()
         # Se Redis não disponível, não podemos verificar revogação
         return False
 
@@ -125,6 +162,8 @@ async def is_token_revoked(jti: str) -> bool:
         return await client.exists(key) > 0
     except Exception as e:
         logger.error(f"Failed to check token revocation: {e}")
+        if settings.is_production:
+            _fail_closed_revocation_unavailable()
         return False
 
 
@@ -146,8 +185,6 @@ async def revoke_all_user_tokens(user_id: str) -> int:
         return 0
 
     try:
-        # Buscar todas as chaves do usuário
-        pattern = f"{BLACKLIST_PREFIX}*"
         count = 0
 
         # Esta é uma operação simplificada - em produção real,
@@ -375,7 +412,8 @@ def verify_token(
         token_kv = payload.get("kv", 1)
         if token_kv != settings.jwt_key_version:
             logger.warning(
-                f"Token key version mismatch: token={token_kv}, current={settings.jwt_key_version}"
+                f"Token key version mismatch: "
+                f"token={token_kv}, current={settings.jwt_key_version}"
             )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -401,7 +439,7 @@ def verify_token(
         logger.warning(f"JWT verification failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {str(e)}",
+            detail="Invalid token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -487,7 +525,8 @@ def verify_refresh_token(token: str) -> dict:
         token_kv = payload.get("kv", 1)
         if token_kv != settings.jwt_key_version:
             logger.warning(
-                f"Refresh token key version mismatch: token={token_kv}, current={settings.jwt_key_version}"
+                f"Refresh token key version mismatch: "
+                f"token={token_kv}, current={settings.jwt_key_version}"
             )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -519,7 +558,7 @@ def verify_refresh_token(token: str) -> dict:
         logger.warning(f"Refresh token verification failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid refresh token: {str(e)}",
+            detail="Invalid refresh token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -593,9 +632,11 @@ async def get_optional_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
 ) -> Optional[str]:
     """
-    Like `get_current_user`, but returns None when no/invalid credentials are provided.
+    Like `get_current_user`, but returns None when no/invalid credentials
+    are provided.
 
-    This is used for endpoints that support anonymous access in dev or when explicitly enabled.
+    This is used for endpoints that support anonymous access in dev or when
+    explicitly enabled.
     """
     if credentials is None:
         return None

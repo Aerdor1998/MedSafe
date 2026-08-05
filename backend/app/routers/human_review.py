@@ -11,6 +11,7 @@ MIGRATION:
 This file is kept for reference only and should be removed in a future cleanup.
 """
 
+import logging
 import warnings
 
 warnings.warn(
@@ -31,6 +32,8 @@ from pydantic import BaseModel, Field
 # DEPRECATED: These imports will fail - module no longer exists
 # from ..agents.human_in_the_loop import get_hitl_agent, HumanReviewRequest, ReviewStatus, ReviewPriority
 from ..auth.jwt import get_current_user
+
+logger = logging.getLogger(__name__)
 
 
 class ReviewStatus(str, Enum):
@@ -206,10 +209,9 @@ async def submit_review(
 
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Erro ao submeter revisão: {str(e)}"
-        )
+    except Exception:
+        logger.exception("Erro ao submeter revisão")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/dashboard/stats")

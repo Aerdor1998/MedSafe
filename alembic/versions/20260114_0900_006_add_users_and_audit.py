@@ -5,6 +5,8 @@ Revises: 005
 Create Date: 2026-01-14 09:00:00.000000
 
 """
+import os
+
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
@@ -14,6 +16,31 @@ revision = '006'
 down_revision = '005'
 branch_labels = None
 depends_on = None
+
+ADMIN_EMAIL = 'admin@medsafe.local'
+
+
+def _get_admin_initial_password() -> str:
+    """Lê ADMIN_INITIAL_PASSWORD do ambiente; FALHA se ausente/vazia.
+
+    Sem senha default e sem fallback: instalações novas devem definir a env
+    antes de rodar as migrações. A senha nunca é logada.
+    """
+    password = os.environ.get('ADMIN_INITIAL_PASSWORD', '').strip()
+    if not password:
+        raise RuntimeError(
+            'ADMIN_INITIAL_PASSWORD ausente ou vazia. Defina esta variável de '
+            'ambiente com a senha inicial do usuário admin antes de rodar '
+            '"alembic upgrade". A migração 006 não seeda senha default.'
+        )
+    return password
+
+
+def _admin_password_hash() -> str:
+    """Deriva o hash da senha inicial reusando o mesmo contexto bcrypt do app."""
+    # Import tardio: alembic/env.py já coloca a raiz do repo no sys.path.
+    from backend.app.auth.password import hash_password
+    return hash_password(_get_admin_initial_password())
 
 
 def upgrade() -> None:
@@ -142,24 +169,19 @@ def upgrade() -> None:
         postgresql_where=sa.text("success = false")
     )
     
-    # Criar usuário admin inicial (senha deve ser alterada no primeiro login)
-    # Hash BCrypt de 'ChangeMeNow123!' para bootstrap
-    op.execute("""
-        INSERT INTO users (email, password_hash, full_name, role, is_active, is_verified)
-        VALUES (
-            'admin@medsafe.local',
-            '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.SuFPz6XWx5Xrz6',
-            'Administrador MedSafe',
-            'admin',
-            true,
-            true
-        )
-        ON CONFLICT (email) DO NOTHING;
-    """)
-    
+    # Criar usuário admin inicial com senha derivada de ADMIN_INITIAL_PASSWORD.
+    # Sem default: _get_admin_initial_password() falha se a env estiver
+    # ausente/vazia, abortando a migração com mensagem clara.
+    op.execute(
+        sa.text("""
+            INSERT INTO users (email, password_hash, full_name, role, is_active, is_verified)
+            VALUES (:email, :password_hash, 'Administrador MedSafe', 'admin', true, true)
+            ON CONFLICT (email) DO NOTHING
+        """).bindparams(email=ADMIN_EMAIL, password_hash=_admin_password_hash())
+    )
+
     print("✅ Tabelas users, user_sessions e audit_logs criadas com sucesso!")
-    print("⚠️  Usuário admin inicial criado: admin@medsafe.local")
-    print("⚠️  IMPORTANTE: Altere a senha no primeiro login!")
+    print(f"✅ Usuário admin inicial criado: {ADMIN_EMAIL} (senha de ADMIN_INITIAL_PASSWORD)")
 
 
 def downgrade() -> None:

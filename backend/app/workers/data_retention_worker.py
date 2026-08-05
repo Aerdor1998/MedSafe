@@ -23,14 +23,13 @@ import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List
 
-from sqlalchemy import and_, column, delete, func, inspect, or_, table, text, update
+from sqlalchemy import column, delete, func, inspect, or_, table, text, update
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db.database import get_db_context
-from ..db.models import AnalysisJob, HITLReview, IngestJob, Report, Triage
 
 logger = logging.getLogger(__name__)
 _IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
@@ -161,7 +160,8 @@ def _execute_anonymization(
     missing_columns = [col for col in columns if col not in valid_columns]
     if missing_columns:
         logger.warning(
-            f"Tabela {table_name} não tem colunas {missing_columns}, pulando anonimização dessas colunas"
+            f"Tabela {table_name} não tem colunas {missing_columns}, "
+            "pulando anonimização dessas colunas"
         )
     if not valid_columns:
         return 0
@@ -180,8 +180,8 @@ def _execute_anonymization(
     stmt = update(t).where(column(date_column) < cutoff_date)
     if has_is_deleted:
         stmt = stmt.where(
-            or_(column("is_deleted") == False, column("is_deleted").is_(None))
-        )  # noqa: E712
+            or_(column("is_deleted").is_(False), column("is_deleted").is_(None))
+        )
     values = {col: '"[ANONYMIZED_LGPD]"' for col in valid_columns}
     if has_updated_at:
         values["updated_at"] = func.now()
@@ -233,9 +233,7 @@ def _execute_soft_delete(
     stmt = (
         update(t)
         .where(column(date_column) < cutoff_date)
-        .where(
-            or_(column("is_deleted") == False, column("is_deleted").is_(None))
-        )  # noqa: E712
+        .where(or_(column("is_deleted").is_(False), column("is_deleted").is_(None)))
         .values(**values)
     )
 
@@ -338,7 +336,8 @@ def _log_retention_action(
         )
     except Exception as e:
         logger.error(
-            f"Falha ao registrar auditoria de retenção LGPD (table={table_name}, action={action}): {e}"
+            "Falha ao registrar auditoria de retenção LGPD "
+            f"(table={table_name}, action={action}): {e}"
         )
 
 

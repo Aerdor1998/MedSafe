@@ -204,6 +204,23 @@ def _get_redis_client():
         return None
 
 
+def check_redis_health() -> bool:
+    """
+    Check Redis connectivity (used by health probes).
+
+    Lives here because this module owns the Redis client lifecycle
+    (`_get_redis_client()` handles REDIS_URL parsing and connection).
+    """
+    client = _get_redis_client()
+    if client is None:
+        return False
+    try:
+        return bool(client.ping())
+    except Exception as e:
+        logger.warning(f"Redis health check failed: {e}")
+        return False
+
+
 def _cache_backend(ttl_seconds: int, max_size: int, prefix: str):
     """
     Choose cache backend:

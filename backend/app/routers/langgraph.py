@@ -404,11 +404,9 @@ async def analyze_drug_interaction(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Failed to start analysis: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to start analysis: {str(e)}"
-        )
+    except Exception:
+        logger.exception("Failed to start analysis")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/status/{session_id}", response_model=AnalyzeResponse)
@@ -508,9 +506,9 @@ async def get_analysis_status(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Status check failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Status check failed: {str(e)}")
+    except Exception:
+        logger.exception("Status check failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/hitl/approve", response_model=AnalyzeResponse)
@@ -637,9 +635,9 @@ async def approve_analysis(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"HITL approval failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"HITL approval failed: {str(e)}")
+    except Exception:
+        logger.exception("HITL approval failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/triages", response_model=TriageListResponse)
@@ -697,9 +695,9 @@ async def list_triages(
                 per_page=per_page,
             )
 
-    except Exception as e:
-        logger.error(f"Failed to list triages: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to list triages: {str(e)}")
+    except Exception:
+        logger.exception("Failed to list triages")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/triages/{triage_id}/report")
@@ -742,9 +740,9 @@ async def get_triage_report(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Failed to get report: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get report: {str(e)}")
+    except Exception:
+        logger.exception("Failed to get report")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/health")
@@ -773,6 +771,6 @@ async def health_check():
             "max_reflection_cycles": lg_settings.max_reflection_cycles,
         }
 
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        return {"status": "unhealthy", "error": str(e)}
+    except Exception:
+        logger.exception("Health check failed")
+        return {"status": "unhealthy", "error": "Internal server error"}

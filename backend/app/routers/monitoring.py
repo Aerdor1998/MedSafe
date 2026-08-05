@@ -36,9 +36,12 @@ async def get_cache_statistics():
     try:
         stats = get_cache_stats()
         return {"cache": stats, "timestamp": datetime.utcnow().isoformat()}
-    except Exception as e:
-        logger.error(f"Error getting cache stats: {e}")
-        return {"error": str(e), "timestamp": datetime.utcnow().isoformat()}
+    except Exception:
+        logger.exception("Error getting cache stats")
+        return {
+            "error": "Internal server error",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
 
 
 @router.post("/cache/clear")
@@ -48,9 +51,9 @@ async def clear_caches():
         clear_all_caches()
         logger.warning("Caches cleared via API")
         return {"status": "success", "message": "Caches cleared"}
-    except Exception as e:
-        logger.error(f"Error clearing caches: {e}")
-        return {"status": "error", "message": str(e)}
+    except Exception:
+        logger.exception("Error clearing caches")
+        return {"status": "error", "message": "Internal server error"}
 
 
 @router.get("/")

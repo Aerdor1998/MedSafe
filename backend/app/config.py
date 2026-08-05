@@ -277,7 +277,7 @@ class Settings(BaseSettings):
         } or bool(getattr(self, "testing", False))
 
         # Determinar strictness baseado em ambiente e flags
-        is_production = self.environment.lower() == "production"
+        is_production = self.is_production
         is_staging = self.environment.lower() == "staging"
         is_strict_env = (
             (is_production or is_staging) and (not is_testing_env) and (not is_pytest)
@@ -433,6 +433,14 @@ class Settings(BaseSettings):
                 "Set specific allowed hosts in ALLOWED_HOSTS environment variable."
             )
 
+        # SECURITY: Produção sem ALLOWED_HOSTS deixaria o TrustedHostMiddleware
+        # sem hosts válidos — falhar no boot, não em runtime.
+        if is_production and not self.allowed_hosts:
+            raise ValueError(
+                "ALLOWED_HOSTS must be configured in production. "
+                "Set specific allowed hosts in ALLOWED_HOSTS environment variable."
+            )
+
         # ==========================================================================
         # VALIDAÇÃO DE DEBUG EM PRODUÇÃO
         # ==========================================================================
@@ -465,6 +473,11 @@ class Settings(BaseSettings):
     def ollama_base_url(self) -> str:
         """Retorna a URL base do Ollama"""
         return f"{self.ollama_host}/v1"
+
+    @property
+    def is_production(self) -> bool:
+        """Ambiente é produção (comparação case-insensitive de ENVIRONMENT)."""
+        return self.environment.lower() == "production"
 
 
 # Instância global das configurações
