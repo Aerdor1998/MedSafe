@@ -183,6 +183,134 @@ class TestJWTRevocation:
 
         assert revoked is False
 
+    @pytest.mark.asyncio
+    async def test_get_redis_client_builds_from_redis_url(self):
+        """SECURITY FIX: cliente deve ser construído a partir de REDIS_URL"""
+        from backend.app.auth import jwt as jwt_mod
+
+        mock_client = AsyncMock()
+
+        with patch.object(jwt_mod, "_redis_client", None), patch.dict(
+            os.environ, {"REDIS_URL": "redis://:s3cret@redis-host:6390/2"}
+        ), patch.object(
+            jwt_mod.redis, "from_url", MagicMock(return_value=mock_client)
+        ) as mock_from_url, patch(
+            "backend.app.auth.jwt.settings"
+        ) as mock_settings:
+            mock_settings.jwt_enable_revocation = True
+
+            client = await jwt_mod._get_redis_client()
+
+            assert client is mock_client
+            mock_from_url.assert_called_once_with(
+                "redis://:s3cret@redis-host:6390/2",
+                decode_responses=True,
+                socket_connect_timeout=2,
+            )
+            mock_client.ping.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_get_redis_client_degrades_without_redis_url(self):
+        """Sem REDIS_URL definido, degrada (None) em vez de crashar"""
+        from backend.app.auth import jwt as jwt_mod
+
+        env = {k: v for k, v in os.environ.items() if k != "REDIS_URL"}
+
+        with patch.object(jwt_mod, "_redis_client", None), patch.dict(
+            os.environ, env, clear=True
+        ), patch("backend.app.auth.jwt.settings") as mock_settings:
+            mock_settings.jwt_enable_revocation = True
+
+            client = await jwt_mod._get_redis_client()
+
+        assert client is None
+
+    @pytest.mark.asyncio
+    async def test_is_token_revoked_fails_closed_in_production(self):
+        """SECURITY FIX: em produção, Redis indisponível => 503, não False"""
+        from fastapi import HTTPException
+
+        from backend.app.auth import jwt as jwt_mod
+
+        with patch.object(
+            jwt_mod, "_get_redis_client", AsyncMock(return_value=None)
+        ), patch("backend.app.auth.jwt.settings") as mock_settings:
+            mock_settings.jwt_enable_revocation = True
+            mock_settings.environment = "production"
+            mock_settings.is_production = True
+
+            with pytest.raises(HTTPException) as exc_info:
+                await jwt_mod.is_token_revoked("jti-xyz")
+
+        assert exc_info.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_is_token_revoked_fails_closed_on_redis_error_in_production(self):
+        """SECURITY FIX: erro de Redis em produção => 503, não False"""
+        from fastapi import HTTPException
+
+        from backend.app.auth import jwt as jwt_mod
+
+        mock_redis = AsyncMock()
+        mock_redis.exists = AsyncMock(side_effect=ConnectionError("redis down"))
+
+        with patch.object(
+            jwt_mod, "_get_redis_client", AsyncMock(return_value=mock_redis)
+        ), patch("backend.app.auth.jwt.settings") as mock_settings:
+            mock_settings.environment = "production"
+            mock_settings.is_production = True
+
+            with pytest.raises(HTTPException) as exc_info:
+                await jwt_mod.is_token_revoked("jti-xyz")
+
+        assert exc_info.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_is_token_revoked_permissive_in_development(self):
+        """Fora de produção, Redis indisponível mantém comportamento permissivo"""
+        from backend.app.auth import jwt as jwt_mod
+
+        with patch.object(
+            jwt_mod, "_get_redis_client", AsyncMock(return_value=None)
+        ), patch("backend.app.auth.jwt.settings") as mock_settings:
+            mock_settings.jwt_enable_revocation = True
+            mock_settings.environment = "development"
+            mock_settings.is_production = False
+
+            revoked = await jwt_mod.is_token_revoked("jti-xyz")
+
+        assert revoked is False
+
+    @pytest.mark.asyncio
+    async def test_revoked_jti_still_reported_revoked(self):
+        """JTI genuinamente revogado continua sendo reportado como revogado"""
+        from backend.app.auth import jwt as jwt_mod
+
+        store = {}
+
+        async def fake_setex(key, ttl, value):
+            store[key] = value
+            return True
+
+        async def fake_exists(key):
+            return 1 if key in store else 0
+
+        mock_redis = AsyncMock()
+        mock_redis.setex = AsyncMock(side_effect=fake_setex)
+        mock_redis.exists = AsyncMock(side_effect=fake_exists)
+
+        with patch.object(
+            jwt_mod, "_get_redis_client", AsyncMock(return_value=mock_redis)
+        ):
+            exp = datetime.utcnow() + timedelta(minutes=5)
+            ok = await jwt_mod.revoke_token("jti-revogado", exp)
+            revoked = await jwt_mod.is_token_revoked("jti-revogado")
+            other = await jwt_mod.is_token_revoked("jti-outro")
+
+        assert ok is True
+        assert revoked is True
+        assert other is False
+
 
 class TestRBAC:
     """Test Role-Based Access Control"""

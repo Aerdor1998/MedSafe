@@ -261,3 +261,32 @@ class TestCacheDecorators:
 
         result = test_func("test query")
         assert result == [{"doc": "result"}]
+
+
+class TestCheckRedisHealth:
+    """Tests for the check_redis_health helper used by health probes"""
+
+    def test_returns_false_when_client_unavailable(self):
+        """No Redis client available -> unhealthy"""
+        from backend.app.utils import cache
+
+        with patch.object(cache, "_get_redis_client", return_value=None):
+            assert cache.check_redis_health() is False
+
+    def test_returns_true_when_ping_succeeds(self):
+        """Successful PING -> healthy"""
+        from backend.app.utils import cache
+
+        client = MagicMock()
+        client.ping.return_value = True
+        with patch.object(cache, "_get_redis_client", return_value=client):
+            assert cache.check_redis_health() is True
+
+    def test_returns_false_when_ping_raises(self):
+        """Connection error during PING -> unhealthy, no exception"""
+        from backend.app.utils import cache
+
+        client = MagicMock()
+        client.ping.side_effect = ConnectionError("connection refused")
+        with patch.object(cache, "_get_redis_client", return_value=client):
+            assert cache.check_redis_health() is False

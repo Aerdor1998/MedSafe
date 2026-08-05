@@ -1,14 +1,48 @@
 """
 Unit tests for langgraph router
 
-Tests the LangGraph-based analysis endpoints.
+Tests the LangGraph-based analysis endpoints with exact, hermetic
+assertions: no network and no database — external collaborators are
+mocked at the source and every response pins a single status code.
 """
 
+from contextlib import contextmanager
+from typing import Iterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
+
+def _validation_locs(response) -> set:
+    """Extrai o conjunto de `loc` dos erros de uma resposta 422."""
+    return {tuple(err["loc"]) for err in response.json()["detail"]}
+
+
+@contextmanager
+def _analysis_backend_mocked() -> Iterator[MagicMock]:
+    """
+    Mocka orchestrator, idempotência e auth anônima — sem DB/rede.
+
+    Permite exercitar o caminho feliz de POST /api/v2/analyze de forma
+    hermética e determinística.
+    """
+    import backend.app.routers.langgraph as langgraph_module
+
+    orchestrator = MagicMock()
+    orchestrator.create_triage = AsyncMock(return_value="triage-123")
+    orchestrator.create_analysis_job = AsyncMock(return_value="job-123")
+    with patch.object(
+        langgraph_module, "get_orchestrator", return_value=orchestrator
+    ), patch.object(
+        langgraph_module,
+        "_find_existing_job_by_idempotency_key",
+        new=AsyncMock(return_value=None),
+    ), patch.object(
+        langgraph_module.app_settings, "allow_anonymous_analysis", True
+    ):
+        yield orchestrator
 
 
 class TestLangGraphEndpoints:
@@ -29,33 +63,37 @@ class TestLangGraphEndpoints:
         return app
 
     def test_analyze_endpoint_validation(self, client):
-        """Test analyze endpoint validates input"""
-        # Missing required fields
+        """Corpo vazio falha validação com 422 nos campos obrigatórios."""
         response = client.post("/api/v2/analyze", json={})
 
-        # May return 403 if auth is required, 422 for validation, etc
-        assert response.status_code in [401, 403, 422, 400]
+        assert response.status_code == 422
+        locs = _validation_locs(response)
+        assert ("body", "medication") in locs
+        assert ("body", "patient_data") in locs
 
     def test_analyze_endpoint_with_valid_input(self, client):
-        """Test analyze endpoint with valid input"""
-        response = client.post(
-            "/api/v2/analyze",
-            json={
-                "medication_text": "aspirin 100mg",
-                "patient_data": {
-                    "age": 65,
-                    "weight": 70,
-                    "conditions": ["hypertension"],
-                    "current_medications": ["metformin"],
-                },
+        """Input válido com backend mockado -> 200 e job 'pending'."""
+        payload = {
+            "medication": "aspirin 100mg",
+            "patient_data": {
+                "age": 65,
+                "weight": 70,
+                "conditions": ["hypertension"],
+                "current_medications": ["metformin"],
             },
-        )
+        }
+        with _analysis_backend_mocked():
+            response = client.post("/api/v2/analyze", json=payload)
 
-        # May fail due to missing dependencies, but should not be 404
-        assert response.status_code != 404
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "pending"
+        assert data["job_id"] == "job-123"
+        assert data["triage_id"] == "triage-123"
+        assert data["session_id"]
 
     def test_triage_endpoint(self, client):
-        """Test triage endpoint"""
+        """Não existe rota POST /api/v2/triage neste router -> 404."""
         response = client.post(
             "/api/v2/triage",
             json={
@@ -64,15 +102,16 @@ class TestLangGraphEndpoints:
             },
         )
 
-        # May require auth or not exist in this router
-        assert response.status_code in [200, 401, 403, 404, 422, 500]
+        assert response.status_code == 404
 
     def test_health_endpoint(self, client):
-        """Test health endpoint in langgraph router"""
+        """GET /api/v2/health é in-process e determinístico -> 200."""
         response = client.get("/api/v2/health")
 
-        # Should return some response
-        assert response.status_code in [200, 500, 503]
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "healthy"
+        assert "model" in data
 
 
 class TestAnalysisValidation:
@@ -93,29 +132,31 @@ class TestAnalysisValidation:
         return app
 
     def test_empty_medication_text(self, client):
-        """Test validation rejects empty medication text"""
-        response = client.post(
-            "/api/v2/analyze", json={"medication_text": "", "patient_data": {"age": 30}}
-        )
-
-        # May require auth (403) or validate (400/422)
-        assert response.status_code in [200, 400, 401, 403, 422, 500]
-
-    def test_missing_patient_data(self, client):
-        """Test validation handles missing patient data"""
-        response = client.post("/api/v2/analyze", json={"medication_text": "aspirin"})
-
-        assert response.status_code in [400, 401, 403, 422]
-
-    def test_invalid_age(self, client):
-        """Test validation handles invalid age"""
+        """medication vazio viola min_length=1 -> 422 no campo certo."""
         response = client.post(
             "/api/v2/analyze",
-            json={"medication_text": "aspirin", "patient_data": {"age": -5}},
+            json={"medication": "", "patient_data": {"age": 30}},
         )
 
-        # May pass or fail validation, may require auth
-        assert response.status_code in [200, 400, 401, 403, 422, 500]
+        assert response.status_code == 422
+        assert ("body", "medication") in _validation_locs(response)
+
+    def test_missing_patient_data(self, client):
+        """patient_data é obrigatório -> 422 apontando o campo ausente."""
+        response = client.post("/api/v2/analyze", json={"medication": "aspirin"})
+
+        assert response.status_code == 422
+        assert ("body", "patient_data") in _validation_locs(response)
+
+    def test_invalid_age(self, client):
+        """age=-5 viola ge=0 -> 422 apontando patient_data.age."""
+        response = client.post(
+            "/api/v2/analyze",
+            json={"medication": "aspirin", "patient_data": {"age": -5}},
+        )
+
+        assert response.status_code == 422
+        assert ("body", "patient_data", "age") in _validation_locs(response)
 
 
 class TestStatusEndpoints:
@@ -136,18 +177,16 @@ class TestStatusEndpoints:
         return app
 
     def test_get_job_status_not_found(self, client):
-        """Test job status for non-existent job"""
+        """Não existe /api/v2/jobs/{id} (rota real: /api/v2/status/{id})."""
         response = client.get("/api/v2/jobs/nonexistent-job-id")
 
-        # Should return 404 for non-existent job
-        assert response.status_code in [404, 500]
+        assert response.status_code == 404
 
     def test_list_jobs_endpoint(self, client):
-        """Test listing jobs endpoint"""
+        """Não existe rota GET /api/v2/jobs neste router -> 404."""
         response = client.get("/api/v2/jobs")
 
-        # May return 404 if endpoint doesn't exist, or list of jobs
-        assert response.status_code in [200, 401, 403, 404]
+        assert response.status_code == 404
 
 
 class TestModelOverride:
@@ -168,18 +207,17 @@ class TestModelOverride:
         return app
 
     def test_analyze_with_model_override(self, client):
-        """Test analyze with custom model"""
-        response = client.post(
-            "/api/v2/analyze",
-            json={
-                "medication_text": "aspirin",
-                "patient_data": {"age": 30},
-                "model_override": "llama3:8b",
-            },
-        )
+        """Campo extra model_override é ignorado e não quebra o fluxo."""
+        payload = {
+            "medication": "aspirin",
+            "patient_data": {"age": 30},
+            "model_override": "llama3:8b",
+        }
+        with _analysis_backend_mocked():
+            response = client.post("/api/v2/analyze", json=payload)
 
-        # Should accept the request or require auth
-        assert response.status_code in [200, 400, 401, 403, 422, 500, 503]
+        assert response.status_code == 200
+        assert response.json()["status"] == "pending"
 
 
 class TestInteractionsEndpoint:
@@ -200,22 +238,21 @@ class TestInteractionsEndpoint:
         return app
 
     def test_check_interactions(self, client):
-        """Test checking drug interactions"""
+        """Não existe rota POST /api/v2/interactions neste router -> 404."""
         response = client.post(
             "/api/v2/interactions",
             json={"drug_name": "warfarin", "other_drugs": ["aspirin", "ibuprofen"]},
         )
 
-        # Should process the request
-        assert response.status_code in [200, 400, 404, 422, 500]
+        assert response.status_code == 404
 
     def test_check_interactions_empty_list(self, client):
-        """Test checking interactions with empty drug list"""
+        """Guard de inventário: a rota segue ausente com payload mínimo."""
         response = client.post(
             "/api/v2/interactions", json={"drug_name": "warfarin", "other_drugs": []}
         )
 
-        assert response.status_code in [200, 400, 404, 422, 500]
+        assert response.status_code == 404
 
 
 class TestAnalyzeAnonymousAuthGate:

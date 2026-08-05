@@ -1,13 +1,18 @@
 """
-Additional tests for LangGraph router
+Additional tests for LangGraph router (full app)
 
-Tests more endpoints and edge cases.
+Usa as rotas reais montadas em backend.app.main — o prefixo do router é
+/api/v2 (NÃO existe prefixo /api/v2/langgraph). Asserts exatos e
+herméticos: nenhuma chamada externa e nenhum código 500 aceito.
 """
-
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+
+
+def _validation_locs(response) -> set:
+    """Extrai o conjunto de `loc` dos erros de uma resposta 422."""
+    return {tuple(err["loc"]) for err in response.json()["detail"]}
 
 
 class TestLangGraphRouterSetup:
@@ -21,31 +26,34 @@ class TestLangGraphRouterSetup:
         return TestClient(app)
 
     def test_router_is_mounted(self, client):
-        """Test langgraph router is mounted"""
-        # Check if we can reach the endpoint
-        response = client.get("/api/v2/langgraph/health")
+        """GET /api/v2/health responde 200 — router montado no app."""
+        response = client.get("/api/v2/health")
 
-        # Could be 200, 404, or auth error - just checking it's reachable
-        assert response.status_code in [200, 404, 401, 403, 500]
+        assert response.status_code == 200
+        assert response.json()["status"] == "healthy"
 
     def test_analyze_endpoint_exists(self, client):
-        """Test analyze endpoint exists"""
-        response = client.post(
-            "/api/v2/langgraph/analyze",
-            json={"medications": ["aspirin"], "patient_data": {"age": 30}},
-        )
+        """POST /api/v2/analyze existe: corpo vazio falha validação (422)."""
+        response = client.post("/api/v2/analyze", json={})
 
-        # Check endpoint exists (any response that isn't 404)
-        assert response.status_code in [200, 400, 401, 403, 405, 422, 500]
+        assert response.status_code == 422
+        locs = _validation_locs(response)
+        assert ("body", "medication") in locs
+        assert ("body", "patient_data") in locs
 
-    def test_triage_endpoint_exists(self, client):
-        """Test triage endpoint exists"""
+    def test_triage_route_absent(self, client):
+        """
+        Não existe POST /api/v2/triage no app.
+
+        O mount StaticFiles em "/" (html=True) captura caminhos
+        desconhecidos e só aceita GET/HEAD, logo POST -> 405.
+        """
         response = client.post(
-            "/api/v2/langgraph/triage",
+            "/api/v2/triage",
             json={"symptoms": ["headache"], "patient_info": {}},
         )
 
-        assert response.status_code in [200, 400, 401, 403, 404, 405, 422, 500]
+        assert response.status_code == 405
 
 
 class TestLangGraphHealthEndpoint:
@@ -59,11 +67,14 @@ class TestLangGraphHealthEndpoint:
         return TestClient(app)
 
     def test_health_returns_json(self, client):
-        """Test health endpoint returns JSON"""
-        response = client.get("/api/v2/langgraph/health")
+        """Health endpoint retorna JSON com status e modelo em uso."""
+        response = client.get("/api/v2/health")
 
-        if response.status_code == 200:
-            assert response.json() is not None
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, dict)
+        assert data["status"] == "healthy"
+        assert "model" in data
 
 
 class TestLangGraphInputValidation:
@@ -77,16 +88,15 @@ class TestLangGraphInputValidation:
         return TestClient(app)
 
     def test_empty_body_rejected(self, client):
-        """Test empty body is rejected"""
-        response = client.post("/api/v2/langgraph/analyze", json={})
+        """Corpo vazio é rejeitado pela validação com 422."""
+        response = client.post("/api/v2/analyze", json={})
 
-        # Should fail validation
-        assert response.status_code in [400, 401, 403, 405, 422, 500]
+        assert response.status_code == 422
+        assert ("body", "medication") in _validation_locs(response)
 
     def test_missing_medications_rejected(self, client):
-        """Test missing medications is handled"""
-        response = client.post(
-            "/api/v2/langgraph/analyze", json={"patient_data": {"age": 30}}
-        )
+        """medication ausente -> 422 apontando o campo obrigatório."""
+        response = client.post("/api/v2/analyze", json={"patient_data": {"age": 30}})
 
-        assert response.status_code in [400, 401, 403, 405, 422, 500]
+        assert response.status_code == 422
+        assert ("body", "medication") in _validation_locs(response)

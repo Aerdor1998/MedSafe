@@ -9,6 +9,10 @@ import pytest
 import json
 from playwright.sync_api import Page, expect
 
+# Todos os testes deste módulo exigem stack completa rodando (frontend+API).
+# O runner local/CI de unit tests os deseleciona via `-m "not e2e"`.
+pytestmark = pytest.mark.e2e
+
 
 class TestAnalysisWorkflow:
     """Test the complete analysis workflow"""
