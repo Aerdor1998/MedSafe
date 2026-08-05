@@ -172,7 +172,8 @@ secrets.json
 *.crt
 
 # Docker
-.dockerignore
+# NOTA: .dockerignore É versionado de propósito — ignorá-lo tornava impossível
+# controlar o contexto de build (que incluía .env, logs/, data/ e .git/).
 
 # Ollama models (grandes)
 *.gguf

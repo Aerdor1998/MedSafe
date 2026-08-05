@@ -192,22 +192,26 @@ groups:
   - name: medsafe_llm
     rules:
       # Ollama Down
+      #
+      # Medido por probe HTTP do blackbox-exporter (Ollama não expõe métricas
+      # Prometheus). Este é o alerta mais importante da stack: em 2026-07-25 o Ollama
+      # ficou fora do ar enquanto /healthz seguia verde, e toda análise clínica falharia
+      # silenciosamente.
       - alert: OllamaDown
-        expr: up{job="ollama"} == 0
+        expr: probe_success{job="ollama"} == 0
         for: 2m
         labels:
           severity: critical
         annotations:
           summary: "Ollama LLM service is down"
-          description: "Ollama has been unreachable for more than 2 minutes"
+          description: "Ollama has been unreachable for more than 2 minutes — clinical analyses cannot complete"
 
-      # LLM Request Timeout
-      - alert: LLMRequestTimeout
-        expr: |
-          rate(llm_request_timeout_total{job="medsafe-api"}[5m]) > 0.1
-        for: 5m
+      # Falha de scrape do próprio probe (blackbox fora do ar = cegueira, não saúde)
+      - alert: OllamaProbeMissing
+        expr: absent(probe_success{job="ollama"})
+        for: 10m
         labels:
           severity: warning
         annotations:
-          summary: "LLM requests timing out"
-          description: "{{ $value }} LLM timeouts per second"
+          summary: "Ollama probe is not being collected"
+          description: "blackbox-exporter is not reporting probe_success for Ollama; OllamaDown cannot fire"

@@ -1,0 +1,62 @@
+# Contexto de build do Docker.
+#
+# O Dockerfile só copia backend/, frontend/, static/, alembic/ e requirements.txt —
+# então nada daqui vazava para dentro da imagem. O problema era o contexto enviado ao
+# daemon: .env com secrets de produção, o histórico do git e centenas de MB de dados.
+
+# Segredos e configuração local
+.env
+.env.*
+!env.example
+!env.prod.example
+*.pem
+*.key
+*.crt
+secrets.*
+
+# Git
+.git/
+.gitignore
+.github/
+
+# Dados, logs e artefatos de runtime
+logs/
+data/
+backups/
+evals/results/
+*.dump
+*.sql.gz
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Testes e cobertura (a imagem de produção não roda testes)
+tests/
+backend/tests/
+.coverage
+coverage.xml
+htmlcov/
+.coveragerc
+
+# Deploy do frontend
+frontend/.vercel/
+frontend/node_modules/
+
+# Docs e mídia
+docs/
+imgs/
+*.md
+!README.md
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -11,8 +11,7 @@ global:
 alerting:
   alertmanagers:
     - static_configs:
-        - targets: []
-          # - alertmanager:9093
+        - targets: ['alertmanager:9093']
 
 # Load rules once and periodically evaluate them
 rule_files:
@@ -55,5 +54,23 @@ scrape_configs:
       - targets: ['node-exporter:9100']
         labels:
           service: 'system'
+
+  # Ollama (host nativo) via blackbox exporter.
+  # Ollama não fala Prometheus; o blackbox faz probe HTTP e publica probe_success.
+  - job_name: 'ollama'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets: ['http://host.docker.internal:11434/api/tags']
+        labels:
+          service: 'llm'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
 
 

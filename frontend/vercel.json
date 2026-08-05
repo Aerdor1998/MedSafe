@@ -2,11 +2,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://worked-labels-concert-bbs.trycloudflare.com/api/:path*"
+      "destination": "https://api.seudominio.com/api/:path*"
     },
     {
       "source": "/healthz",
-      "destination": "https://worked-labels-concert-bbs.trycloudflare.com/healthz"
+      "destination": "https://api.seudominio.com/healthz"
     }
   ],
   "headers": [

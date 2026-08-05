@@ -1,8 +1,19 @@
+# Rotação de logs: sem isto o driver json-file cresce sem limite até encher o disco
+# do host (e derrubar o Postgres junto). Aplicado a todos os serviços via anchor.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # PostgreSQL com pgvector
   db:
-    image: ankane/pgvector:latest
+    # Pin (auditoria): v0.5.1 tem o MESMO digest do antigo :latest (Postgres 15.4 +
+    # pgvector 0.5.1) — nenhuma mudança de major; o cliente de backup segue em 15.
+    image: ankane/pgvector:v0.5.1
     container_name: medsafe_db
+    logging: *default-logging
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-medsafe}
       POSTGRES_USER: ${POSTGRES_USER:-medsafe}
@@ -18,8 +29,11 @@ services:
     #
     # SKILL: deployment-pipeline-design
     # Mantém consistência com docker-compose.yml (dev = prod)
+    #
+    # SECURITY: bind em 127.0.0.1 — publicar o Postgres em 0.0.0.0 expõe o banco de
+    # PHI a qualquer host que alcance esta máquina, contornando nginx e rate limit.
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-medsafe}"]
       interval: 10s
@@ -33,6 +47,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: medsafe_redis
+    logging: *default-logging
     # SECURITY: Password MUST be set via .env - no default allowed in production
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
     volumes:
@@ -40,8 +55,9 @@ services:
     # FIX: avoid binding host port 6379 (often already used).
     # Services use redis via the Docker network: redis:6379
     # If you need host access (debug), override with REDIS_HOST_PORT.
+    # SECURITY: bind em 127.0.0.1 (ver nota no serviço db)
     ports:
-      - "${REDIS_HOST_PORT:-6380}:6379"
+      - "127.0.0.1:${REDIS_HOST_PORT:-6380}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 10s
@@ -53,7 +69,7 @@ services:
 
   # Ollama com modelos
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.32.5
     container_name: medsafe_ollama
     # DESATIVADO por padrão: Docker no WSL sem nvidia-container-toolkit (runtime "nvidia" indisponível)
     # e sudo interativo necessário para instalar. A stack usa o Ollama NATIVO do host (GPU),
@@ -95,10 +111,16 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: medsafe_api
+    logging: *default-logging
     # host-gateway → IP do docker0 (172.17.0.1), onde o Ollama nativo do host escuta
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
+      # SECURITY (crítico): sem esta linha o container cai no default "development"
+      # de backend/app/config.py e TODAS as validações de produção viram no-op —
+      # bloqueio de secrets default, entropia de secret, tamanho da senha do Postgres,
+      # bloqueio de DEBUG e obrigatoriedade de redação de log (config.py:280-452).
+      - ENVIRONMENT=production
       - DEBUG=false
       # SECURITY: Passwords via env vars - no defaults in production
       - DATABASE_URL=postgresql://${POSTGRES_USER:-medsafe}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-medsafe}
@@ -111,8 +133,12 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       # SECURITY: ALLOWED_ORIGINS must be explicit - wildcard rejected in production
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:?ALLOWED_ORIGINS must be set explicitly (no wildcard)}
-      # SECURITY: TrustedHostMiddleware — hosts externos (ex: túnel Cloudflare) devem ser explícitos
-      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      # SECURITY: TrustedHostMiddleware — hosts externos (ex: túnel Cloudflare) devem
+      # ser explícitos. Agora é OBRIGATÓRIO: o default silencioso "localhost,127.0.0.1"
+      # fazia o middleware devolver 400 Invalid host header em TODA requisição vinda do
+      # túnel ou do domínio real — uma falha que só aparecia em produção, com o serviço
+      # de pé e "saudável". Melhor não subir do que subir quebrado.
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:?ALLOWED_HOSTS must list the public hostname(s), e.g. api.seudominio.com}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ENABLE_METRICS=true
       - METRICS_PORT=9090
@@ -124,10 +150,23 @@ services:
       # Feature flags
       - ENABLE_LEGACY_V1=${ENABLE_LEGACY_V1:-false}
       - LEGACY_V1_SUNSET_DATE=${LEGACY_V1_SUNSET_DATE:-2025-03-01}
-      # SECURITY: keep false unless explicitly required
-      - ALLOW_ANONYMOUS_ANALYSIS=${ALLOW_ANONYMOUS_ANALYSIS:-false}
+      # SECURITY: hardcoded false, NÃO interpolado do .env.
+      #
+      # O .env local de desenvolvimento tem ALLOW_ANONYMOUS_ANALYSIS=true, e o compose
+      # lê esse mesmo .env — ou seja, a config de dev vazava para produção e abria
+      # POST /api/v2/analyze sem autenticação (routers/langgraph.py:334-338,
+      # routers/vision.py:36-40). Fixando aqui, produção fica segura independente do
+      # conteúdo do .env. Desligado em produção confirmado pelo dono em 2026-07-25;
+      # conforme CLAUDE.md, só volte a true com autorização explícita.
+      - ALLOW_ANONYMOUS_ANALYSIS=false
       # HITL (LangGraph human-in-the-loop; resume cross-process via PostgresSaver)
       - MEDSAFE_ENABLE_HITL=${MEDSAFE_ENABLE_HITL:-true}
+      # CSP estrito (nonces, sem 'unsafe-inline'): lido em middleware/security.py:42.
+      # Default false = o default seguro do próprio código; ver env.prod.example.
+      - CSP_STRICT_MODE=${CSP_STRICT_MODE:-false}
+      # Senha do admin semeado pelas migrações alembic (rodam neste container).
+      # A migração 006 FALHA se vazia — obrigatória no primeiro deploy. Nunca é logada.
+      - ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD:-}
     # PRODUCTION: No bind-mounts for code - use immutable image only
     # Only mount data directories that need persistence
     volumes:
@@ -141,9 +180,15 @@ services:
     #
     # SKILL: deployment-pipeline-design
     # Mantém consistência com docker-compose.yml (dev = prod)
+    #
+    # SECURITY: bind em 127.0.0.1. A porta 9001 é o alvo do Cloudflare Tunnel (que roda
+    # no host, então alcança o loopback); publicá-la em 0.0.0.0 deixava qualquer host da
+    # rede falar direto com a API, pulando o nginx, seu rate limit e o bloqueio de /docs.
+    # A 9090 é a de métricas Prometheus — o nginx a bloqueia (nginx.conf:137-140), mas
+    # publicada em 0.0.0.0 esse bloqueio era contornável.
     ports:
-      - "9001:9000"
-      - "9090:9090"
+      - "127.0.0.1:9001:9000"
+      - "127.0.0.1:9090:9090"
     depends_on:
       db:
         condition: service_healthy
@@ -172,11 +217,18 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: medsafe_worker
+    logging: *default-logging
     # host-gateway → IP do docker0 (172.17.0.1), onde o Ollama nativo do host escuta
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: ["python", "-m", "backend.app.workers.analysis_worker"]
+    # Drain: o worker trata SIGTERM e termina a análise em voo antes de sair. O maior
+    # caso do golden set leva 178s e ollama_timeout é 300s — 360s dá margem para a
+    # análise corrente concluir em vez de ficar presa em status "running" para sempre.
+    stop_grace_period: 360s
     environment:
+      # SECURITY: idem api — sem isto as validações de produção não rodam
+      - ENVIRONMENT=production
       - DEBUG=false
       - DATABASE_URL=postgresql://${POSTGRES_USER:-medsafe}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-medsafe}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
@@ -196,6 +248,10 @@ services:
       - LEGACY_V1_SUNSET_DATE=${LEGACY_V1_SUNSET_DATE:-2025-03-01}
       # HITL (deve espelhar o serviço api — worker executa o grafo que interrompe)
       - MEDSAFE_ENABLE_HITL=${MEDSAFE_ENABLE_HITL:-true}
+      # Shutdown/recuperação (analysis_worker.py:32,38). Drain 300s < stop_grace_period
+      # 360s acima — senão o SIGKILL chega antes de o drain terminar.
+      - MEDSAFE_WORKER_DRAIN_TIMEOUT=${MEDSAFE_WORKER_DRAIN_TIMEOUT:-300.0}
+      - MEDSAFE_WORKER_STALE_JOB_SECONDS=${MEDSAFE_WORKER_STALE_JOB_SECONDS:-600.0}
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data
@@ -224,10 +280,84 @@ services:
           cpus: '1'
           memory: 2G
 
+  # Worker de retenção de dados (LGPD)
+  #
+  # COMPLIANCE: o data_retention_worker existia mas nenhum processo o executava — a
+  # política de retenção nunca era aplicada de fato. Ele já tem loop interno de 24h
+  # (data_retention_worker.py:491,519); só faltava alguém rodá-lo.
+  retention-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: medsafe_retention_worker
+    logging: *default-logging
+    command: ["python", "-m", "backend.app.workers.data_retention_worker"]
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-medsafe}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-medsafe}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE:-0.0}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q data_retention_worker /proc/1/cmdline || exit 1"]
+      interval: 60s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    networks:
+      - medsafe_network
+    restart: unless-stopped
+
+  # Backup automático do Postgres
+  #
+  # DATA SAFETY: antes disto o banco de PHI nunca tinha sido copiado — scripts de backup
+  # existiam mas nenhum agendamento, e o diretório backups/ sequer existia. Dumps ficam
+  # em ./backups no host; BACKUP_KEEP_* controla a rotação.
+  # ATENÇÃO: isto é backup LOCAL, no mesmo disco do banco. Cópia off-host é obrigatória
+  # antes de tratar dados de paciente reais — ver docs/RUNBOOK.md.
+  backup:
+    # Tag = versão do cliente Postgres. O servidor (ankane/pgvector) é 15.4, então
+    # fixamos 15: pg_dump/pg_restore de versão maior que o servidor pode gerar um
+    # archive com construções que o servidor não entende no restore.
+    image: prodrigestivill/postgres-backup-local:15
+    container_name: medsafe_backup
+    logging: *default-logging
+    environment:
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-medsafe}
+      - POSTGRES_USER=${POSTGRES_USER:-medsafe}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      # Formato custom (-Fc) — restaura com pg_restore, permite restore seletivo
+      - POSTGRES_EXTRA_OPTS=-Fc
+      # Diário às 03:12 (evita o minuto 0, quando todo mundo agenda)
+      - SCHEDULE=12 3 * * *
+      - BACKUP_KEEP_DAYS=14
+      - BACKUP_KEEP_WEEKS=8
+      - BACKUP_KEEP_MONTHS=6
+      - HEALTHCHECK_PORT=8080
+    # Healthcheck: herdado da imagem (HEALTHCHECK upstream faz curl no webserver de status do cron em :8080) — não redefinir aqui.
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - medsafe_network
+    restart: unless-stopped
+
   # Nginx como reverse proxy
   nginx:
     image: nginx:alpine
     container_name: medsafe_nginx
+    logging: *default-logging
     volumes:
       - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infra/nginx/ssl:/etc/nginx/ssl:ro
@@ -250,8 +380,9 @@ services:
 
   # Prometheus para métricas
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.13.2
     container_name: medsafe_prometheus
+    logging: *default-logging
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -263,16 +394,25 @@ services:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
+    # SECURITY: bind em 127.0.0.1 — Prometheus roda com --web.enable-lifecycle,
+    # que permite recarregar/desligar via HTTP para quem alcançar a porta.
     ports:
-      - "9091:9090"
+      - "127.0.0.1:9091:9090"
+    healthcheck:
+      # Imagens prom/* são busybox: wget existe, curl não
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     networks:
       - medsafe_network
     restart: unless-stopped
 
   # Grafana para visualização
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:13.1.2
     container_name: medsafe_grafana
+    logging: *default-logging
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
       # SECURITY: Password MUST be set via .env - no default allowed in production
@@ -282,17 +422,137 @@ services:
       - grafana_data:/var/lib/grafana
       - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    # SECURITY: bind em 127.0.0.1 — acesse via túnel SSH ou pelo próprio host
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
+    healthcheck:
+      # Imagem Alpine: wget do busybox disponível
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     depends_on:
       - prometheus
     networks:
       - medsafe_network
     restart: unless-stopped
 
+  # Alertmanager — destino dos alertas do Prometheus
+  #
+  # OBSERVABILIDADE: prometheus.yml tinha `alertmanagers: targets: []`, ou seja, as 15
+  # regras de infra/prometheus/alerts.yml eram avaliadas e descartadas. Sem isto, nada
+  # avisa que a API caiu.
+  alertmanager:
+    # ≥v0.25 para discord_configs, ≥v0.27 para webhook_url_file (CHANGELOG #2948/#3555)
+    image: prom/alertmanager:v0.33.1
+    container_name: medsafe_alertmanager
+    logging: *default-logging
+    volumes:
+      - ./infra/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      # Webhook do Discord (credencial): arquivo criado à mão, fora do git
+      # (secrets/alertmanager/.gitignore). Setup no RUNBOOK §7.
+      - ./secrets/alertmanager/discord_webhook_url:/etc/alertmanager/secrets/discord_webhook_url:ro
+      - alertmanager_data:/alertmanager
+    # SECURITY: bind em 127.0.0.1 — a UI lista alertas com detalhes internos
+    ports:
+      - "127.0.0.1:9093:9093"
+    healthcheck:
+      # O Alertmanager lê o webhook_url_file só na HORA de notificar (v0.33.1
+      # notify/discord/discord.go:144) — a config carrega mesmo sem o secret. O
+      # `test -s` torna arquivo ausente/vazio visível como unhealthy (fail-fast).
+      test: ["CMD-SHELL", "test -s /etc/alertmanager/secrets/discord_webhook_url && wget --quiet --tries=1 --spider http://127.0.0.1:9093/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - medsafe_network
+    restart: unless-stopped
+
+  # Exporters — sem eles 11 das 15 regras de alerta referenciam métricas inexistentes
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    container_name: medsafe_postgres_exporter
+    logging: *default-logging
+    environment:
+      - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER:-medsafe}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-medsafe}?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # /metrics é o único endpoint HTTP do exporter (imagem busybox: wget)
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:9187/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - medsafe_network
+    restart: unless-stopped
+
+  redis-exporter:
+    # -alpine: a tag padrão é FROM scratch (sem shell/wget), inviável para healthcheck
+    image: oliver006/redis_exporter:v1.88.0-alpine
+    container_name: medsafe_redis_exporter
+    logging: *default-logging
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # /health não toca o Redis (exporter.go:674) — mais leve que /metrics
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:9121/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - medsafe_network
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    container_name: medsafe_node_exporter
+    logging: *default-logging
+    command:
+      - '--path.rootfs=/host'
+    volumes:
+      - /:/host:ro,rslave
+    healthcheck:
+      # node_exporter não tem /-/healthy; /metrics na porta padrão 9100 (busybox: wget)
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:9100/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - medsafe_network
+    restart: unless-stopped
+
+  # Blackbox exporter — sonda o Ollama nativo do host.
+  #
+  # Ollama não expõe métricas Prometheus, então um scrape direto não funciona (o JSON
+  # de /api/tags não faz parse e up viraria 0 permanentemente). O blackbox faz um probe
+  # HTTP de verdade e publica probe_success, que é o que o alerta OllamaDown consome.
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.28.0
+    container_name: medsafe_blackbox_exporter
+    logging: *default-logging
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./infra/prometheus/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    healthcheck:
+      # Endpoint /-/healthy existe no blackbox (main.go:204); imagem busybox: wget
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:9115/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - medsafe_network
+    restart: unless-stopped
+
   # pgAdmin para gerenciamento do banco
   pgadmin:
-    image: dpage/pgadmin4:latest
+    image: dpage/pgadmin4:9.17
     container_name: medsafe_pgadmin
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@medsafe.com}
@@ -301,7 +561,7 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     ports:
-      - "5050:80"
+      - "127.0.0.1:5050:80"
     depends_on:
       - db
     networks:
@@ -312,12 +572,13 @@ services:
 
   # Redis Commander para debug
   redis-commander:
-    image: rediscommander/redis-commander:latest
+    # redis-commander-210 é o último release do upstream (projeto parado; perfil debug)
+    image: rediscommander/redis-commander:redis-commander-210
     container_name: medsafe_redis_commander
     environment:
       - REDIS_HOSTS=local:redis:6379:0:${REDIS_PASSWORD}
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     depends_on:
       - redis
     networks:
@@ -336,6 +597,8 @@ volumes:
   prometheus_data:
     driver: local
   grafana_data:
+    driver: local
+  alertmanager_data:
     driver: local
   pgadmin_data:
     driver: local

@@ -1,145 +1,93 @@
-name: Deploy
+name: Smoke Test (pós-deploy)
+
+# CONTEXTO — por que este workflow não faz deploy:
+#
+# O caminho de entrega real do MedSafe é: stack local via docker-compose.prod.yml,
+# exposta por Cloudflare Tunnel, com o frontend estático no Vercel. O GitHub Actions
+# não tem como alcançar essa máquina — não há host SSH para onde fazer deploy.
+#
+# A versão anterior deste arquivo fingia: marcava environments do GitHub como
+# "deployed" em URLs inexistentes (staging.medsafe.example.com) e imprimia
+# "Smoke tests passed" sem nunca fazer uma requisição. Um deploy quebrado aparecia
+# verde. Isso foi removido.
+#
+# O que sobrou é honesto: uma verificação de verdade, rodada sob demanda contra a URL
+# pública real, que FALHA quando a aplicação está fora do ar.
+#
+# Para habilitar, defina a variável de repositório MEDSAFE_PUBLIC_URL
+# (Settings → Secrets and variables → Actions → Variables), ex.: https://api.seudominio.com
 
 on:
-  workflow_run:
-    workflows: ["Build & Push Docker Image"]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Target environment'
-        required: true
-        default: 'staging'
-        type: choice
-        options:
-          - staging
-          - production
-      image_tag:
-        description: 'Docker image tag to deploy'
+      target_url:
+        description: 'URL base a verificar (sobrepõe a variável MEDSAFE_PUBLIC_URL)'
         required: false
-        default: 'latest'
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+        type: string
+  schedule:
+    # Diário às 09:07 UTC — minuto fora do :00 de propósito
+    - cron: '7 9 * * *'
 
 jobs:
-  deploy-staging:
-    name: Deploy to Staging
+  smoke:
+    name: Verifica saúde da produção
     runs-on: ubuntu-latest
-    if: |
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-      (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging')
-    environment:
-      name: staging
-      url: https://staging.medsafe.example.com
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set image tag
-        id: image
+      - name: Resolve URL alvo
+        id: target
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "tag=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
-          else
-            echo "tag=latest" >> $GITHUB_OUTPUT
+          URL="${{ inputs.target_url || vars.MEDSAFE_PUBLIC_URL }}"
+          if [ -z "$URL" ]; then
+            echo "::error::Nenhuma URL configurada. Defina a variável de repositório MEDSAFE_PUBLIC_URL ou passe target_url."
+            exit 1
+          fi
+          echo "url=${URL%/}" >> "$GITHUB_OUTPUT"
+          echo "Alvo: ${URL%/}"
+
+      - name: /healthz responde e não está unhealthy
+        run: |
+          URL="${{ steps.target.outputs.url }}"
+          BODY=$(curl -fsS --max-time 20 "$URL/healthz")
+          echo "$BODY"
+          STATUS=$(echo "$BODY" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))')
+          echo "status=$STATUS"
+          case "$STATUS" in
+            healthy)  echo "OK: todas as dependências no ar" ;;
+            degraded) echo "::warning::Aplicação DEGRADADA (provável Ollama fora) — analisa não completa" ;;
+            *)        echo "::error::status inesperado: '$STATUS'"; exit 1 ;;
+          esac
+
+      - name: /readyz aceita tráfego
+        run: |
+          URL="${{ steps.target.outputs.url }}"
+          # /readyz devolve 503 quando uma dependência dura (Postgres/Redis) está fora;
+          # -f faz o curl falhar nesse caso, que é exatamente o que queremos aqui.
+          curl -fsS --max-time 20 "$URL/readyz"
+
+      - name: Endpoint de análise exige autenticação
+        run: |
+          URL="${{ steps.target.outputs.url }}"
+          # Guardrail de segurança: ALLOW_ANONYMOUS_ANALYSIS deve estar false em produção.
+          # Sem token, POST /api/v2/analyze tem que ser recusado (401/403).
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
+            -X POST "$URL/api/v2/analyze" \
+            -H 'Content-Type: application/json' \
+            -d '{"medication":"dipirona","patient_data":{}}')
+          echo "HTTP $CODE"
+          if [ "$CODE" != "401" ] && [ "$CODE" != "403" ]; then
+            echo "::error::Análise anônima NÃO está bloqueada (HTTP $CODE). Verifique ALLOW_ANONYMOUS_ANALYSIS e ENVIRONMENT=production."
+            exit 1
           fi
 
-      - name: Deploy to staging
+      - name: Documentação interativa não exposta
         run: |
-          echo "## Staging Deployment" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Environment:** staging" >> $GITHUB_STEP_SUMMARY
-          echo "**Timestamp:** $(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Deployment Commands" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "# SSH to staging server and run:" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
-          echo "docker-compose -f docker-compose.yml up -d" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-
-      # Uncomment when SSH credentials are configured:
-      # - name: SSH Deploy
-      #   uses: appleboy/ssh-action@v1.0.0
-      #   with:
-      #     host: ${{ secrets.STAGING_HOST }}
-      #     username: ${{ secrets.STAGING_USER }}
-      #     key: ${{ secrets.STAGING_SSH_KEY }}
-      #     script: |
-      #       cd /opt/medsafe
-      #       docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.image.outputs.tag }}
-      #       docker-compose -f docker-compose.yml up -d
-      #       docker system prune -f
-
-      - name: Smoke test
-        run: |
-          echo "Running smoke tests..."
-          # Uncomment when staging URL is available:
-          # curl -f https://staging.medsafe.example.com/healthz || exit 1
-          echo "Smoke tests passed"
-
-  deploy-production:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
-    needs: deploy-staging
-    if: github.event_name == 'workflow_dispatch' && inputs.environment == 'production'
-    environment:
-      name: production
-      url: https://medsafe.example.com
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Production deployment notice
-        run: |
-          echo "## Production Deployment" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Environment:** production" >> $GITHUB_STEP_SUMMARY
-          echo "**Approved by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Timestamp:** $(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_STEP_SUMMARY
-
-      # Uncomment when production SSH credentials are configured:
-      # - name: SSH Deploy Production
-      #   uses: appleboy/ssh-action@v1.0.0
-      #   with:
-      #     host: ${{ secrets.PRODUCTION_HOST }}
-      #     username: ${{ secrets.PRODUCTION_USER }}
-      #     key: ${{ secrets.PRODUCTION_SSH_KEY }}
-      #     script: |
-      #       cd /opt/medsafe
-      #       docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
-      #       docker-compose -f docker-compose.prod.yml up -d
-      #       docker system prune -f
-
-      - name: Production smoke test
-        run: |
-          echo "Running production smoke tests..."
-          # Uncomment when production URL is available:
-          # curl -f https://medsafe.example.com/healthz || exit 1
-          echo "Production smoke tests passed"
-
-  rollback:
-    name: Rollback (Manual)
-    runs-on: ubuntu-latest
-    if: failure()
-    environment: rollback
-
-    steps:
-      - name: Rollback instructions
-        run: |
-          echo "## Rollback Required" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Deployment failed. To rollback:" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "# SSH to server and run:" >> $GITHUB_STEP_SUMMARY
-          echo "docker-compose -f docker-compose.yml down" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:previous-stable-tag" >> $GITHUB_STEP_SUMMARY
-          echo "docker-compose -f docker-compose.yml up -d" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          URL="${{ steps.target.outputs.url }}"
+          # /docs e /redoc só existem quando DEBUG=true — em produção devem dar 404.
+          for path in /docs /redoc; do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$URL$path")
+            echo "$path -> HTTP $CODE"
+            if [ "$CODE" = "200" ]; then
+              echo "::error::$path está exposto — DEBUG provavelmente está true em produção."
+              exit 1
+            fi
+          done

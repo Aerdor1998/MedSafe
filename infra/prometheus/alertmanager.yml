@@ -1,0 +1,51 @@
+# Alertmanager — MedSafe
+#
+# Entrega real via Discord (discord_configs é nativo desde v0.25; webhook_url_file
+# desde v0.27 — a imagem está pinada em v0.33.1 no docker-compose.prod.yml).
+#
+# O webhook é uma CREDENCIAL e vive fora do git em
+# ./secrets/alertmanager/discord_webhook_url (montado read-only em
+# /etc/alertmanager/secrets/). Como o Alertmanager só lê o arquivo na hora de
+# notificar (v0.33.1 notify/discord/discord.go:144), a ausência dele não derruba o
+# processo — é o healthcheck do container (`test -s` no arquivo) que a expõe como
+# unhealthy. NÃO suba o stack sem o arquivo; setup completo no RUNBOOK §7.
+#
+# UIs: Alertmanager http://127.0.0.1:9093 · Prometheus http://127.0.0.1:9091/alerts
+
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default'
+
+  routes:
+    # Alertas críticos repetem mais rápido — não deixe um Ollama caído dormir 4h
+    - matchers:
+        - severity = "critical"
+      receiver: 'critical'
+      repeat_interval: 30m
+
+inhibit_rules:
+  # Se a API caiu inteira, não faz sentido acordar alguém com latência alta também
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
+    equal: ['alertname']
+
+receivers:
+  - name: 'default'
+    discord_configs:
+      - webhook_url_file: /etc/alertmanager/secrets/discord_webhook_url
+        title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+        message: '{{ .CommonAnnotations.summary }} — {{ .CommonAnnotations.description }}'
+
+  - name: 'critical'
+    discord_configs:
+      - webhook_url_file: /etc/alertmanager/secrets/discord_webhook_url
+        title: '🚨 [{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+        message: '{{ .CommonAnnotations.summary }} — {{ .CommonAnnotations.description }}'
