@@ -96,7 +96,7 @@ def create_problem_response(
         code=code,
         request_id=request_id,
     )
-    return JSONResponse(status_code=status, content=problem.dict(exclude_none=True))
+    return JSONResponse(status_code=status, content=problem.model_dump(exclude_none=True))
 
 
 # ============================================================================
@@ -364,7 +364,7 @@ async def analyze_drug_interaction(
         if not actual_idempotency_key:
             # Auto-generate idempotency key from payload hash (optional deduplication)
             actual_idempotency_key = _compute_payload_hash(
-                data.medication, data.patient_data.dict()
+                data.medication, data.patient_data.model_dump()
             )
 
         # Try to find existing job with same idempotency key
@@ -394,7 +394,7 @@ async def analyze_drug_interaction(
 
         # Create Triage in database using orchestrator
         triage_id = await orchestrator.create_triage(
-            patient_data=data.patient_data.dict(),
+            patient_data=data.patient_data.model_dump(),
             medication=data.medication,
             user_id=effective_user if effective_user != "anonymous" else "anonymous",
             notes=data.notes,
@@ -407,7 +407,7 @@ async def analyze_drug_interaction(
             triage_id=triage_id,
             user_id=effective_user,
             medication=data.medication,
-            patient_data=data.patient_data.dict(),
+            patient_data=data.patient_data.model_dump(),
             notes=data.notes,
             idempotency_key=actual_idempotency_key,
         )

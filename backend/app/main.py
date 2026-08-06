@@ -53,6 +53,12 @@ async def lifespan(app: FastAPI):
         init_db()
         logger.info("Database initialized")
 
+        # Seed idempotente: cria o admin inicial a partir de
+        # ADMIN_INITIAL_EMAIL/ADMIN_INITIAL_PASSWORD se ainda não existir.
+        from .db.seed import seed_initial_admin
+
+        seed_initial_admin()
+
         await check_services_health()
 
         logger.info("MedSafe API started successfully")
