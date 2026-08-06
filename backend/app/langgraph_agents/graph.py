@@ -178,6 +178,8 @@ def create_medsafe_graph() -> StateGraph:
                 else state.get("risk_level", "unknown")
             ),
             "confidence_score": state.get("confidence_score", 0.0),
+            "risk_score": state.get("risk_score"),
+            "patient_risk_factors": state.get("patient_risk_factors", []),
             # Findings
             "interactions": state.get("interactions", []),
             "contraindications": state.get("contraindications", []),

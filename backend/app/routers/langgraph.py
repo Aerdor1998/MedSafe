@@ -270,6 +270,7 @@ class AnalyzeResponse(BaseModel):
     risk_level: Optional[str] = None
     confidence_score: Optional[float] = None
     accuracy_score: Optional[float] = None  # Calibrated accuracy metric for UI
+    risk_score: Optional[int] = None  # Nota numérica 0-100 da deliberação clínica
 
     # Findings
     interactions: List[Dict[str, Any]] = []
@@ -506,6 +507,8 @@ async def get_analysis_status(
             risk_level=serialize_risk_level(result.get("risk_level")),
             confidence_score=raw_confidence,
             accuracy_score=accuracy_score,  # Calibrated metric for UI
+            risk_score=result.get("risk_score"),
+            patient_risk_factors=result.get("patient_risk_factors", []),
             # Findings
             interactions=result.get("interactions", []),
             contraindications=result.get("contraindications", []),
@@ -639,6 +642,7 @@ async def approve_analysis(
             status="completed" if data.approved else "rejected",
             risk_level=serialize_risk_level(result.get("risk_level")),
             confidence_score=result.get("confidence_score", 0.0),
+            risk_score=result.get("risk_score"),
             interactions=result.get("interactions", []),
             contraindications=result.get("contraindications", []),
             dosage_adjustments=result.get("dosage_adjustments", []),

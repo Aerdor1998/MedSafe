@@ -33,8 +33,15 @@ class UserUpdate(BaseModel):
 
 
 class User(UserBase):
-    """Schema de usuário completo"""
+    """Schema de usuário completo.
 
+    `email` é `str` (não `EmailStr`) de propósito: este é um schema de
+    RESPOSTA e precisa serializar usuários já persistidos (ex.: `admin@admin`,
+    sem ponto no domínio), senão `/auth/me` estoura 500. Validação estrita de
+    email fica na entrada (`UserCreate`/`UserUpdate`).
+    """
+
+    email: str
     id: str
     created_at: datetime
     updated_at: Optional[datetime] = None
