@@ -6,6 +6,7 @@ import base64
 import io
 import json
 import logging
+import re
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List
@@ -252,9 +253,10 @@ Responda em formato JSON válido com a seguinte estrutura:
             # Extrair texto da resposta
             response_text = response.get("response", "")
 
-            # Tentar fazer parse do JSON
+            # Tentar fazer parse do JSON (modelos costumam envolver o JSON
+            # em cercas markdown: ```json ... ``` ou ``` ... ```)
             try:
-                parsed_data = json.loads(response_text)
+                parsed_data = json.loads(self._strip_code_fences(response_text))
             except json.JSONDecodeError:
                 # Se não conseguir fazer parse, extrair informações manualmente
                 parsed_data = self._extract_info_manually(response_text)
@@ -286,6 +288,12 @@ Responda em formato JSON válido com a seguinte estrutura:
                 "extracted_text": "",
                 "model_used": self.model,
             }
+
+    @staticmethod
+    def _strip_code_fences(text: str) -> str:
+        """Remover cercas markdown (```json ... ```) em volta do JSON."""
+        match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+        return match.group(1) if match else text.strip()
 
     def _extract_info_manually(self, text: str) -> Dict[str, Any]:
         """Extrair informações manualmente se o JSON falhar"""
