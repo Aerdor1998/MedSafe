@@ -57,6 +57,32 @@ def serialize_risk_level(value: Any) -> str:
     return "unknown"
 
 
+def _calibrated_accuracy(result: Dict[str, Any], job: Any) -> tuple:
+    """Calcula (raw_confidence, accuracy_score) calibrado para respostas da API.
+
+    Mesma métrica em todos os caminhos que montam AnalyzeResponse
+    (/status e /hitl/approve): usa confidence_score + completude da
+    anamnese + nível de crítica via compute_accuracy.
+    """
+    patient_info = (
+        result.get("patient_data") or job.payload.get("patient_data", {})
+        if job.payload
+        else {}
+    )
+    raw_confidence = result.get("confidence_score", 0.0) or 0.0
+
+    # Only compute accuracy if we have confidence data
+    if (
+        raw_confidence > 0
+        or result.get("interactions")
+        or result.get("contraindications")
+    ):
+        accuracy_score, _ = compute_accuracy(result, patient_info)
+    else:
+        accuracy_score = raw_confidence
+    return raw_confidence, accuracy_score
+
+
 # ============================================================================
 # STANDARDIZED ERROR RESPONSES (RFC 7807 Problem Details)
 # ============================================================================
@@ -481,22 +507,7 @@ async def get_analysis_status(
 
         # Compute calibrated accuracy_score (2026-01-14)
         # Uses confidence_score + anamnesis completeness + critique level + refinements
-        patient_info = (
-            result.get("patient_data") or job.payload.get("patient_data", {})
-            if job.payload
-            else {}
-        )
-        raw_confidence = result.get("confidence_score", 0.0) or 0.0
-
-        # Only compute accuracy if we have confidence data
-        if (
-            raw_confidence > 0
-            or result.get("interactions")
-            or result.get("contraindications")
-        ):
-            accuracy_score, _ = compute_accuracy(result, patient_info)
-        else:
-            accuracy_score = raw_confidence
+        raw_confidence, accuracy_score = _calibrated_accuracy(result, job)
 
         # Build response with new fields
         response = AnalyzeResponse(
@@ -635,13 +646,15 @@ async def approve_analysis(
         )
 
         # Build response
+        raw_confidence, accuracy_score = _calibrated_accuracy(result, job)
         response = AnalyzeResponse(
             session_id=data.session_id,
             job_id=str(job.id),
             triage_id=triage_id,
             status="completed" if data.approved else "rejected",
             risk_level=serialize_risk_level(result.get("risk_level")),
-            confidence_score=result.get("confidence_score", 0.0),
+            confidence_score=raw_confidence,
+            accuracy_score=accuracy_score,  # Calibrated metric for UI
             risk_score=result.get("risk_score"),
             interactions=result.get("interactions", []),
             contraindications=result.get("contraindications", []),
