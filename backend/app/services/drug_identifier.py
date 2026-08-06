@@ -321,7 +321,7 @@ class HybridDrugIdentifier:
         # Vocabulário de nomes conhecidos (sinônimos + base CSV), usado para
         # ANCORAR o fallback LLM e impedir alucinação de fármacos inexistentes
         self._known_drug_names: Optional[set] = None
-        logger.info(f"HybridDrugIdentifier inicializado")
+        logger.info("HybridDrugIdentifier inicializado")
         logger.info(f"   - {len(self.DRUG_SYNONYMS)} sinônimos mapeados")
         logger.info(f"   - {len(self.DRUG_PATTERNS)} padrões regex")
         logger.info(
@@ -603,7 +603,7 @@ class HybridDrugIdentifier:
 
         try:
             prompt = f"""Identify the canonical English scientific name for this medication.
-            
+
 Input: "{original}" (processed: "{processed}")
 
 Rules:

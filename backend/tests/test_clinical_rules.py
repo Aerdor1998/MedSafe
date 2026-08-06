@@ -9,7 +9,6 @@ SKILL: @python-testing-patterns - Comprehensive test coverage
 import pytest
 
 from backend.app.services.clinical_rules import (
-    ClinicalRulesEngine,
     HepaticStage,
     PatientContext,
     PopulationRisk,
@@ -20,8 +19,6 @@ from backend.app.services.clinical_rules import (
     get_rules_engine,
 )
 from backend.app.services.interaction_classifier import (
-    ClassificationResult,
-    InteractionClassifierAgent,
     SeverityLevel,
     get_classifier_agent,
 )

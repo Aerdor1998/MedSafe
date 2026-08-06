@@ -10,7 +10,6 @@ SKILLS APLICADAS:
 import pytest
 
 from backend.app.services.interaction_classifier import (
-    InteractionClassifierAgent,
     SeverityLevel,
     get_classifier_agent,
 )

@@ -120,7 +120,6 @@ class BaseAgent(ABC):
         Returns:
             System prompt string
         """
-        pass
 
     @abstractmethod
     def process(self, state: MedSafeState) -> Dict[str, Any]:
@@ -139,7 +138,6 @@ class BaseAgent(ABC):
         Returns:
             Dictionary of state updates to merge
         """
-        pass
 
     def invoke_llm(
         self,

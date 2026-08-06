@@ -19,7 +19,6 @@ from typing import Any, Dict, List
 
 from ..db.vector_store import MedicalVectorStore, get_vector_store
 from ..services.clinical_rules import (
-    ClinicalRulesEngine,
     PatientContext,
     calculate_gfr_cockroft_gault,
     get_rules_engine,
@@ -204,7 +203,8 @@ Seja minucioso, preciso e baseado em evidências.
                 if not needs_escalation:
                     needs_escalation = True
                 escalation_reasons.append(
-                    f"Evidência insuficiente ({evidence_quality}) para paciente de alto risco - revisão humana recomendada"
+                    f"Evidência insuficiente ({evidence_quality}) "
+                    "para paciente de alto risco - revisão humana recomendada"
                 )
                 logger.warning(
                     f"Low-evidence escalation triggered: "
@@ -914,7 +914,8 @@ Seja minucioso, preciso e baseado em evidências.
         interactions_summary = (
             "\n".join(
                 [
-                    f"- {i['drug1']} + {i['drug2']}: {severity_pt.get(i['severity'].lower(), i['severity'].upper())} - {i['description'][:150]}"
+                    f"- {i['drug1']} + {i['drug2']}: "
+                    f"{severity_pt.get(i['severity'].lower(), i['severity'].upper())} - {i['description'][:150]}"
                     for i in interactions[:5]  # Top 5
                 ]
             )
@@ -926,7 +927,8 @@ Seja minucioso, preciso e baseado em evidências.
         contraindications_summary = (
             "\n".join(
                 [
-                    f"- {c['type']}: {severity_pt.get(c['severity'].lower(), c['severity'].upper())} - {c['description'][:150]}"
+                    f"- {c['type']}: "
+                    f"{severity_pt.get(c['severity'].lower(), c['severity'].upper())} - {c['description'][:150]}"
                     for c in contraindications[:5]  # Top 5
                 ]
             )

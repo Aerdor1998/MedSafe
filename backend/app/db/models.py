@@ -3,7 +3,6 @@ Modelos SQLAlchemy para o MedSafe
 """
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import (
     JSON,

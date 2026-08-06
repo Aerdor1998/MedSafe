@@ -17,19 +17,17 @@ REFERENCE: Antonio Gulli "RAG Implementation" Chapter 14, pg 281-310
 import hashlib
 import json
 import logging
-import re
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 from bs4 import BeautifulSoup
 
-from ..config import settings
 from ..db.database import get_db_context
-from ..db.models import Document, IngestJob
+from ..db.models import IngestJob
 from ..db.vector_store import get_vector_store
 
 logger = logging.getLogger(__name__)
@@ -222,22 +220,6 @@ class LiteratureIngestionService:
             "or using ANVISA's official API if available."
         )
 
-        # Example document structure (would come from actual scraping)
-        example_doc = MedicalDocument(
-            drug_name=query or "example_drug",
-            section="bula_completa",
-            text="Conteúdo da bula ANVISA aqui...",
-            source="ANVISA",
-            source_url="https://consultas.anvisa.gov.br/#/medicamentos/...",
-            metadata={
-                "country": "BR",
-                "regulatory_agency": "ANVISA",
-                "document_type": "bula",
-            },
-        )
-
-        # documents.append(example_doc)  # Uncomment when implementing
-
         return documents
 
     def _ingest_fda(self, query: str, max_results: int) -> List[MedicalDocument]:
@@ -300,7 +282,7 @@ class LiteratureIngestionService:
                                 section=section_name,
                                 text=text,
                                 source="FDA",
-                                source_url=f"https://www.accessdata.fda.gov/scripts/cder/daf/",
+                                source_url="https://www.accessdata.fda.gov/scripts/cder/daf/",
                                 metadata={
                                     "country": "US",
                                     "regulatory_agency": "FDA",

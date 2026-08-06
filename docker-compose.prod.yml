@@ -124,6 +124,9 @@ services:
       - DEBUG=false
       # SECURITY: Passwords via env vars - no defaults in production
       - DATABASE_URL=postgresql://${POSTGRES_USER:-medsafe}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-medsafe}
+      # FIX: validador de produção (config.py:355) exige POSTGRES_PASSWORD no env do
+      # container — sem isto a app sobe com o default CHANGE_ME e crash-loopa.
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       # Ollama nativo do host (GPU via WSL) — ver comentário no serviço "ollama"
       - OLLAMA_HOST=http://host.docker.internal:11434
@@ -231,6 +234,9 @@ services:
       - ENVIRONMENT=production
       - DEBUG=false
       - DATABASE_URL=postgresql://${POSTGRES_USER:-medsafe}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-medsafe}
+      # FIX: validador de produção (config.py:355) exige POSTGRES_PASSWORD no env do
+      # container — sem isto a app sobe com o default CHANGE_ME e crash-loopa.
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       # Ollama nativo do host (GPU via WSL) — ver comentário no serviço "ollama"
       - OLLAMA_HOST=http://host.docker.internal:11434
@@ -296,6 +302,9 @@ services:
       - ENVIRONMENT=production
       - DEBUG=false
       - DATABASE_URL=postgresql://${POSTGRES_USER:-medsafe}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-medsafe}
+      # FIX: validador de produção (config.py:355) exige POSTGRES_PASSWORD no env do
+      # container — sem isto a app sobe com o default CHANGE_ME e crash-loopa.
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - SECRET_KEY=${SECRET_KEY}
       - JWT_SECRET=${JWT_SECRET}

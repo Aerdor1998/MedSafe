@@ -5,12 +5,10 @@ Este módulo define os modelos de usuário necessários para autenticação JWT 
 """
 
 from datetime import datetime, timedelta
-from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
-from sqlalchemy.orm import relationship
 
 from ..auth.rbac import Permission, UserRole
 from .database import Base, is_sqlite

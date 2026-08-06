@@ -20,11 +20,9 @@ CRITICAL: For medical systems, evidence MUST be real and verifiable.
 No LLM synthesis without explicit warning to downstream agents.
 """
 
-import json
 import logging
 from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from ..db.vector_store import MedicalVectorStore, get_vector_store
 from ..services.drug_interactions import normalize_drug_name

@@ -5,12 +5,11 @@ PHASE 1: Test feature flag and deprecation headers
 SKILLS: @debugging-strategies
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import httpx
 import pytest
 from fastapi import FastAPI
-from starlette.responses import JSONResponse
 
 from backend.app.middleware.deprecation import (
     DeprecationMiddleware,

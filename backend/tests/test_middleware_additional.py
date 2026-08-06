@@ -4,12 +4,6 @@ Unit tests for additional middleware modules
 Tests prometheus, metrics, and other middleware components.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
-from fastapi import Request
-from starlette.responses import Response
-
 
 class TestPrometheusMiddleware:
     """Tests for Prometheus middleware"""

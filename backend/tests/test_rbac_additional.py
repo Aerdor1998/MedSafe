@@ -4,10 +4,6 @@ Unit tests for RBAC (Role-Based Access Control)
 Tests UserRole, Permission, and RBAC utilities.
 """
 
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 
 class TestUserRole:
     """Tests for UserRole enum"""
@@ -50,7 +46,7 @@ class TestRBACRolePermissions:
 
     def test_role_permissions_exists(self):
         """Test ROLE_PERMISSIONS mapping exists"""
-        from backend.app.auth.rbac import ROLE_PERMISSIONS, UserRole
+        from backend.app.auth.rbac import ROLE_PERMISSIONS
 
         assert ROLE_PERMISSIONS is not None
         assert isinstance(ROLE_PERMISSIONS, dict)

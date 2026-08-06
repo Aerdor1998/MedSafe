@@ -5,9 +5,6 @@ Tests AgentLogger, setup_logging, and log functions.
 """
 
 import logging
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 
 class TestLogLevel:

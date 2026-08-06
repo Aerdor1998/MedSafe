@@ -6,13 +6,10 @@ SKILLS: @api-design-principles, @secrets-management, @backend-dev-guidelines
 FASE 1.2: Audit logging integration
 """
 
-import hashlib
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
 
 from ..auth.jwt import (
     create_access_token,
@@ -27,7 +24,7 @@ from ..db.database import get_db_context
 from ..db.user_models import User as DBUser
 from ..db.user_models import UserSession as DBUserSession
 from ..middleware.rate_limit import limiter
-from ..utils.audit_logger import AuditEventType, AuditSeverity, audit_logger
+from ..utils.audit_logger import audit_logger
 
 logger = logging.getLogger(__name__)
 

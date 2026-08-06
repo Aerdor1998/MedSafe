@@ -38,6 +38,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v2", tags=["LangGraph Multi-Agent v2"])
 
 
+def serialize_risk_level(value: Any) -> str:
+    """Serializa risk_level para o contrato da API.
+
+    Sempre retorna um membro do enum RiskLevel em minúsculo
+    ('critical'|'high'|'medium'|'low') ou 'unknown' — nunca
+    representações cruas como 'RiskLevel.LOW'.
+    """
+    from ..langgraph_agents.state import RiskLevel
+
+    if isinstance(value, RiskLevel):
+        return value.value
+    if isinstance(value, str):
+        try:
+            return RiskLevel(value).value
+        except ValueError:
+            return "unknown"
+    return "unknown"
+
+
 # ============================================================================
 # STANDARDIZED ERROR RESPONSES (RFC 7807 Problem Details)
 # ============================================================================
@@ -484,7 +503,7 @@ async def get_analysis_status(
             job_id=str(job.id),
             triage_id=result.get("triage_id"),
             status=str(job.status or result.get("status", "unknown")),
-            risk_level=str(result.get("risk_level", "unknown")),
+            risk_level=serialize_risk_level(result.get("risk_level")),
             confidence_score=raw_confidence,
             accuracy_score=accuracy_score,  # Calibrated metric for UI
             # Findings
@@ -618,7 +637,7 @@ async def approve_analysis(
             job_id=str(job.id),
             triage_id=triage_id,
             status="completed" if data.approved else "rejected",
-            risk_level=str(result.get("risk_level", "unknown")),
+            risk_level=serialize_risk_level(result.get("risk_level")),
             confidence_score=result.get("confidence_score", 0.0),
             interactions=result.get("interactions", []),
             contraindications=result.get("contraindications", []),

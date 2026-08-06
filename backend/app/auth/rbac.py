@@ -10,14 +10,14 @@ FASE 1.2: Audit logging integration
 
 import logging
 from enum import Enum
-from typing import List, Optional
+from typing import List
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from ..db.database import get_db
 from ..utils.audit_logger import audit_logger
-from .jwt import get_current_user, verify_token
+from .jwt import get_current_user
 
 logger = logging.getLogger(__name__)
 

@@ -36,8 +36,9 @@ WORKFLOW:
 """
 
 import logging
+import threading
 from datetime import datetime
-from typing import Any, Dict, Literal
+from typing import Literal
 
 from langgraph.graph import END, StateGraph
 
@@ -281,7 +282,7 @@ def create_medsafe_graph() -> StateGraph:
     )
 
     logger.info("MedSafe LangGraph compiled successfully")
-    logger.info(f"   Agents: Triage, Document, Clinical, Reflection, Safety, HITL")
+    logger.info("   Agents: Triage, Document, Clinical, Reflection, Safety, HITL")
     logger.info(f"   Reflection cycles: max {settings.max_reflection_cycles}")
     logger.info(f"   HITL enabled: {settings.enable_hitl}")
     logger.info(f"   Safety guardrails: {settings.enable_safety_guardrails}")
@@ -290,7 +291,6 @@ def create_medsafe_graph() -> StateGraph:
 
 
 # Global graph instance with thread-safety
-import threading
 
 _graph = None
 _graph_lock = threading.Lock()

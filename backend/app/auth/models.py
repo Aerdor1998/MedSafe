@@ -62,9 +62,14 @@ class TokenPayload(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    """Schema de requisição de login"""
+    """Schema de requisição de login.
 
-    email: EmailStr
+    `email` é `str` (não `EmailStr`) de propósito: o login só compara
+    igualdade com o valor persistido, e `EmailStr` rejeita TLDs reservados
+    como o `admin@medsafe.local` seedado (422 antes de chegar à rota).
+    """
+
+    email: str
     password: str
 
 

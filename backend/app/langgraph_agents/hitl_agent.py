@@ -13,7 +13,7 @@ RESPONSIBILITIES:
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from .base_agent import BaseAgent
 from .state import MedSafeState
@@ -110,11 +110,11 @@ the safety concerns and make an informed decision.
             duration = (datetime.now() - start_time).total_seconds()
             self.log_step(state, f"Review package prepared in {duration:.2f}s")
 
-            logger.info(f" HITLAgent: Review package prepared")
+            logger.info(" HITLAgent: Review package prepared")
             logger.info(
                 f"   Escalation reasons: {', '.join(state.get('escalation_reasons', []))}"
             )
-            logger.info(f"   Awaiting physician decision...")
+            logger.info("   Awaiting physician decision...")
 
             return updates
 

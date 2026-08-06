@@ -16,7 +16,7 @@ import logging
 import sys
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Optional
 
 
 class LogLevel(str, Enum):
@@ -116,7 +116,7 @@ class ColoredFormatter(logging.Formatter):
             log_parts.append(f"{color}  └─ Agent: {reset}{record.agent_name}")
 
         # Adicionar traceback se houver exceção
-        if record.exc_info and record.exc_info != True:
+        if record.exc_info and record.exc_info is not True:
             log_parts.append(f"\n{color}  └─ Exception:{reset}")
             log_parts.append(self.formatException(record.exc_info))
 

@@ -339,7 +339,7 @@ def cache_llm_response(func: Callable) -> Callable:
         # Try cache first
         cached = llm_response_cache.get(cache_key)
         if cached is not None:
-            logger.info(f"LLM response cached (saved API call)")
+            logger.info("LLM response cached (saved API call)")
             return cached
 
         # Call LLM and cache
@@ -414,7 +414,7 @@ def cache_rag_search(func: Callable) -> Callable:
         # Try cache first
         cached = rag_search_cache.get(cache_key)
         if cached is not None:
-            logger.info(f"RAG cache hit (saved embedding computation)")
+            logger.info("RAG cache hit (saved embedding computation)")
             return cached
 
         # Execute search and cache

@@ -15,9 +15,9 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
-from sqlalchemy import and_, func, or_, text
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -426,7 +426,7 @@ class DataRetentionService:
                 or_(
                     and_(
                         UserSession.expires_at < cutoff_date,
-                        UserSession.is_active == False,
+                        UserSession.is_active.is_(False),
                     ),
                     UserSession.created_at < cutoff_date,
                 )

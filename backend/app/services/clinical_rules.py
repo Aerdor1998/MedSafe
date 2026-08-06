@@ -14,11 +14,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..data import (
-    get_category_recommendations,
     get_critical_combinations,
     get_critical_interactions,
-    get_population_alerts,
-    get_recommendation_templates,
 )
 
 logger = logging.getLogger(__name__)
@@ -800,7 +797,7 @@ class ClinicalRulesEngine:
             if any(n in drug_name.lower() for n in nephrotoxic):
                 needs_escalation = True
                 escalation_reasons.append(
-                    f"Droga nefrotoxica em paciente com funcao renal comprometida"
+                    "Droga nefrotoxica em paciente com funcao renal comprometida"
                 )
 
         # Regra 7: Baixa confiança + alto risco

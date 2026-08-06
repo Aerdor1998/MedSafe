@@ -2,21 +2,17 @@
 VisionAgent - Agente para análise de imagem/PDF com qwen2.5-vl
 """
 
-import asyncio
 import base64
 import io
 import json
 import logging
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import httpx
-from PIL import Image
 
 from ..config import settings
-from ..db.database import get_db_context
-from ..db.models import Document
 
 logger = logging.getLogger(__name__)
 
@@ -339,4 +335,3 @@ Responda em formato JSON válido com a seguinte estrutura:
         except Exception as e:
             logger.error(f"Erro ao salvar resultado: {e}")
             # Não falhar se não conseguir salvar
-            pass

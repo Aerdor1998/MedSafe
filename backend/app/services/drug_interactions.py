@@ -9,12 +9,8 @@ SKILLS APLICADAS:
 - CODE-REVIEW-EXCELLENCE: Documentação e rastreabilidade
 """
 
-import asyncio
 import csv
 import logging
-import re
-from difflib import SequenceMatcher
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -28,7 +24,6 @@ from .clinical_rules import (
     get_all_critical_interaction_rules,
 )
 from .drug_identifier import (
-    HybridDrugIdentifier,
     IdentificationMethod,
     get_drug_identifier,
 )
@@ -425,8 +420,8 @@ class DrugInteractionService:
         self.drug_identifier = get_drug_identifier(llm_client=llm_client)
 
         logger.info(f"DrugInteractionService inicializado - Base: {self.db_path}")
-        logger.info(f"🤖 InteractionClassifierAgent integrado")
-        logger.info(f"🔬 HybridDrugIdentifier integrado (regex + fuzzy + LLM)")
+        logger.info("🤖 InteractionClassifierAgent integrado")
+        logger.info("🔬 HybridDrugIdentifier integrado (regex + fuzzy + LLM)")
 
     @property
     def interactions_db(self):
@@ -670,7 +665,8 @@ class DrugInteractionService:
                             break  # Found interaction, next row
 
                 logger.info(
-                    f"Total de interações encontradas: {len(interactions)} (escaneadas {rows_scanned}, verificadas {rows_checked})"
+                    f"Total de interações encontradas: {len(interactions)} "
+                    f"(escaneadas {rows_scanned}, verificadas {rows_checked})"
                 )
 
         except Exception as e:
@@ -1217,7 +1213,10 @@ class DrugInteractionService:
                             contraindications.append(
                                 {
                                     "type": f"Contraindicação por {condition}",
-                                    "description": f"{contra_drug.capitalize()} pode ser contraindicado em pacientes com {condition}",
+                                    "description": (
+                                        f"{contra_drug.capitalize()} pode ser "
+                                        f"contraindicado em pacientes com {condition}"
+                                    ),
                                     "severity": "high",
                                     "source": "Diretrizes Clínicas",
                                     "recommendation": "Avaliar alternativas terapêuticas com médico",
@@ -1271,7 +1270,7 @@ class DrugInteractionService:
 
         # 1. Se há contraindicações ou interações CRÍTICAS → CRITICAL
         if critical_contraindications or critical_interactions:
-            logger.warning(f"🔴 RISCO CRÍTICO identificado:")
+            logger.warning("🔴 RISCO CRÍTICO identificado:")
             if critical_contraindications:
                 logger.warning(
                     f"   - {len(critical_contraindications)} contraindicação(ões) crítica(s)"
@@ -1285,7 +1284,7 @@ class DrugInteractionService:
         # 2. Se há pelo menos 1 HIGH → HIGH
         high_count = len(high_contraindications) + len(high_interactions)
         if high_count >= 1:
-            logger.warning(f"🟠 RISCO ALTO identificado:")
+            logger.warning("🟠 RISCO ALTO identificado:")
             if high_contraindications:
                 logger.warning(
                     f"   - {len(high_contraindications)} contraindicação(ões) de alto risco"
@@ -1299,7 +1298,7 @@ class DrugInteractionService:
         # 3. Se há pelo menos 1 MEDIUM → MEDIUM
         medium_count = len(medium_contraindications) + len(medium_interactions)
         if medium_count >= 1:
-            logger.info(f"🟡 RISCO MODERADO identificado:")
+            logger.info("🟡 RISCO MODERADO identificado:")
             if medium_contraindications:
                 logger.info(
                     f"   - {len(medium_contraindications)} contraindicação(ões) moderada(s)"

@@ -6,10 +6,9 @@ SKILLS: @api-design-principles, @backend-dev-guidelines
 """
 
 import logging
-from datetime import datetime
 from typing import Callable
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
