@@ -59,6 +59,65 @@ from .triage_agent import create_triage_agent
 logger = logging.getLogger(__name__)
 
 
+def finalize_report(state: MedSafeState) -> MedSafeState:
+    """
+    Finalize the analysis report
+
+    PATTERN: Report generation
+
+    NOTE: Module-level so the HITL approve endpoint can finalize a saved
+    state directly (the graph has no checkpointer; re-invoking it with a
+    full state would re-run the whole pipeline from START).
+    """
+    settings = get_settings()
+    logger.info("📄 Finalizing report...")
+
+    final_report = {
+        "session_id": state.get("session_id"),
+        "timestamp": datetime.now().isoformat(),
+        "medication": state.get("medication_text"),
+        "risk_level": (
+            state.get("risk_level", "unknown").value
+            if hasattr(state.get("risk_level"), "value")
+            else state.get("risk_level", "unknown")
+        ),
+        "confidence_score": round(float(state.get("confidence_score", 0.0) or 0.0), 4),
+        "risk_score": state.get("risk_score"),
+        "patient_risk_factors": state.get("patient_risk_factors", []),
+        # Findings
+        "interactions": state.get("interactions", []),
+        "contraindications": state.get("contraindications", []),
+        # Recommendations
+        "dosage_adjustments": state.get("dosage_adjustments", []),
+        "adverse_reactions": state.get("adverse_reactions", []),
+        # Evidence
+        "evidence_links": state.get("evidence_links", []),
+        # Quality metrics
+        "critique_level": (
+            state.get("critique_level", "unknown").value
+            if hasattr(state.get("critique_level"), "value")
+            else str(state.get("critique_level", "unknown"))
+        ),
+        "refinement_cycles": state.get("refinement_count", 0),
+        "safety_classification": (
+            state.get("safety_classification", "unknown").value
+            if hasattr(state.get("safety_classification"), "value")
+            else str(state.get("safety_classification", "unknown"))
+        ),
+        "human_reviewed": state.get("human_approved", False),
+        # Metadata
+        "agent_steps": state.get("agent_steps", []),
+        "model_used": state.get("model_used", settings.effective_model_name),
+        "timestamps": state.get("timestamps", {}),
+    }
+
+    return {
+        **state,
+        "final_report": final_report,
+        "status": "completed",
+    }
+
+
 def create_medsafe_graph() -> StateGraph:
     """
     Create the complete MedSafe multi-agent workflow graph
@@ -160,60 +219,7 @@ def create_medsafe_graph() -> StateGraph:
             logger.info("No HITL required - proceeding to finalization")
             return "finalize"
 
-    def finalize_report(state: MedSafeState) -> MedSafeState:
-        """
-        Finalize the analysis report
-
-        PATTERN: Report generation
-        """
-        logger.info("📄 Finalizing report...")
-
-        final_report = {
-            "session_id": state.get("session_id"),
-            "timestamp": datetime.now().isoformat(),
-            "medication": state.get("medication_text"),
-            "risk_level": (
-                state.get("risk_level", "unknown").value
-                if hasattr(state.get("risk_level"), "value")
-                else state.get("risk_level", "unknown")
-            ),
-            "confidence_score": state.get("confidence_score", 0.0),
-            "risk_score": state.get("risk_score"),
-            "patient_risk_factors": state.get("patient_risk_factors", []),
-            # Findings
-            "interactions": state.get("interactions", []),
-            "contraindications": state.get("contraindications", []),
-            # Recommendations
-            "dosage_adjustments": state.get("dosage_adjustments", []),
-            "adverse_reactions": state.get("adverse_reactions", []),
-            # Evidence
-            "evidence_links": state.get("evidence_links", []),
-            # Quality metrics
-            "critique_level": (
-                state.get("critique_level", "unknown").value
-                if hasattr(state.get("critique_level"), "value")
-                else str(state.get("critique_level", "unknown"))
-            ),
-            "refinement_cycles": state.get("refinement_count", 0),
-            "safety_classification": (
-                state.get("safety_classification", "unknown").value
-                if hasattr(state.get("safety_classification"), "value")
-                else str(state.get("safety_classification", "unknown"))
-            ),
-            "human_reviewed": state.get("human_approved", False),
-            # Metadata
-            "agent_steps": state.get("agent_steps", []),
-            "model_used": state.get("model_used", settings.effective_model_name),
-            "timestamps": state.get("timestamps", {}),
-        }
-
-        return {
-            **state,
-            "final_report": final_report,
-            "status": "completed",
-        }
-
-    # Create the graph
+    # Create the graph (finalize_report is module-level — see above)
     logger.info("   Building graph structure...")
     workflow = StateGraph(MedSafeState)
 
