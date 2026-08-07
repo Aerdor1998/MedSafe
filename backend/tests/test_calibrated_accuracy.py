@@ -7,7 +7,7 @@ nos dois caminhos.
 
 from types import SimpleNamespace
 
-from app.routers.langgraph import _calibrated_accuracy
+from backend.app.routers.langgraph import _calibrated_accuracy
 
 
 def _job(payload=None):
