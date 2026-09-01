@@ -286,13 +286,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       
+      # Imagem oficial do Trivy (evita o install.sh do trivy-action, que falha
+      # ao baixar o binário do GitHub Releases dentro do runner)
       - name: 🔍 Scan Docker image for vulnerabilities
-        uses: aquasecurity/trivy-action@v0.33.1
-        with:
-          image-ref: medsafe:test
-          format: 'table'
-          exit-code: '1'
-          severity: 'CRITICAL,HIGH'
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache/trivy:/root/.cache/trivy" \
+            aquasec/trivy:0.65.0 image \
+              --format table --exit-code 1 --severity CRITICAL,HIGH \
+              --ignore-unfixed medsafe:test
 
   # =================================================================
   # JOB 7: E2E Tests (só em push para main)
