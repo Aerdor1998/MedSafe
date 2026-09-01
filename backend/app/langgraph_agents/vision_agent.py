@@ -22,7 +22,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
-
 from ..config import settings
 from .base_agent import BaseAgent
 from .state import MedSafeState

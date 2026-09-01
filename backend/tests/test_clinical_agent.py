@@ -7,7 +7,6 @@ without requiring actual LLM or database connections.
 
 from unittest.mock import MagicMock, patch
 
-
 from backend.app.langgraph_agents.clinical_agent import (
     ClinicalAgent,
     create_clinical_agent,

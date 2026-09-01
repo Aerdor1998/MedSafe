@@ -13,10 +13,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..data import (
-    get_critical_combinations,
-    get_critical_interactions,
-)
+from ..data import get_critical_combinations, get_critical_interactions
 
 logger = logging.getLogger(__name__)
 

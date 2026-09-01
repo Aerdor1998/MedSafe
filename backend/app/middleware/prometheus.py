@@ -6,10 +6,13 @@ SKILLS: @prometheus-configuration, @grafana-dashboards, @api-design-principles
 """
 
 import logging
+import platform
+import secrets
 import time
+from pathlib import Path
 from typing import Callable
 
-from fastapi import Request, Response
+from fastapi import HTTPException, Request, Response, status
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     CollectorRegistry,
@@ -20,6 +23,8 @@ from prometheus_client import (
     generate_latest,
 )
 from starlette.middleware.base import BaseHTTPMiddleware
+
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -391,6 +396,38 @@ async def metrics_endpoint(request: Request):
 
     SKILL: @prometheus-configuration
     """
+    if not settings.enable_metrics:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    if settings.is_production:
+        token_file = settings.metrics_auth_token_file
+        try:
+            expected_token = Path(token_file or "").read_text(encoding="utf-8").strip()
+        except (OSError, ValueError):
+            logger.error("Metrics credential is unavailable")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Metrics endpoint unavailable",
+            )
+
+        if len(expected_token) < 32:
+            logger.error("Metrics credential is missing or too short")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Metrics endpoint unavailable",
+            )
+
+        authorization = request.headers.get("Authorization", "")
+        scheme, _, supplied_token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not secrets.compare_digest(
+            supplied_token, expected_token
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid metrics credential",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
     # Update metrics before export
     update_metrics()
 
@@ -418,7 +455,7 @@ def setup_prometheus():
     medsafe_info.info(
         {
             "version": "2.0.0",
-            "python_version": "3.10",
+            "python_version": platform.python_version(),
             "framework": "FastAPI + LangGraph",
             "llm_provider": "Ollama",
             "database": "PostgreSQL + pgvector",

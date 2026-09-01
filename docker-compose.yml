@@ -1,9 +1,10 @@
 services:
-  # Ollama com modelos pré-carregados + GPU support
+  # Ollama com modelos pré-carregados + GPU NVIDIA (obrigatório).
+  # No WSL2 o driver fica no Windows; o Docker Engine do WSL precisa do
+  # NVIDIA Container Toolkit instalado (ver docs/ops/gpu-wsl.md).
   ollama:
     image: ollama/ollama:latest
     container_name: medsafe_ollama
-    # SKILL: @python-performance-optimization - GPU acceleration
     deploy:
       resources:
         reservations:

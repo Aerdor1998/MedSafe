@@ -33,15 +33,17 @@ def _analysis_backend_mocked() -> Iterator[MagicMock]:
     orchestrator = MagicMock()
     orchestrator.create_triage = AsyncMock(return_value="triage-123")
     orchestrator.create_analysis_job = AsyncMock(return_value="job-123")
+    idempotency_lookup = AsyncMock(return_value=None)
     with patch.object(
         langgraph_module, "get_orchestrator", return_value=orchestrator
     ), patch.object(
         langgraph_module,
         "_find_existing_job_by_idempotency_key",
-        new=AsyncMock(return_value=None),
+        new=idempotency_lookup,
     ), patch.object(
         langgraph_module.app_settings, "allow_anonymous_analysis", True
     ):
+        orchestrator.idempotency_lookup = idempotency_lookup
         yield orchestrator
 
 
@@ -91,6 +93,51 @@ class TestLangGraphEndpoints:
         assert data["job_id"] == "job-123"
         assert data["triage_id"] == "triage-123"
         assert data["session_id"]
+
+    def test_idempotency_is_only_applied_when_header_is_present(self, client):
+        """Requisições clínicas diferentes não são colapsadas por hash parcial."""
+        payload = {"medication": "aspirin", "patient_data": {"allergies": ["ASA"]}}
+
+        with _analysis_backend_mocked() as orchestrator:
+            response = client.post("/api/v2/analyze", json=payload)
+
+        assert response.status_code == 200
+        orchestrator.idempotency_lookup.assert_not_awaited()
+        assert (
+            orchestrator.create_analysis_job.await_args.kwargs["idempotency_key"]
+            is None
+        )
+
+    def test_explicit_idempotency_key_is_honored(self, client):
+        payload = {"medication": "aspirin", "patient_data": {}}
+
+        with _analysis_backend_mocked() as orchestrator:
+            response = client.post(
+                "/api/v2/analyze",
+                json=payload,
+                headers={"Idempotency-Key": " retry-123 "},
+            )
+
+        assert response.status_code == 200
+        orchestrator.idempotency_lookup.assert_awaited_once_with(
+            "retry-123", "anonymous"
+        )
+
+    def test_payload_user_id_cannot_spoof_attribution(self, client):
+        payload = {
+            "medication": "aspirin",
+            "patient_data": {},
+            "user_id": "another-user",
+        }
+
+        with _analysis_backend_mocked() as orchestrator:
+            response = client.post("/api/v2/analyze", json=payload)
+
+        assert response.status_code == 200
+        assert orchestrator.create_triage.await_args.kwargs["user_id"] == "anonymous"
+        assert (
+            orchestrator.create_analysis_job.await_args.kwargs["user_id"] == "anonymous"
+        )
 
     def test_triage_endpoint(self, client):
         """Não existe rota POST /api/v2/triage neste router -> 404."""
@@ -187,6 +234,62 @@ class TestStatusEndpoints:
         response = client.get("/api/v2/jobs")
 
         assert response.status_code == 404
+
+    def test_status_requires_auth_when_anonymous_access_is_disabled(
+        self, client, monkeypatch
+    ):
+        import backend.app.routers.langgraph as langgraph_module
+
+        monkeypatch.setattr(
+            langgraph_module.app_settings, "allow_anonymous_analysis", False
+        )
+
+        response = client.get("/api/v2/status/private-session")
+
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Authentication required"
+
+    def test_status_checks_job_owner_even_without_triage(self, client, monkeypatch):
+        from types import SimpleNamespace
+
+        import backend.app.routers.langgraph as langgraph_module
+
+        orchestrator = MagicMock()
+        orchestrator.get_job_by_session = AsyncMock(
+            return_value=SimpleNamespace(
+                id="job-1",
+                user_id="different-user",
+                triage_id=None,
+                state={},
+                payload={},
+                status="pending",
+            )
+        )
+        monkeypatch.setattr(
+            langgraph_module.app_settings, "allow_anonymous_analysis", True
+        )
+        monkeypatch.setattr(langgraph_module, "get_orchestrator", lambda: orchestrator)
+
+        response = client.get("/api/v2/status/private-session")
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Access denied"
+
+    def test_hitl_endpoint_uses_clinical_approval_permission(self):
+        from fastapi.routing import APIRoute
+
+        from backend.app.auth.rbac import can_approve_analysis
+        from backend.app.routers.langgraph import router
+
+        route = next(
+            route
+            for route in router.routes
+            if isinstance(route, APIRoute) and route.path == "/api/v2/hitl/approve"
+        )
+
+        assert can_approve_analysis in {
+            dependency.call for dependency in route.dependant.dependencies
+        }
 
 
 class TestModelOverride:

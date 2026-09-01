@@ -7,6 +7,7 @@ __pycache__/
 env/
 venv/
 .venv/
+.pip-audit-cache/
 ENV/
 build/
 dist/
@@ -100,6 +101,9 @@ START_MVP.md
 MVP_PRODUCTION_READY.md
 /docs /docs/**/*
 docs/
+!docs/
+docs/*
+!docs/RUNBOOK.md
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -181,3 +185,7 @@ models/*.bin
 
 # Relatórios de eval (gerados localmente; golden set fica em git)
 evals/results/
+
+# local caches
+.pnpm-store/
+.pytest_tmp/

@@ -1,6 +1,5 @@
 import types
 
-
 from backend.app.db import vector_store as vs
 
 

@@ -31,7 +31,7 @@ class UserRole(str, Enum):
 
     ADMIN = "admin"  # Full system access + user management
     PHYSICIAN = "physician"  # Can create/approve analyses, HITL decisions
-    PHARMACIST = "pharmacist"  # Can view analyses, create triages (no HITL approval)
+    PHARMACIST = "pharmacist"  # Can create triages and review HITL analyses
     READONLY = "readonly"  # Can only view existing analyses (auditor, researcher)
 
 
@@ -126,9 +126,10 @@ ROLE_PERMISSIONS = {
         # Triage
         Permission.TRIAGE_CREATE,
         Permission.TRIAGE_READ,
-        # Analysis (no HITL)
+        # Analysis and HITL review
         Permission.ANALYSIS_CREATE,
         Permission.ANALYSIS_READ,
+        Permission.ANALYSIS_APPROVE,
         # Reports
         Permission.REPORT_READ,
     ],

@@ -164,12 +164,8 @@ Você é a última linha de defesa. Seja conservador e cauteloso.
             )
             floor = None
             for finding in findings:
-                mapped = severity_to_risk.get(
-                    str(finding.get("severity", "")).lower()
-                )
-                if mapped and (
-                    floor is None or risk_order[mapped] > risk_order[floor]
-                ):
+                mapped = severity_to_risk.get(str(finding.get("severity", "")).lower())
+                if mapped and (floor is None or risk_order[mapped] > risk_order[floor]):
                     floor = mapped
 
             current_risk = updates.get("risk_level", state.get("risk_level"))

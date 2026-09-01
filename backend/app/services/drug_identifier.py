@@ -64,6 +64,15 @@ class HybridDrugIdentifier:
 
     # Mapeamento completo de sinônimos (português → inglês científico)
     DRUG_SYNONYMS = {
+        # ===== NOMES PT-BR FALTANTES (detectados em smoke test 2026-09-01) =====
+        "amiodarona": "amiodarone",
+        "ancoron": "amiodarone",
+        "digoxina": "digoxin",
+        "claritromicina": "clarithromycin",
+        "fluconazol": "fluconazole",
+        "anlodipino": "amlodipine",
+        "amlodipina": "amlodipine",
+        "dabigatrana": "dabigatran",
         # ===== DIURÉTICOS =====
         "espironolactona": "spironolactone",
         "spironolactona": "spironolactone",

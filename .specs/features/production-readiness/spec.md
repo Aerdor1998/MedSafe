@@ -5,14 +5,14 @@
 
 ## Problem Statement
 
-O MedSafe precisa ir a produção em stack de host único (docker-compose.prod.yml: api FastAPI, worker, postgres, redis, nginx, backup, grafana, prometheus). Antes do go-live é preciso provar, com evidência executável, que segurança (auth, segredos, sunset da v1), confiabilidade (health, HITL, degradação) e qualidade (suite backend, E2E público) atendem os critérios auditados.
+O MedSafe precisa ir a produção em stack de host único (docker-compose.prod.yml: API FastAPI, worker, postgres, redis, backup e observabilidade; nginx disponível no profile `tls`). Antes do go-live é preciso provar, com evidência executável, que segurança (auth, segredos, sunset da v1), confiabilidade (health, HITL, degradação) e qualidade (suite backend, E2E público) atendem os critérios auditados.
 
 ## Assumptions & Open Questions
 
 - A1: Stack roda em host único via docker compose (sem orquestrador externo). Confirmado pelo usuário.
 - A2: Ollama roda no host (host.docker.internal:11434) e não é gerido pelo compose. Confirmado.
-- A3: TLS terminado no nginx com certificado local (ambiente de homologação). Confirmado.
-- Q1 (resolvida): Grafana/Prometheus ficam fora do gate bloqueante — tratados como melhoria.
+- A3: TLS termina no Cloudflare Tunnel por padrão; nginx com certificado local permanece disponível no profile opcional `tls`.
+- Q1 (resolvida): Grafana/Prometheus integram o stack de produção e são bloqueantes; desenvolvimento local continua podendo usar o Compose reduzido.
 
 Open questions: none
 
@@ -24,9 +24,9 @@ Como operador, quero que o stack suba apenas com segredos vindos do ambiente e s
 
 **Acceptance Criteria**: ver PROD-01, PROD-05.
 
-### P1: Usuário final usa o fluxo público sem sessão
+### P1: Usuário final inicia no frontend público e autentica a análise
 
-Como usuário anônimo, quero analisar interações na home e ser orientado a logar quando necessário, para que o produto funcione sem fricção e sem vazar erros técnicos.
+Como usuário, quero abrir a home sem sessão e receber orientação de login antes de usar análises protegidas, para que o produto funcione sem vazar erros técnicos ou dados clínicos.
 
 **Acceptance Criteria**: ver PROD-02, PROD-03, PROD-04, PROD-07.
 
@@ -84,10 +84,10 @@ WHEN a suite pytest do backend roda, THE SYSTEM SHALL passar com 0 falhas e cobe
 
 ### PROD-07: Fluxo público E2E íntegro
 
-WHEN o fluxo público (home → step1 → step2 → modal auth → login inválido → upload anônimo → mobile 375px) roda via Playwright, THE SYSTEM SHALL completar sem erros de console não esperados e sem overflow horizontal em mobile.
+WHEN o fluxo público (home → step1 → step2 → modal auth → login inválido → login válido → análise autenticada → mobile) roda via Playwright contra staging, THE SYSTEM SHALL completar sem erros de console não esperados e sem overflow horizontal em mobile.
 
 **Acceptance Criteria**:
-- AC-07.1: WHEN e2e.js roda THEN únicos 4xx são 401 esperados (login inválido, vision sem sessão) e overflow mobile == 0px.
+- AC-07.1: WHEN `tests/e2e/playwright/run.mjs` roda no CI THEN a suíte termina com exit 0, os únicos 4xx esperados são 401 de autenticação e o overflow mobile é 0px.
 
 ### PROD-08: Gating de risco HITL
 
@@ -106,7 +106,7 @@ WHEN uma análise resulta em risco alto/crítico, THE SYSTEM SHALL marcar requir
 ## Out of Scope
 
 - Orquestração multi-host, CDN, WAF externo.
-- Grafana/Prometheus healthchecks (não-bloqueante, melhoria futura).
+- Operação de produção sem Grafana/Prometheus/Alertmanager; desenvolvimento local reduzido permanece fora deste requisito.
 
 ## Requirement Traceability
 

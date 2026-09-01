@@ -169,4 +169,8 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("app.main:app", host="0.0.0.0", port=9000, reload=settings.debug)
+    # Execução direta é apenas para desenvolvimento local. O container define
+    # explicitamente 0.0.0.0 no CMD.
+    uvicorn.run(
+        "backend.app.main:app", host="127.0.0.1", port=9000, reload=settings.debug
+    )

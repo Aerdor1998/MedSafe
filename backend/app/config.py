@@ -71,7 +71,7 @@ class Settings(BaseSettings):
 
     # Configurações da aplicação
     app_name: str = "MedSafe"
-    app_version: str = "1.0.0"
+    app_version: str = "2.0.0"
     debug: bool = False
     # True durante testes automatizados (evita inicializações pesadas no startup)
     testing: bool = False
@@ -152,6 +152,8 @@ class Settings(BaseSettings):
     # Configurações de telemetria
     enable_metrics: bool = True
     metrics_port: int = 9090
+    # Em produção, /metrics exige Bearer token carregado de Docker secret.
+    metrics_auth_token_file: Optional[str] = None
 
     # Error tracking (SDK compatível com Sentry — GlitchTip self-hosted).
     # Vazio/None = desabilitado. Trocar de backend = trocar o DSN.

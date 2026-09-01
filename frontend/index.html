@@ -1704,14 +1704,22 @@
 
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-        async function pollAnalysisStatus(sessionId, timeoutMs = 600000, intervalMs = 2000) {
+        async function pollAnalysisStatus(sessionId, timeoutMs = 600000, intervalMs = 3000) {
             const start = Date.now();
+            let delay = intervalMs;
             while (true) {
                 if (Date.now() - start > timeoutMs) {
                     throw new Error('Análise excedeu o tempo limite. Tente novamente.');
                 }
 
                 const resp = await Auth.fetch(`${API_URL}/api/v2/status/${encodeURIComponent(sessionId)}`, { method: 'GET' });
+                if (resp.status === 429) {
+                    // Rate limit: respeita Retry-After (ou backoff) e continua o polling em vez de falhar.
+                    const retryAfter = parseInt(resp.headers.get('Retry-After') || '0', 10);
+                    delay = Math.min(Math.max(retryAfter * 1000, delay * 2), 30000);
+                    await sleep(delay);
+                    continue;
+                }
                 if (!resp.ok) {
                     const err = await resp.json().catch(() => ({}));
                     throw new Error(err.detail || `Erro ao consultar status: ${resp.status}`);

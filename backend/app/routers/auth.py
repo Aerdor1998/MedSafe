@@ -7,7 +7,7 @@ FASE 1.2: Audit logging integration
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
@@ -18,13 +18,20 @@ from ..auth.jwt import (
     revoke_token,
     verify_refresh_token,
 )
-from ..auth.models import LoginRequest, RefreshTokenRequest, Token, User, UserCreate
+from ..auth.models import (
+    ChangePasswordRequest,
+    LoginRequest,
+    RefreshTokenRequest,
+    Token,
+    User,
+    UserCreate,
+)
 from ..auth.rbac import UserRole, require_admin
 from ..db.database import get_db_context
 from ..db.user_models import User as DBUser
 from ..db.user_models import UserSession as DBUserSession
 from ..middleware.rate_limit import limiter
-from ..utils.audit_logger import audit_logger
+from ..utils.audit_logger import AuditEventType, audit_logger
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +80,7 @@ async def register_user(
             email=user_data.email,
             password_hash=DBUser.hash_password(user_data.password),
             full_name=user_data.full_name,
-            role=UserRole.READONLY,  # Default role
+            role=user_data.role,
             is_active=user_data.is_active,
         )
 
@@ -89,6 +96,7 @@ async def register_user(
             full_name=new_user.full_name,
             is_active=new_user.is_active,
             is_superuser=new_user.role == UserRole.ADMIN,
+            role=new_user.role,
             created_at=new_user.created_at,
         )
 
@@ -432,9 +440,85 @@ async def get_current_user_profile(current_user: str = Depends(get_current_user)
             full_name=user.full_name,
             is_active=user.is_active,
             is_superuser=user.role == UserRole.ADMIN,
+            role=user.role,
             created_at=user.created_at,
             updated_at=user.updated_at,
         )
+
+
+@router.post("/change-password")
+@limiter.limit("5/hour")
+async def change_password(
+    request: Request,
+    password_data: ChangePasswordRequest,
+    current_user: str = Depends(get_current_user),
+) -> dict[str, str]:
+    """Rotate the authenticated user's password and revoke refresh sessions."""
+    with get_db_context() as db:
+        user = db.query(DBUser).filter(DBUser.id == current_user).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        if not user.verify_password(password_data.current_password):
+            raise HTTPException(status_code=400, detail="Current password is invalid")
+        if user.verify_password(password_data.new_password):
+            raise HTTPException(
+                status_code=400, detail="New password must differ from current password"
+            )
+
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.lower().startswith("bearer "):
+            raise HTTPException(status_code=401, detail="Invalid access token")
+
+        from ..auth.jwt import verify_token
+
+        token_payload = verify_token(
+            auth_header.split(" ", 1)[1].strip(),
+            expected_type="access",
+            check_revocation=False,
+        )
+        token_jti = token_payload.get("jti")
+        token_exp = token_payload.get("exp")
+        if not token_jti or not token_exp:
+            raise HTTPException(status_code=401, detail="Invalid access token")
+
+        try:
+            revoked = await revoke_token(
+                str(token_jti),
+                datetime.fromtimestamp(int(token_exp), tz=timezone.utc),
+            )
+        except Exception as exc:
+            logger.error(
+                "Could not revoke access token during password change: %s", exc
+            )
+            raise HTTPException(
+                status_code=503, detail="Token revocation unavailable"
+            ) from exc
+        if not revoked:
+            raise HTTPException(status_code=503, detail="Token revocation unavailable")
+
+        user.password_hash = DBUser.hash_password(password_data.new_password)
+        user.last_password_change = datetime.now(timezone.utc)
+        sessions = (
+            db.query(DBUserSession)
+            .filter(DBUserSession.user_id == current_user)
+            .filter(DBUserSession.is_active.is_(True))
+            .all()
+        )
+        for session in sessions:
+            session.revoke(reason="password_change")
+        db.commit()
+
+        user_email = user.email
+        user_role = user.role.value
+
+    await audit_logger.log(
+        AuditEventType.PASSWORD_CHANGE,
+        "password_changed",
+        user_id=current_user,
+        user_email=user_email,
+        user_role=user_role,
+    )
+    return {"message": "Password changed; sign in again"}
 
 
 # ============================================================================

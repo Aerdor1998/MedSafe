@@ -225,9 +225,7 @@ Seja minucioso, preciso e baseado em evidências.
                     f"{nomes}. A análise de interações pode estar incompleta — "
                     "revisão humana obrigatória."
                 )
-                logger.warning(
-                    f"⚠️ HITL por medicamento não identificado: {nomes}"
-                )
+                logger.warning(f"⚠️ HITL por medicamento não identificado: {nomes}")
 
             # Step 6: Generate structured recommendations
             self.agent_logger.progress("Gerando recomendacoes estruturadas")
@@ -288,8 +286,15 @@ Seja minucioso, preciso e baseado em evidências.
                     interactions, contraindications, risk_level
                 )
                 recommendations["structured"] = structured_recs
-                recommendations["escalation_needed"] = needs_escalation
+                # LLM indisponível => análise parcial; nunca liberar sem revisão
+                needs_escalation = True
+                escalation_reasons = list(escalation_reasons) + [
+                    "LLM indisponível: análise baseada apenas em regras "
+                    "determinísticas (parcial). Revisão humana obrigatória."
+                ]
+                recommendations["escalation_needed"] = True
                 recommendations["escalation_reasons"] = escalation_reasons
+                analysis_metadata["partial_analysis"] = True
 
         except Exception as e:
             self.agent_logger.error("Falha na análise clínica", exc_info=True)
@@ -641,9 +646,7 @@ Seja minucioso, preciso e baseado em evidências.
                     )
                 )
             if rule_results:
-                logger.info(
-                    f"Clinical rules found {len(rule_results)} interactions"
-                )
+                logger.info(f"Clinical rules found {len(rule_results)} interactions")
                 for i in rule_results:
                     i["source"] = "clinical_rules"
                 interactions.extend(rule_results)
@@ -784,9 +787,7 @@ Seja minucioso, preciso e baseado em evidências.
         # consultar o identificador de drogas. Antes, a string combinada
         # inteira (ex: "varfarina, aspirina") era enviada como um único
         # nome e falhava a identificação ("Medicamento não identificado").
-        drugs_to_check = [
-            m.strip() for m in medication_text.split(",") if m.strip()
-        ]
+        drugs_to_check = [m.strip() for m in medication_text.split(",") if m.strip()]
         if len(drugs_to_check) <= 1:
             drugs_to_check = [medication_text]
 
@@ -822,9 +823,7 @@ Seja minucioso, preciso e baseado em evidências.
         das interações críticas já identificadas, sem duplicar.
         """
         derived: List[Dict[str, Any]] = []
-        seen = {
-            (c.get("type", ""), c.get("description", "")) for c in existing
-        }
+        seen = {(c.get("type", ""), c.get("description", "")) for c in existing}
         for interaction in interactions:
             if str(interaction.get("severity", "")).lower() != "critical":
                 continue
@@ -840,8 +839,7 @@ Seja minucioso, preciso e baseado em evidências.
                 "source": interaction.get("source", "Base de Interações"),
                 "recommendation": interaction.get(
                     "recommendation",
-                    "CONTRAINDICADO - Evitar combinação; "
-                    "consultar prescritor",
+                    "CONTRAINDICADO - Evitar combinação; " "consultar prescritor",
                 ),
             }
             key = (entry["type"], entry["description"])
@@ -851,8 +849,7 @@ Seja minucioso, preciso e baseado em evidências.
 
         if derived:
             logger.info(
-                "   Derived %d contraindication(s) from critical "
-                "interactions",
+                "   Derived %d contraindication(s) from critical " "interactions",
                 len(derived),
             )
         return derived
@@ -935,8 +932,7 @@ Seja minucioso, preciso e baseado em evidências.
             or patient_data.get("weight", "não informado"),
             "Gestante": (
                 "sim"
-                if patient_data.get("pregnant")
-                or patient_data.get("is_pregnant")
+                if patient_data.get("pregnant") or patient_data.get("is_pregnant")
                 else "não/não informado"
             ),
             "Condições clínicas": ", ".join(patient_data.get("conditions") or [])
@@ -1028,8 +1024,7 @@ Regras:
                 "Resposta do LLM não era JSON válido — retry único"
             )
             raw_retry = self.invoke_llm(
-                prompt
-                + "\n\nATENÇÃO: a resposta anterior não era JSON válido. "
+                prompt + "\n\nATENÇÃO: a resposta anterior não era JSON válido. "
                 "Responda SOMENTE o objeto JSON.",
                 context=context,
             )

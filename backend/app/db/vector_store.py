@@ -240,7 +240,7 @@ class MedicalVectorStore:
         """
         # Generate cache key from query + params
         filter_str = json.dumps(filter_dict, sort_keys=True) if filter_dict else ""
-        cache_key = hashlib.md5(
+        cache_key = hashlib.sha256(
             f"{query.lower().strip()}|k={k}|sw={semantic_weight}|f={filter_str}".encode()
         ).hexdigest()
 

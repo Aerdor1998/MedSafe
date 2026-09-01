@@ -175,9 +175,14 @@ class TestJWTRevocation:
 
     @pytest.mark.asyncio
     async def test_is_token_revoked_false_when_no_redis(self):
+        """Fora de produção: permissivo quando Redis indisponível"""
         from backend.app.auth import jwt as jwt_mod
 
-        with patch.object(jwt_mod, "_get_redis_client", AsyncMock(return_value=None)):
+        with patch.object(
+            jwt_mod, "_get_redis_client", AsyncMock(return_value=None)
+        ), patch.object(jwt_mod, "settings") as mock_settings:
+            mock_settings.jwt_enable_revocation = True
+            mock_settings.is_production = False
             revoked = await jwt_mod.is_token_revoked("jti-xyz")
 
         assert revoked is False
@@ -354,15 +359,43 @@ class TestRBAC:
         assert check_permission(UserRole.PHYSICIAN, Permission.ANALYSIS_APPROVE) is True
         assert check_permission(UserRole.PHYSICIAN, Permission.USER_CREATE) is False
 
-        # Pharmacist cannot approve
+        # Pharmacist is an explicit HITL reviewer in the production spec
         assert (
-            check_permission(UserRole.PHARMACIST, Permission.ANALYSIS_APPROVE) is False
+            check_permission(UserRole.PHARMACIST, Permission.ANALYSIS_APPROVE) is True
         )
         assert check_permission(UserRole.PHARMACIST, Permission.TRIAGE_CREATE) is True
 
         # Readonly can only read
         assert check_permission(UserRole.READONLY, Permission.TRIAGE_READ) is True
         assert check_permission(UserRole.READONLY, Permission.TRIAGE_CREATE) is False
+
+
+class TestAuthSchemas:
+    """Operational IAM contracts used by the production bootstrap."""
+
+    def test_admin_can_assign_supported_role_on_registration(self):
+        from backend.app.auth.models import UserCreate
+        from backend.app.auth.rbac import UserRole
+
+        physician = UserCreate(
+            email="doctor@example.com",
+            password="a-secure-password",
+            role="physician",
+        )
+        default_user = UserCreate(
+            email="reader@example.com", password="a-secure-password"
+        )
+
+        assert physician.role is UserRole.PHYSICIAN
+        assert default_user.role is UserRole.READONLY
+
+    def test_password_rotation_requires_twelve_characters(self):
+        from pydantic import ValidationError
+
+        from backend.app.auth.models import ChangePasswordRequest
+
+        with pytest.raises(ValidationError):
+            ChangePasswordRequest(current_password="old", new_password="too-short")
 
 
 class TestUserModel:

@@ -5,7 +5,7 @@
 <p><strong>Sistema Inteligente de Contraindicação de Medicamentos</strong> — IA multi-agente 100% local, com o médico no circuito.</p>
 
 [![CI/CD](https://img.shields.io/github/actions/workflow/status/Aerdor1998/MedSafe/ci.yml?branch=main&style=for-the-badge&label=CI%2FCD&logo=githubactions&logoColor=white)](https://github.com/Aerdor1998/MedSafe/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.12-blue?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-0.2.50+-purple?style=for-the-badge)](https://langchain-ai.github.io/langgraph/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
@@ -45,7 +45,7 @@ flowchart TD
 
 - **Reflection loop limitado a 3 iterações** — autocrítica melhora a análise clínica, mas precisa de teto para latência previsível.
 - **Human-in-the-loop obrigatório** para casos sinalizados pelo SafetyAgent — IA sugere, médico decide.
-- **LLM local (Ollama / qwen3:8b)** — dados de paciente nunca saem da infraestrutura (LGPD by design).
+- **LLM local (Ollama / MedGemma)** — dados de paciente permanecem na infraestrutura configurada.
 - **Guardrails em camadas**: validação de entrada → regras clínicas determinísticas → safety agent → HITL.
 
 ## Stack
@@ -53,12 +53,12 @@ flowchart TD
 **IA & Agentes** (6 agentes especializados, inferência local)
 
 ![LangGraph](https://img.shields.io/badge/LangGraph_0.2.50+-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)
-![Ollama](https://img.shields.io/badge/Ollama_·_qwen3:8b-000000?style=for-the-badge&logo=ollama&logoColor=white)
+![Ollama](https://img.shields.io/badge/Ollama_·_MedGemma-000000?style=for-the-badge&logo=ollama&logoColor=white)
 ![Tesseract](https://img.shields.io/badge/OCR-Tesseract_+_Vision_AI-555555?style=for-the-badge)
 
 **Backend & Dados**
 
-![Python](https://img.shields.io/badge/Python_3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python_3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI_0.115+-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![Pydantic](https://img.shields.io/badge/Pydantic-E92063?style=for-the-badge&logo=pydantic&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_+_pgvector-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
@@ -85,6 +85,18 @@ cp env.example .env
 | Health Check | http://localhost:9001/healthz |
 | Prometheus | http://localhost:9090 |
 | Grafana | http://localhost:3001 |
+
+Para uma implantação vendável, use o stack de produção e não o quick start:
+
+```bash
+cp env.prod.example .env
+python scripts/preflight_prod.py --first-deploy --vercel
+docker compose -f docker-compose.prod.yml up -d
+```
+
+O procedimento completo está no [runbook de produção](docs/RUNBOOK.md). Escopo de
+oferta, limites multi-tenant e gates externos estão em
+[COMMERCIAL_READINESS.md](COMMERCIAL_READINESS.md).
 
 <details>
 <summary><strong>Desenvolvimento local (sem Docker completo)</strong></summary>

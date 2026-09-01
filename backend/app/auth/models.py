@@ -7,6 +7,8 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
+from .rbac import UserRole
+
 
 class UserBase(BaseModel):
     """Schema base de usuário"""
@@ -21,6 +23,7 @@ class UserCreate(UserBase):
     """Schema para criação de usuário"""
 
     password: str = Field(..., min_length=8)
+    role: UserRole = UserRole.READONLY
 
 
 class UserUpdate(BaseModel):
@@ -43,6 +46,7 @@ class User(UserBase):
 
     email: str
     id: str
+    role: UserRole
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -84,3 +88,10 @@ class RefreshTokenRequest(BaseModel):
     """Schema de requisição de refresh token"""
 
     refresh_token: str
+
+
+class ChangePasswordRequest(BaseModel):
+    """Authenticated password rotation request."""
+
+    current_password: str
+    new_password: str = Field(..., min_length=12)

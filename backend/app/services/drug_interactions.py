@@ -23,10 +23,7 @@ from .clinical_rules import (
     PopulationRisk,
     get_all_critical_interaction_rules,
 )
-from .drug_identifier import (
-    IdentificationMethod,
-    get_drug_identifier,
-)
+from .drug_identifier import IdentificationMethod, get_drug_identifier
 
 # Import do agente especializado em classificação
 # SKILL: API-DESIGN-PRINCIPLES - Separação correta de responsabilidades

@@ -1,4 +1,5 @@
 """Contrato: risk_level na resposta da API é sempre membro do enum ou 'unknown'."""
+
 from backend.app.langgraph_agents.state import RiskLevel
 from backend.app.routers.langgraph import serialize_risk_level
 

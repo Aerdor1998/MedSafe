@@ -248,6 +248,12 @@ class AgentLogger:
 
     def error(self, message: str, exc_info=None, **kwargs):
         """Log erro do agente"""
+        # makeRecord exige tupla/None; exc_info=True (estilo logging padrão)
+        # causava TypeError e mascarava o erro original.
+        if exc_info is True:
+            exc_info = sys.exc_info()
+            if exc_info[0] is None:
+                exc_info = None
         record = self.logger.makeRecord(
             self.logger.name,
             logging.ERROR,
@@ -299,8 +305,11 @@ def setup_logging(
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, log_level.upper()))
 
-    # Remover handlers existentes
-    root_logger.handlers.clear()
+    # Remover e fechar handlers existentes. Em Windows, apenas limpar a lista
+    # deixa FileHandlers com o arquivo aberto e impede rotação/remoção do log.
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+        handler.close()
 
     # Remover filtros existentes
     root_logger.filters.clear()
