@@ -442,7 +442,9 @@ async def analyze_drug_interaction(
 
 
 @router.get("/status/{session_id}", response_model=AnalyzeResponse)
-@limiter.limit("120/minute")  # Polling endpoint (leitura barata): frontend consulta a cada 3s
+@limiter.limit(
+    "120/minute"
+)  # Polling endpoint (leitura barata): frontend consulta a cada 3s
 async def get_analysis_status(
     request: Request,
     session_id: str,
