@@ -3,7 +3,6 @@
 import logging
 from unittest.mock import MagicMock, patch
 
-
 from backend.app.utils.logging_config import AgentLogger
 
 

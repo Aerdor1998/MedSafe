@@ -7,8 +7,7 @@ from contextlib import contextmanager
 from typing import Generator
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 from ..config import settings
 
