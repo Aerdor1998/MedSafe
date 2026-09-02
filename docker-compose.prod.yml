@@ -217,7 +217,10 @@ services:
     # SECURITY: bind em 127.0.0.1. A porta 9001 é o alvo do Cloudflare Tunnel (que roda
     # no host, então alcança o loopback); publicá-la em 0.0.0.0 deixava qualquer host da
     # rede falar direto com a API, pulando o nginx, seu rate limit e o bloqueio de /docs.
-    ports:
+    # !override: sem isso o merge com docker-compose.yml ACUMULA os mapeamentos
+    # (0.0.0.0:9001 do base + 127.0.0.1:9001 daqui) e o segundo bind falha com
+    # "address already in use", mesmo com a porta livre no host.
+    ports: !override
       - "127.0.0.1:9001:9000"
     depends_on:
       migrate:
