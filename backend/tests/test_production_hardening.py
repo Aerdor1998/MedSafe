@@ -9,6 +9,26 @@ from fastapi.testclient import TestClient
 from starlette.requests import Request as StarletteRequest
 
 
+class _ComposeLoader(yaml.SafeLoader):
+    """SafeLoader que aceita as tags de merge do Compose (!override, !reset).
+
+    São sintaxe oficial do Compose v2.24+ para substituir (em vez de acumular)
+    um campo vindo de outro arquivo. O SafeLoader puro aborta ao encontrá-las.
+    """
+
+
+def _compose_tag(loader, node):
+    if isinstance(node, yaml.SequenceNode):
+        return loader.construct_sequence(node)
+    if isinstance(node, yaml.MappingNode):
+        return loader.construct_mapping(node)
+    return loader.construct_scalar(node)
+
+
+for _tag in ("!override", "!reset"):
+    _ComposeLoader.add_constructor(_tag, _compose_tag)
+
+
 def _request(headers=None, client_host="203.0.113.9") -> StarletteRequest:
     raw_headers = [
         (name.lower().encode(), value.encode())
@@ -106,8 +126,9 @@ def test_metrics_remain_available_without_token_outside_production(monkeypatch):
 
 def test_production_compose_gates_application_on_migrations_and_metrics_secret():
     root = Path(__file__).resolve().parents[2]
-    compose = yaml.safe_load(
-        (root / "docker-compose.prod.yml").read_text(encoding="utf-8")
+    compose = yaml.load(
+        (root / "docker-compose.prod.yml").read_text(encoding="utf-8"),
+        Loader=_ComposeLoader,
     )
     services = compose["services"]
 
