@@ -26,10 +26,18 @@ jobs:
     outputs:
       image_tag: ${{ steps.meta.outputs.tags }}
       image_digest: ${{ steps.build.outputs.digest }}
+      image_name: ${{ steps.img.outputs.name }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # Referências OCI precisam ser minúsculas. github.repository preserva o
+      # case do repo (Aerdor1998/MedSafe); metadata-action normaliza sozinho,
+      # mas syft e trivy recebem a string crua e falham ao resolvê-la.
+      - name: Normalize image name
+        id: img
+        run: echo "name=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -73,7 +81,7 @@ jobs:
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          image: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}@${{ steps.build.outputs.digest }}
           artifact-name: sbom-medsafe.spdx.json
           output-file: ./sbom.spdx.json
 
@@ -102,7 +110,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-and-push.outputs.image_digest }}
+          image-ref: ${{ env.REGISTRY }}/${{ needs.build-and-push.outputs.image_name }}@${{ needs.build-and-push.outputs.image_digest }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
