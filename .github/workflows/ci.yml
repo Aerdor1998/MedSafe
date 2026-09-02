@@ -300,12 +300,18 @@ jobs:
 
   # =================================================================
   # JOB 7: E2E Tests (só em push para main)
+  #
+  # Roda contra um staging real. Enquanto não existir staging (variável de
+  # repositório E2E_BASE_URL ausente), o job é PULADO — não falha. Uma vez
+  # configurado, a suite é gate bloqueante e credenciais ausentes falham alto.
+  #   gh api -X POST repos/{owner}/{repo}/actions/variables -f name=E2E_BASE_URL -f value=https://...
+  #   gh secret set E2E_EMAIL --env staging ; gh secret set E2E_PASSWORD --env staging
   # =================================================================
   e2e-tests:
     name: 🎭 E2E Tests
     runs-on: ubuntu-latest
     needs: [integration-tests, docker-build]
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') && vars.E2E_BASE_URL != ''
     environment: staging
     timeout-minutes: 45
     
@@ -337,7 +343,7 @@ jobs:
       - name: 🎭 Run blocking Playwright suite against staging
         working-directory: tests/e2e/playwright
         env:
-          E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
+          E2E_BASE_URL: ${{ vars.E2E_BASE_URL }}
           E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
           E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
         run: |

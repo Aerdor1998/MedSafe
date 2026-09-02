@@ -26,7 +26,7 @@ Marque tudo antes de atender paciente real:
 - [ ] `SENTRY_DSN` preenchido (seção 7)
 - [ ] Gate clínico verde no commit que vai subir (seção 9)
 - [ ] `python scripts/preflight_prod.py --first-deploy --vercel` termina com `PREFLIGHT OK`
-- [ ] Ambiente GitHub `staging` possui `E2E_BASE_URL`, `E2E_EMAIL` e `E2E_PASSWORD`
+- [ ] Variável de repositório `E2E_BASE_URL` definida e ambiente GitHub `staging` possui os secrets `E2E_EMAIL` e `E2E_PASSWORD` (sem a variável, o job E2E do CI é pulado, não falha)
 
 ---
 

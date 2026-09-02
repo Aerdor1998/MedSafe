@@ -16,6 +16,10 @@ name: Smoke Test (pós-deploy)
 #
 # Para habilitar, defina a variável de repositório MEDSAFE_PUBLIC_URL
 # (Settings → Secrets and variables → Actions → Variables), ex.: https://api.seudominio.com
+#
+# Sem a variável, a execução AGENDADA é pulada (não há o que verificar — falhar
+# todo dia às 09:07 por "não configurado" só ensina a ignorar o CI). A execução
+# manual sempre roda e falha alto se nenhuma URL for informada.
 
 on:
   workflow_dispatch:
@@ -32,6 +36,7 @@ jobs:
   smoke:
     name: Verifica saúde da produção
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || vars.MEDSAFE_PUBLIC_URL != ''
     steps:
       - name: Resolve URL alvo
         id: target
