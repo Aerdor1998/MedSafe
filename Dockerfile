@@ -3,7 +3,21 @@
 # PHASE 1: Standardized production-ready container
 # =============================================================================
 
-FROM python:3.10-slim AS base
+FROM python:3.12-slim AS builder
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY requirements.lock ./
+RUN pip wheel --wheel-dir=/wheels -r requirements.lock
+
+FROM python:3.12-slim AS runtime
 
 # =============================================================================
 # BUILD ARGUMENTS & ENVIRONMENT
@@ -40,10 +54,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Network utilities
     curl \
     ca-certificates \
-    # PostgreSQL client
-    libpq-dev \
-    # Build tools (for some Python packages)
-    gcc \
+    # PostgreSQL runtime library
+    libpq5 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /tmp/* \
@@ -65,10 +77,11 @@ ENV PYTHONPATH=/app:$PYTHONPATH
 # PYTHON DEPENDENCIES
 # =============================================================================
 # Copy requirements first for better Docker layer caching
-COPY requirements.txt ./
+COPY requirements.lock ./
+COPY --from=builder /wheels /wheels
 
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.lock \
+    && rm -rf /wheels
 
 # =============================================================================
 # APPLICATION CODE

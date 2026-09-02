@@ -78,9 +78,7 @@ class TestKnownClinicalRules:
         assert results[0]["severity"] in {"critical", "high"}
 
     def test_negative_control_stays_silent(self, service):
-        assert (
-            service._check_known_clinical_rules("paracetamol", ["metformina"]) == []
-        )
+        assert service._check_known_clinical_rules("paracetamol", ["metformina"]) == []
 
     def test_every_canonical_rule_is_reachable(self, service):
         """Cada regra da base deve ser alcançável pelo matching bilateral."""
@@ -137,9 +135,7 @@ class TestClinicalAgentAlwaysRunsRules:
         agent.vector_store = None
         return agent
 
-    def test_weak_external_evidence_does_not_suppress_rules(
-        self, agent, monkeypatch
-    ):
+    def test_weak_external_evidence_does_not_suppress_rules(self, agent, monkeypatch):
         """Regressão do bug original: CSV/OpenFDA fracos suprimiam as regras."""
         monkeypatch.setattr(
             agent.interaction_service,
@@ -154,9 +150,9 @@ class TestClinicalAgentAlwaysRunsRules:
 
         assert "clinical_rules" in sources
         criticals = [i for i in interactions if i.get("severity") == "critical"]
-        assert criticals, (
-            "regra crítica varfarina+aspirina foi suprimida por evidência fraca"
-        )
+        assert (
+            criticals
+        ), "regra crítica varfarina+aspirina foi suprimida por evidência fraca"
 
     def test_dedup_keeps_highest_severity_per_pair(self, agent, monkeypatch):
         monkeypatch.setattr(
@@ -170,9 +166,9 @@ class TestClinicalAgentAlwaysRunsRules:
             "aspirina", {"current_medications": ["varfarina"]}
         )
 
-        assert len(interactions) == 1, (
-            "dedup deveria fundir o mesmo par em uma única entrada"
-        )
+        assert (
+            len(interactions) == 1
+        ), "dedup deveria fundir o mesmo par em uma única entrada"
         assert interactions[0]["severity"] == "critical"
 
     def test_rules_run_even_without_other_sources(self, agent, monkeypatch):
@@ -253,8 +249,7 @@ class TestSafetyAgentRiskFloor:
         assert updates["risk_level"] == RiskLevel.CRITICAL
         assert updates["requires_human_review"] is True
         assert any(
-            "Guardrail" in reason
-            for reason in updates.get("escalation_reasons", [])
+            "Guardrail" in reason for reason in updates.get("escalation_reasons", [])
         ), "escalação deve registrar o motivo do guardrail"
 
     def test_string_risk_level_is_normalized_and_floored(self):
@@ -272,13 +267,13 @@ class TestSafetyAgentRiskFloor:
         from backend.app.langgraph_agents.state import RiskLevel
 
         agent = _build_safety_agent()
-        state = _state(
-            RiskLevel.LOW, [{"severity": "high", "description": "x"}]
-        )
+        state = _state(RiskLevel.LOW, [{"severity": "high", "description": "x"}])
 
         updates = agent.process(state)
 
         assert updates["risk_level"] == RiskLevel.HIGH
+        # AC-08.1: risco alto TAMBÉM entra na fila HITL (não só critical)
+        assert updates["requires_human_review"] is True
 
     def test_no_findings_keeps_low(self):
         from backend.app.langgraph_agents.state import RiskLevel
@@ -295,9 +290,7 @@ class TestSafetyAgentRiskFloor:
         from backend.app.langgraph_agents.state import RiskLevel
 
         agent = _build_safety_agent()
-        state = _state(
-            RiskLevel.CRITICAL, [{"severity": "medium", "description": "x"}]
-        )
+        state = _state(RiskLevel.CRITICAL, [{"severity": "medium", "description": "x"}])
 
         updates = agent.process(state)
 

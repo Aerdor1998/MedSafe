@@ -21,7 +21,7 @@ pytest-playwright>=0.4.4
 # =============================================================================
 # API TESTING
 # =============================================================================
-httpx>=0.25.0,<0.28.0   # Async HTTP client (compat: starlette TestClient uses httpx.Client(app=...))
+httpx>=0.28.0,<1.0.0    # Async HTTP client compatible with the current Starlette/FastAPI stack
 respx>=0.20.0           # Mock httpx requests
 
 # =============================================================================

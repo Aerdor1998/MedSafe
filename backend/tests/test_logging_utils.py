@@ -5,9 +5,6 @@ Tests AgentLogger, setup_logging, and log functions.
 """
 
 import logging
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 
 class TestLogLevel:
@@ -149,6 +146,8 @@ class TestSetupLogging:
         try:
             setup_logging(log_level="INFO", log_file=log_file)
         finally:
+            # Reconfigurar fecha o FileHandler antes da remoção no Windows.
+            setup_logging(log_level="INFO")
             if os.path.exists(log_file):
                 os.unlink(log_file)
 

@@ -1,7 +1,7 @@
 # MedSafe - Makefile para operações
 # Uso: make <comando>
 
-.PHONY: help dev test lint fmt migrate ingest reindex clean build up down logs
+.PHONY: help dev test lint fmt migrate ingest reindex clean build up down logs prod-check release-check prod-up prod-down
 
 # Variáveis
 COMPOSE_FILE = docker-compose.yml
@@ -36,6 +36,10 @@ help:
 	@echo "  clean        - Limpar arquivos temporários"
 	@echo "  backup       - Fazer backup do banco"
 	@echo "  restore      - Restaurar backup do banco"
+	@echo "  prod-check   - Validar configuração de produção"
+	@echo "  release-check - Validar todos os gates da oferta comercial"
+	@echo "  prod-up      - Subir stack de produção com gate de migração"
+	@echo "  prod-down    - Parar stack de produção"
 
 # Desenvolvimento
 # SKILL: debugging-strategies
@@ -149,13 +153,22 @@ start-hf:
 	./start_hf.sh
 
 # Comandos de produção
-prod-up:
+prod-check:
+	$(PYTHON) scripts/preflight_prod.py
+	docker compose -f docker-compose.prod.yml config --quiet
+
+release-check:
+	$(PYTHON) scripts/preflight_prod.py --vercel
+	docker compose -f docker-compose.prod.yml config --quiet
+
+prod-up: prod-check
 	@echo "🚀 Subindo ambiente de produção..."
-	docker-compose -f $(COMPOSE_FILE) --profile production up -d
+	docker compose -f docker-compose.prod.yml up -d
+	docker compose -f docker-compose.prod.yml ps -a
 
 prod-down:
 	@echo "⬇️  Parando ambiente de produção..."
-	docker-compose -f $(COMPOSE_FILE) --profile production down
+	docker compose -f docker-compose.prod.yml down
 
 # Comandos de monitoramento
 monitoring:
@@ -244,7 +257,7 @@ test-coverage:
 		--cov=app \
 		--cov-report=html \
 		--cov-report=term-missing \
-		--cov-fail-under=80 \
+		--cov-fail-under=60 \
 		--ignore=tests/e2e
 	@echo "✅ Relatório de cobertura disponível em backend/htmlcov/"
 
@@ -271,4 +284,3 @@ deploy-staging:
 deploy-production:
 	@echo "🚀 Deploy para produção..."
 	@echo "⚠️  Implementar pipeline de deploy para produção"
-

@@ -7,9 +7,7 @@ from contextlib import contextmanager
 from typing import Generator
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 from ..config import settings
 
@@ -198,7 +196,6 @@ def create_indexes():
     except Exception as e:
         logger.error(f"Erro ao criar índices: {e}")
         # Não falhar se os índices não puderem ser criados
-        pass
 
 
 def check_db_health() -> bool:

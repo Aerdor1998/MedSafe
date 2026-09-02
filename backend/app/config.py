@@ -71,7 +71,7 @@ class Settings(BaseSettings):
 
     # Configurações da aplicação
     app_name: str = "MedSafe"
-    app_version: str = "1.0.0"
+    app_version: str = "2.0.0"
     debug: bool = False
     # True durante testes automatizados (evita inicializações pesadas no startup)
     testing: bool = False
@@ -152,6 +152,8 @@ class Settings(BaseSettings):
     # Configurações de telemetria
     enable_metrics: bool = True
     metrics_port: int = 9090
+    # Em produção, /metrics exige Bearer token carregado de Docker secret.
+    metrics_auth_token_file: Optional[str] = None
 
     # Error tracking (SDK compatível com Sentry — GlitchTip self-hosted).
     # Vazio/None = desabilitado. Trocar de backend = trocar o DSN.
@@ -275,14 +277,21 @@ class Settings(BaseSettings):
             "true",
             "yes",
         } or bool(getattr(self, "testing", False))
+        # Override explícito: força validação estrita mesmo sob pytest/TESTING.
+        # Permite testes de regressão exercitarem o caminho de produção
+        # (sem isso, o bypass `is_pytest` tornaria essas validações intestáveis).
+        force_strict = os.getenv("MEDSAFE_FORCE_STRICT", "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        bypass = (is_testing_env or is_pytest) and not force_strict
 
         # Determinar strictness baseado em ambiente e flags
         is_production = self.is_production
         is_staging = self.environment.lower() == "staging"
-        is_strict_env = (
-            (is_production or is_staging) and (not is_testing_env) and (not is_pytest)
-        )
-        is_very_strict = is_production and (not is_testing_env) and (not is_pytest)
+        is_strict_env = (is_production or is_staging) and not bypass
+        is_very_strict = is_production and not bypass
 
         # ==========================================================================
         # VALIDAÇÃO DE AMBIENTE

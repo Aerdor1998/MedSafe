@@ -44,7 +44,7 @@ email-validator
 # ============================================================================
 # Security
 # ============================================================================
-python-jose[cryptography]
+PyJWT[crypto]>=2.10.0
 passlib[bcrypt]
 bcrypt>=4.0.0,<4.1.0  # Pin to avoid passlib incompatibility with bcrypt 4.1+
 
@@ -106,12 +106,3 @@ sentry-sdk[fastapi]>=2.0.0
 # Resilience
 # ============================================================================
 pybreaker
-
-# ============================================================================
-# Testing
-# ============================================================================
-pytest>=8.0.0
-pytest-cov>=4.0.0
-pytest-asyncio>=0.23.0
-pytest-mock>=3.12.0
-httpx  # Already included above, needed for TestClient

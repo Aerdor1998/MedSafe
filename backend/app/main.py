@@ -53,6 +53,12 @@ async def lifespan(app: FastAPI):
         init_db()
         logger.info("Database initialized")
 
+        # Seed idempotente: cria o admin inicial a partir de
+        # ADMIN_INITIAL_EMAIL/ADMIN_INITIAL_PASSWORD se ainda não existir.
+        from .db.seed import seed_initial_admin
+
+        seed_initial_admin()
+
         await check_services_health()
 
         logger.info("MedSafe API started successfully")
@@ -163,4 +169,8 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("app.main:app", host="0.0.0.0", port=9000, reload=settings.debug)
+    # Execução direta é apenas para desenvolvimento local. O container define
+    # explicitamente 0.0.0.0 no CMD.
+    uvicorn.run(
+        "backend.app.main:app", host="127.0.0.1", port=9000, reload=settings.debug
+    )

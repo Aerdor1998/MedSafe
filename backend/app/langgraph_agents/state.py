@@ -109,6 +109,8 @@ class MedSafeState(TypedDict):
     evidence_links: List[str]  # Scientific sources
     final_report: Dict[str, Any]  # Complete structured report
     confidence_score: float  # Model confidence (0.0-1.0)
+    risk_score: Optional[int]  # Nota numérica 0-100 da deliberação clínica
+    patient_risk_factors: List[str]  # Fatores de risco derivados da anamnese
 
     # ========================================================================
     # STRUCTURED RECOMMENDATIONS (New - Clinical Rules Engine)

@@ -10,14 +10,14 @@ FASE 1.2: Audit logging integration
 
 import logging
 from enum import Enum
-from typing import List, Optional
+from typing import List
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from ..db.database import get_db
 from ..utils.audit_logger import audit_logger
-from .jwt import get_current_user, verify_token
+from .jwt import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class UserRole(str, Enum):
 
     ADMIN = "admin"  # Full system access + user management
     PHYSICIAN = "physician"  # Can create/approve analyses, HITL decisions
-    PHARMACIST = "pharmacist"  # Can view analyses, create triages (no HITL approval)
+    PHARMACIST = "pharmacist"  # Can create triages and review HITL analyses
     READONLY = "readonly"  # Can only view existing analyses (auditor, researcher)
 
 
@@ -126,9 +126,10 @@ ROLE_PERMISSIONS = {
         # Triage
         Permission.TRIAGE_CREATE,
         Permission.TRIAGE_READ,
-        # Analysis (no HITL)
+        # Analysis and HITL review
         Permission.ANALYSIS_CREATE,
         Permission.ANALYSIS_READ,
+        Permission.ANALYSIS_APPROVE,
         # Reports
         Permission.REPORT_READ,
     ],

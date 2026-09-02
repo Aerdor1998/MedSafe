@@ -13,10 +13,9 @@ PATTERN: RESTful API for agent orchestration + persistence
 SKILLS: @fastapi-templates, @api-design-principles, @ultrathink
 """
 
-import hashlib
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -24,10 +23,13 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from ..auth.jwt import get_current_user, get_optional_current_user
+from ..auth.rbac import can_approve_analysis
 from ..config import settings as app_settings
 from ..db.database import get_db_context
 from ..db.models import AnalysisJob, HITLReview, Report, Triage
-from ..langgraph_agents import get_graph, get_settings
+from ..langgraph_agents import get_settings
+from ..langgraph_agents.graph import finalize_report
+from ..langgraph_agents.hitl_agent import create_hitl_agent
 from ..middleware.rate_limit import limiter
 from ..services.analysis_orchestrator import get_orchestrator
 from ..services.response_formatter import compute_accuracy
@@ -36,6 +38,51 @@ logger = logging.getLogger(__name__)
 
 # Create router
 router = APIRouter(prefix="/api/v2", tags=["LangGraph Multi-Agent v2"])
+
+
+def serialize_risk_level(value: Any) -> str:
+    """Serializa risk_level para o contrato da API.
+
+    Sempre retorna um membro do enum RiskLevel em minúsculo
+    ('critical'|'high'|'medium'|'low') ou 'unknown' — nunca
+    representações cruas como 'RiskLevel.LOW'.
+    """
+    from ..langgraph_agents.state import RiskLevel
+
+    if isinstance(value, RiskLevel):
+        return value.value
+    if isinstance(value, str):
+        try:
+            return RiskLevel(value).value
+        except ValueError:
+            return "unknown"
+    return "unknown"
+
+
+def _calibrated_accuracy(result: Dict[str, Any], job: Any) -> tuple:
+    """Calcula (raw_confidence, accuracy_score) calibrado para respostas da API.
+
+    Mesma métrica em todos os caminhos que montam AnalyzeResponse
+    (/status e /hitl/approve): usa confidence_score + completude da
+    anamnese + nível de crítica via compute_accuracy.
+    """
+    patient_info = (
+        result.get("patient_data") or job.payload.get("patient_data", {})
+        if job.payload
+        else {}
+    )
+    raw_confidence = result.get("confidence_score", 0.0) or 0.0
+
+    # Only compute accuracy if we have confidence data
+    if (
+        raw_confidence > 0
+        or result.get("interactions")
+        or result.get("contraindications")
+    ):
+        accuracy_score, _ = compute_accuracy(result, patient_info)
+    else:
+        accuracy_score = raw_confidence
+    return round(raw_confidence, 4), round(accuracy_score, 4)
 
 
 # ============================================================================
@@ -77,28 +124,14 @@ def create_problem_response(
         code=code,
         request_id=request_id,
     )
-    return JSONResponse(status_code=status, content=problem.dict(exclude_none=True))
+    return JSONResponse(
+        status_code=status, content=problem.model_dump(exclude_none=True)
+    )
 
 
 # ============================================================================
 # IDEMPOTENCY SUPPORT
 # ============================================================================
-
-
-def _compute_payload_hash(medication: str, patient_data: Dict) -> str:
-    """Compute a deterministic hash of the analysis payload for deduplication."""
-    # Normalize data for consistent hashing
-    normalized = {
-        "medication": medication.lower().strip(),
-        "age": patient_data.get("age"),
-        "weight": patient_data.get("weight"),
-        "current_medications": sorted(
-            [m.lower() for m in patient_data.get("current_medications", [])]
-        ),
-        "conditions": sorted([c.lower() for c in patient_data.get("conditions", [])]),
-    }
-    payload_str = str(sorted(normalized.items()))
-    return hashlib.sha256(payload_str.encode()).hexdigest()[:32]
 
 
 async def _find_existing_job_by_idempotency_key(
@@ -251,6 +284,7 @@ class AnalyzeResponse(BaseModel):
     risk_level: Optional[str] = None
     confidence_score: Optional[float] = None
     accuracy_score: Optional[float] = None  # Calibrated accuracy metric for UI
+    risk_score: Optional[int] = None  # Nota numérica 0-100 da deliberação clínica
 
     # Findings
     interactions: List[Dict[str, Any]] = []
@@ -337,34 +371,32 @@ async def analyze_drug_interaction(
         ):
             raise HTTPException(status_code=401, detail="Authentication required")
 
-        effective_user = (data.user_id or current_user or "anonymous").strip()
+        # A identidade é sempre derivada do JWT. O campo legado user_id do
+        # payload jamais pode reatribuir uma análise autenticada.
+        effective_user = current_user or "anonymous"
 
-        # IDEMPOTENCY: Check if job already exists
-        actual_idempotency_key = idempotency_key
-        if not actual_idempotency_key:
-            # Auto-generate idempotency key from payload hash (optional deduplication)
-            actual_idempotency_key = _compute_payload_hash(
-                data.medication, data.patient_data.dict()
+        # Idempotency is opt-in. Automatically hashing a partial clinical
+        # payload can collapse two materially different analyses.
+        actual_idempotency_key = idempotency_key.strip() if idempotency_key else None
+        if actual_idempotency_key:
+            existing_job = await _find_existing_job_by_idempotency_key(
+                actual_idempotency_key, effective_user
             )
-
-        # Try to find existing job with same idempotency key
-        existing_job = await _find_existing_job_by_idempotency_key(
-            actual_idempotency_key, effective_user
-        )
-        if existing_job:
-            logger.info(
-                "Returning existing job due to idempotency (job_id=%s)", existing_job.id
-            )
-            return AnalyzeResponse(
-                session_id=existing_job.session_id,
-                job_id=str(existing_job.id),
-                triage_id=(
-                    str(existing_job.triage_id) if existing_job.triage_id else None
-                ),
-                status=existing_job.status,
-                message="Existing analysis found (idempotent). Check /api/v2/status/{session_id} for results.",
-                created_at=existing_job.created_at,
-            )
+            if existing_job:
+                logger.info(
+                    "Returning existing job due to idempotency (job_id=%s)",
+                    existing_job.id,
+                )
+                return AnalyzeResponse(
+                    session_id=existing_job.session_id,
+                    job_id=str(existing_job.id),
+                    triage_id=(
+                        str(existing_job.triage_id) if existing_job.triage_id else None
+                    ),
+                    status=existing_job.status,
+                    message="Existing analysis found (idempotent). Check /api/v2/status/{session_id} for results.",
+                    created_at=existing_job.created_at,
+                )
 
         # LGPD: avoid logging raw medication/patient details; keep session correlation
         logger.info("New analysis request (user=%s)", effective_user)
@@ -374,7 +406,7 @@ async def analyze_drug_interaction(
 
         # Create Triage in database using orchestrator
         triage_id = await orchestrator.create_triage(
-            patient_data=data.patient_data.dict(),
+            patient_data=data.patient_data.model_dump(),
             medication=data.medication,
             user_id=effective_user if effective_user != "anonymous" else "anonymous",
             notes=data.notes,
@@ -387,7 +419,7 @@ async def analyze_drug_interaction(
             triage_id=triage_id,
             user_id=effective_user,
             medication=data.medication,
-            patient_data=data.patient_data.dict(),
+            patient_data=data.patient_data.model_dump(),
             notes=data.notes,
             idempotency_key=actual_idempotency_key,
         )
@@ -410,7 +442,9 @@ async def analyze_drug_interaction(
 
 
 @router.get("/status/{session_id}", response_model=AnalyzeResponse)
-@limiter.limit("30/minute")  # Rate limit: 30 status checks per minute
+@limiter.limit(
+    "120/minute"
+)  # Polling endpoint (leitura barata): frontend consulta a cada 3s
 async def get_analysis_status(
     request: Request,
     session_id: str,
@@ -425,6 +459,11 @@ async def get_analysis_status(
     Returns analysis results if completed, or current status if still running
     """
     try:
+        if not current_user and (
+            not getattr(app_settings, "allow_anonymous_analysis", False)
+        ):
+            raise HTTPException(status_code=401, detail="Authentication required")
+
         logger.info(f"Status check for session: {session_id}")
 
         orchestrator = get_orchestrator()
@@ -434,11 +473,14 @@ async def get_analysis_status(
                 status_code=404, detail=f"Session {session_id} not found"
             )
 
-        # Authorization (if triage exists)
+        effective_user = current_user or "anonymous"
+        if job.user_id and job.user_id != effective_user:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # Authorization against the persisted clinical record, when present.
         if job.triage_id:
             with get_db_context() as db:
                 triage = db.query(Triage).filter(Triage.id == job.triage_id).first()
-                effective_user = current_user or "anonymous"
                 if triage and triage.user_id and triage.user_id != effective_user:
                     raise HTTPException(status_code=403, detail="Access denied")
 
@@ -461,32 +503,20 @@ async def get_analysis_status(
 
         # Compute calibrated accuracy_score (2026-01-14)
         # Uses confidence_score + anamnesis completeness + critique level + refinements
-        patient_info = (
-            result.get("patient_data") or job.payload.get("patient_data", {})
-            if job.payload
-            else {}
-        )
-        raw_confidence = result.get("confidence_score", 0.0) or 0.0
-
-        # Only compute accuracy if we have confidence data
-        if (
-            raw_confidence > 0
-            or result.get("interactions")
-            or result.get("contraindications")
-        ):
-            accuracy_score, _ = compute_accuracy(result, patient_info)
-        else:
-            accuracy_score = raw_confidence
+        raw_confidence, accuracy_score = _calibrated_accuracy(result, job)
 
         # Build response with new fields
         response = AnalyzeResponse(
             session_id=session_id,
             job_id=str(job.id),
             triage_id=result.get("triage_id"),
+            report_id=result.get("report_id"),
             status=str(job.status or result.get("status", "unknown")),
-            risk_level=str(result.get("risk_level", "unknown")),
+            risk_level=serialize_risk_level(result.get("risk_level")),
             confidence_score=raw_confidence,
             accuracy_score=accuracy_score,  # Calibrated metric for UI
+            risk_score=result.get("risk_score"),
+            patient_risk_factors=result.get("patient_risk_factors", []),
             # Findings
             interactions=result.get("interactions", []),
             contraindications=result.get("contraindications", []),
@@ -516,10 +546,10 @@ async def get_analysis_status(
 async def approve_analysis(
     request: Request,
     data: HITLApprovalRequest,
-    current_user: str = Depends(get_current_user),
+    current_user: str = Depends(can_approve_analysis),
 ) -> AnalyzeResponse:
     """
-    Physician approves or rejects analysis (HITL continuation)
+    Authorized clinical reviewer approves or rejects analysis (HITL continuation)
 
     **PATTERN**: Interrupt resume
     **Rate Limit**: 20 requests/minute per user
@@ -569,10 +599,17 @@ async def approve_analysis(
             "human_feedback": human_feedback,
         }
 
-        # Resume graph execution
-        graph = get_graph()
-        config = {"configurable": {"thread_id": data.session_id}}
-        result = await graph.ainvoke(updated_state, config)
+        # Apply HITL feedback + finalize directly on the SAVED state.
+        # The graph has no checkpointer (state lives in AnalysisJob), so
+        # re-invoking it with the full state would re-run the entire
+        # pipeline from START, recomputing results non-deterministically
+        # and losing report_id / evidence_links from the original run.
+        hitl_agent = create_hitl_agent()
+        hitl_updates = hitl_agent.process(updated_state)
+        result: Dict[str, Any] = dict(
+            finalize_report({**updated_state, **hitl_updates})
+        )
+        result["status"] = "completed" if data.approved else "rejected"
 
         # Update Report in database if exists
         triage_id = result.get("triage_id")
@@ -590,6 +627,9 @@ async def approve_analysis(
                         report.is_final = True
                         report.confidence_score = result.get("confidence_score", 0.0)
                         report.status = "final" if data.approved else "rejected"
+                        # Defensive: never lose report_id in the response
+                        if not result.get("report_id"):
+                            result["report_id"] = str(report.id)
 
                     # Persist HITL decision (audit)
                     review = HITLReview(
@@ -609,24 +649,28 @@ async def approve_analysis(
             job_id=str(job.id),
             status="completed" if data.approved else "rejected",
             state=result,
-            finished_at=datetime.utcnow(),
+            finished_at=datetime.now(timezone.utc),
         )
 
         # Build response
+        raw_confidence, accuracy_score = _calibrated_accuracy(result, job)
         response = AnalyzeResponse(
             session_id=data.session_id,
             job_id=str(job.id),
             triage_id=triage_id,
+            report_id=result.get("report_id"),
             status="completed" if data.approved else "rejected",
-            risk_level=str(result.get("risk_level", "unknown")),
-            confidence_score=result.get("confidence_score", 0.0),
+            risk_level=serialize_risk_level(result.get("risk_level")),
+            confidence_score=raw_confidence,
+            accuracy_score=accuracy_score,  # Calibrated metric for UI
+            risk_score=result.get("risk_score"),
             interactions=result.get("interactions", []),
             contraindications=result.get("contraindications", []),
             dosage_adjustments=result.get("dosage_adjustments", []),
             adverse_reactions=result.get("adverse_reactions", []),
             evidence_links=result.get("evidence_links", []),
             final_report=result.get("final_report", {}),
-            message=f"Analysis {'approved' if data.approved else 'rejected'} by physician {current_user}.",
+            message=f"Analysis {'approved' if data.approved else 'rejected'} by reviewer {current_user}.",
         )
 
         logger.info(f"   HITL completed: {response.status}")
@@ -755,9 +799,9 @@ async def health_check():
     try:
         lg_settings = get_settings()
 
-        return {
+        response = {
             "status": "healthy",
-            "version": "2.0.0-langgraph-enhanced",
+            "version": app_settings.app_version,
             "features": {
                 "database_persistence": True,
                 "rate_limiting": True,
@@ -765,11 +809,13 @@ async def health_check():
                 "hitl_workflow": bool(lg_settings.enable_hitl),
             },
             "model": lg_settings.effective_model_name,
-            "ollama_url": lg_settings.effective_ollama_url,
             "hitl_enabled": lg_settings.enable_hitl,
             "safety_guardrails": lg_settings.enable_safety_guardrails,
             "max_reflection_cycles": lg_settings.max_reflection_cycles,
         }
+        if not app_settings.is_production:
+            response["ollama_url"] = lg_settings.effective_ollama_url
+        return response
 
     except Exception:
         logger.exception("Health check failed")

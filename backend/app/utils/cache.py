@@ -262,7 +262,7 @@ def cache_embedding(func: Callable) -> Callable:
     @wraps(func)
     def wrapper(text: str, *args, **kwargs):
         # Create cache key from text hash
-        cache_key = hashlib.md5(text.encode()).hexdigest()
+        cache_key = hashlib.sha256(text.encode()).hexdigest()
 
         # Try cache first
         cached = embedding_cache.get(cache_key)
@@ -334,12 +334,12 @@ def cache_llm_response(func: Callable) -> Callable:
             {"prompt": prompt, "kwargs": {k: str(v) for k, v in kwargs.items()}},
             sort_keys=True,
         )
-        cache_key = hashlib.md5(cache_input.encode()).hexdigest()
+        cache_key = hashlib.sha256(cache_input.encode()).hexdigest()
 
         # Try cache first
         cached = llm_response_cache.get(cache_key)
         if cached is not None:
-            logger.info(f"LLM response cached (saved API call)")
+            logger.info("LLM response cached (saved API call)")
             return cached
 
         # Call LLM and cache
@@ -409,12 +409,14 @@ def cache_rag_search(func: Callable) -> Callable:
     def wrapper(query: str, *args, **kwargs):
         # Create cache key from normalized query + params
         k = kwargs.get("k", 5)
-        cache_key = hashlib.md5(f"{query.lower().strip()}|k={k}".encode()).hexdigest()
+        cache_key = hashlib.sha256(
+            f"{query.lower().strip()}|k={k}".encode()
+        ).hexdigest()
 
         # Try cache first
         cached = rag_search_cache.get(cache_key)
         if cached is not None:
-            logger.info(f"RAG cache hit (saved embedding computation)")
+            logger.info("RAG cache hit (saved embedding computation)")
             return cached
 
         # Execute search and cache

@@ -11,9 +11,9 @@ This is intended for internal/admin use on a single VM deployment.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 
 from ..auth.rbac import require_admin
 from ..db.database import get_db_context

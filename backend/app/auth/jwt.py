@@ -10,13 +10,14 @@ import hashlib
 import logging
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import NoReturn, Optional, Tuple
 
+import jwt
 import redis.asyncio as redis
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+from jwt import PyJWTError as JWTError
 
 from ..config import settings
 
@@ -36,6 +37,11 @@ BLACKLIST_PREFIX = "jwt:revoked:"
 
 # FASE 1.1: Redis client para token revocation (lazy initialization)
 _redis_client: Optional[redis.Redis] = None
+
+
+def _utc_now() -> datetime:
+    """Return a timezone-aware UTC timestamp."""
+    return datetime.now(timezone.utc)
 
 
 async def _get_redis_client() -> Optional[redis.Redis]:
@@ -113,7 +119,9 @@ async def revoke_token(jti: str, exp: datetime) -> bool:
 
     try:
         # Calcular TTL até expiração do token
-        ttl = int((exp - datetime.utcnow()).total_seconds())
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        ttl = int((exp - _utc_now()).total_seconds())
         if ttl <= 0:
             # Token já expirado, não precisa revogar
             return True
@@ -272,17 +280,17 @@ def create_access_token(
     jti = _generate_jti()
 
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = _utc_now() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.jwt_expire_minutes)
+        expire = _utc_now() + timedelta(minutes=settings.jwt_expire_minutes)
 
     # SECURITY FIX: Claims JWT completos
     # FASE 1.1: Adicionado key_version para key rotation
     to_encode.update(
         {
             "exp": expire,
-            "iat": datetime.utcnow(),
-            "nbf": datetime.utcnow(),
+            "iat": _utc_now(),
+            "nbf": _utc_now(),
             "type": "access",
             "jti": jti,  # JWT ID único
             "iss": JWT_ISSUER,  # Issuer
@@ -330,15 +338,15 @@ def create_refresh_token(
 
     to_encode = data.copy()
     jti = _generate_jti()
-    expire = datetime.utcnow() + timedelta(days=settings.jwt_refresh_expire_days)
+    expire = _utc_now() + timedelta(days=settings.jwt_refresh_expire_days)
 
     # SECURITY FIX: Claims JWT completos para refresh
     # FASE 1.1: Adicionado key_version para key rotation
     to_encode.update(
         {
             "exp": expire,
-            "iat": datetime.utcnow(),
-            "nbf": datetime.utcnow(),
+            "iat": _utc_now(),
+            "nbf": _utc_now(),
             "type": "refresh",
             "jti": jti,
             "iss": JWT_ISSUER,
@@ -426,7 +434,7 @@ def verify_token(
         if exp is None:
             raise credentials_exception
 
-        if datetime.fromtimestamp(exp) < datetime.utcnow():
+        if datetime.fromtimestamp(exp, tz=timezone.utc) < _utc_now():
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token expired",
@@ -539,7 +547,7 @@ def verify_refresh_token(token: str) -> dict:
         if exp is None:
             raise credentials_exception
 
-        if datetime.fromtimestamp(exp) < datetime.utcnow():
+        if datetime.fromtimestamp(exp, tz=timezone.utc) < _utc_now():
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Refresh token expired",

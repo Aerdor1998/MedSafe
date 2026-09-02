@@ -13,7 +13,7 @@ RESPONSIBILITIES:
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from .base_agent import BaseAgent
 from .state import MedSafeState
@@ -102,19 +102,19 @@ the safety concerns and make an informed decision.
                 "review_package": review_package,  # For API to display to physician
             }
 
-            # Update timestamps
-            if "timestamps" not in state:
-                updates["timestamps"] = {}
-            updates["timestamps"]["hitl_started"] = datetime.now()
+            # Copy timestamps so the saved state is not mutated in place.
+            timestamps = dict(state.get("timestamps") or {})
+            timestamps["hitl_started"] = datetime.now()
+            updates["timestamps"] = timestamps
 
             duration = (datetime.now() - start_time).total_seconds()
             self.log_step(state, f"Review package prepared in {duration:.2f}s")
 
-            logger.info(f" HITLAgent: Review package prepared")
+            logger.info(" HITLAgent: Review package prepared")
             logger.info(
                 f"   Escalation reasons: {', '.join(state.get('escalation_reasons', []))}"
             )
-            logger.info(f"   Awaiting physician decision...")
+            logger.info("   Awaiting physician decision...")
 
             return updates
 
@@ -233,7 +233,7 @@ Be direct and action-oriented."""
         PATTERN: Resuming after interrupt (PDF pg 22, 32)
         SKILL: @api-design-principles - Clean feedback integration
         """
-        self.log_step(state, "Processing physician feedback")
+        self.log_step(state, "Processing clinical reviewer feedback")
 
         human_feedback = state["human_feedback"]
 
@@ -243,7 +243,7 @@ Be direct and action-oriented."""
         modifications = human_feedback.get("modifications", {})
 
         logger.info(
-            f" HITLAgent: Physician decision = {'APPROVED' if approved else 'REJECTED'}"
+            f" HITLAgent: Reviewer decision = {'APPROVED' if approved else 'REJECTED'}"
         )
         if physician_notes:
             logger.info(f"   Notes: {physician_notes[:100]}")
@@ -272,15 +272,15 @@ Be direct and action-oriented."""
                 current_adverse.append(
                     {
                         "description": additional,
-                        "source": "Physician Override",
+                        "source": "Clinical Reviewer Override",
                     }
                 )
                 updates["adverse_reactions"] = current_adverse
 
-        # Update timestamps
-        if "timestamps" not in state:
-            updates["timestamps"] = {}
-        updates["timestamps"]["hitl_completed"] = datetime.now()
+        # Copy timestamps so the saved state is not mutated in place.
+        timestamps = dict(state.get("timestamps") or {})
+        timestamps["hitl_completed"] = datetime.now()
+        updates["timestamps"] = timestamps
 
         # Calculate HITL duration
         if state.get("timestamps", {}).get("hitl_started"):
@@ -291,7 +291,7 @@ Be direct and action-oriented."""
 
         self.log_step(
             state,
-            f"Physician feedback processed: {'APPROVED' if approved else 'REJECTED'}",
+            f"Reviewer feedback processed: {'APPROVED' if approved else 'REJECTED'}",
         )
 
         return updates

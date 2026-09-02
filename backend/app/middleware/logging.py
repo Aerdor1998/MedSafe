@@ -4,7 +4,6 @@ Middleware de logging estruturado com redação PHI/PII.
 SECURITY: Todos os logs passam por redação automática para compliance LGPD.
 """
 
-import logging
 import time
 from typing import Any, Dict
 

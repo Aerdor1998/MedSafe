@@ -4,10 +4,7 @@ Unit tests for cache utilities
 Tests TTLCache, cache decorators, and cache management functions.
 """
 
-from datetime import datetime
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 
 class TestTTLCache:
@@ -132,7 +129,7 @@ class TestClearAllCaches:
 
     def test_clear_all_caches(self):
         """Test clearing all caches"""
-        from backend.app.utils.cache import TTLCache, clear_all_caches
+        from backend.app.utils.cache import clear_all_caches
 
         result = clear_all_caches()
 

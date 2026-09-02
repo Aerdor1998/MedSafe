@@ -20,9 +20,7 @@ import logging
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
-
-import httpx
+from typing import Any, Dict
 
 from ..config import settings
 from .base_agent import BaseAgent
@@ -239,7 +237,7 @@ Respond with valid JSON only."""
             age = patient_data.get("age")
             conditions = patient_data.get("conditions", [])
 
-            context = f"\n\nPATIENT CONTEXT (for relevance):\n"
+            context = "\n\nPATIENT CONTEXT (for relevance):\n"
             context += f"- Age: {age}\n"
             if conditions:
                 context += f"- Conditions: {', '.join(conditions)}\n"

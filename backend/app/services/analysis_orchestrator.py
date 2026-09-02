@@ -11,7 +11,6 @@ Responsibilities:
 - Format responses for different API versions
 """
 
-import json
 import logging
 import uuid
 from datetime import date, datetime
@@ -21,6 +20,15 @@ from typing import Any, Dict, Optional
 from uuid import UUID
 
 from ..config import settings
+from ..db.database import get_db_context
+from ..db.models import AnalysisJob, Report, Triage
+from ..langgraph_agents import get_graph
+from ..langgraph_agents.config import get_settings as get_langgraph_settings
+from .response_formatter import (
+    build_recommendations_from_state,
+    compute_accuracy,
+    normalize_str,
+)
 
 
 def _json_serialize_state(obj: Any) -> Any:
@@ -93,16 +101,6 @@ def _json_serialize_state(obj: Any) -> Any:
     except Exception:
         return f"<non-serializable: {type(obj).__name__}>"
 
-
-from ..db.database import get_db_context
-from ..db.models import AnalysisJob, Report, Triage
-from ..langgraph_agents import get_graph
-from ..langgraph_agents.config import get_settings as get_langgraph_settings
-from .response_formatter import (
-    build_recommendations_from_state,
-    compute_accuracy,
-    normalize_str,
-)
 
 logger = logging.getLogger(__name__)
 

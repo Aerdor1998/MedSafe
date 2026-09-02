@@ -1,4 +1,4 @@
-import pytest
+import enum
 
 from backend.app.services.response_formatter import (
     build_recommendations_from_state,
@@ -88,16 +88,6 @@ def test_compute_accuracy_penalizes_partial_missing_anamnesis_and_critique():
     assert acc < 0.9
     assert any("partial analysis" in f.lower() for f in factors)
     assert any("CritiqueLevel=high" in f for f in factors)
-
-
-import enum
-
-from backend.app.services.response_formatter import (
-    build_recommendations_from_state,
-    compute_accuracy,
-    normalize_str,
-    patient_completeness,
-)
 
 
 class _E(enum.Enum):

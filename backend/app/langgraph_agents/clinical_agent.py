@@ -13,13 +13,14 @@ RESPONSIBILITIES:
 """
 
 import asyncio
+import json
 import logging
+import re
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from ..db.vector_store import MedicalVectorStore, get_vector_store
 from ..services.clinical_rules import (
-    ClinicalRulesEngine,
     PatientContext,
     calculate_gfr_cockroft_gault,
     get_rules_engine,
@@ -204,7 +205,8 @@ Seja minucioso, preciso e baseado em evidências.
                 if not needs_escalation:
                     needs_escalation = True
                 escalation_reasons.append(
-                    f"Evidência insuficiente ({evidence_quality}) para paciente de alto risco - revisão humana recomendada"
+                    f"Evidência insuficiente ({evidence_quality}) "
+                    "para paciente de alto risco - revisão humana recomendada"
                 )
                 logger.warning(
                     f"Low-evidence escalation triggered: "
@@ -223,9 +225,7 @@ Seja minucioso, preciso e baseado em evidências.
                     f"{nomes}. A análise de interações pode estar incompleta — "
                     "revisão humana obrigatória."
                 )
-                logger.warning(
-                    f"⚠️ HITL por medicamento não identificado: {nomes}"
-                )
+                logger.warning(f"⚠️ HITL por medicamento não identificado: {nomes}")
 
             # Step 6: Generate structured recommendations
             self.agent_logger.progress("Gerando recomendacoes estruturadas")
@@ -245,6 +245,29 @@ Seja minucioso, preciso e baseado em evidências.
                 recommendations = self._generate_recommendations(
                     state, interactions, contraindications, risk_level, feedback
                 )
+                # Merge da deliberação estruturada do LLM nos achados
+                # rule-based (dedup por descrição; LLM nunca rebaixa risco).
+                interactions = self._merge_llm_findings(
+                    interactions, recommendations.pop("llm_interactions", [])
+                )
+                contraindications = self._merge_llm_findings(
+                    contraindications,
+                    recommendations.pop("llm_contraindications", []),
+                )
+                new_level = self._reconcile_risk(
+                    risk_level, recommendations.pop("llm_risk_level", None)
+                )
+                if new_level != risk_level:
+                    risk_level = new_level
+                    if not needs_escalation and risk_level in (
+                        RiskLevel.HIGH,
+                        RiskLevel.CRITICAL,
+                    ):
+                        needs_escalation = True
+                        escalation_reasons.append(
+                            "Risco elevado identificado na deliberação "
+                            "clínica do LLM"
+                        )
                 # Merge structured recommendations
                 recommendations["structured"] = structured_recs
                 recommendations["escalation_needed"] = needs_escalation
@@ -263,8 +286,15 @@ Seja minucioso, preciso e baseado em evidências.
                     interactions, contraindications, risk_level
                 )
                 recommendations["structured"] = structured_recs
-                recommendations["escalation_needed"] = needs_escalation
+                # LLM indisponível => análise parcial; nunca liberar sem revisão
+                needs_escalation = True
+                escalation_reasons = list(escalation_reasons) + [
+                    "LLM indisponível: análise baseada apenas em regras "
+                    "determinísticas (parcial). Revisão humana obrigatória."
+                ]
+                recommendations["escalation_needed"] = True
                 recommendations["escalation_reasons"] = escalation_reasons
+                analysis_metadata["partial_analysis"] = True
 
         except Exception as e:
             self.agent_logger.error("Falha na análise clínica", exc_info=True)
@@ -300,6 +330,12 @@ Seja minucioso, preciso e baseado em evidências.
             "contraindications": contraindications,
             "risk_level": risk_level,
             "confidence_score": confidence,
+            "risk_score": self._score_from_level(
+                risk_level, recommendations.get("risk_score")
+            ),
+            "patient_risk_factors": self._patient_risk_factors(
+                state.get("patient_data") or {}
+            ),
             "dosage_adjustments": recommendations.get("dosage_adjustments", []),
             "adverse_reactions": recommendations.get("adverse_reactions", []),
             "status": "analyzed" if not llm_failed else "analyzed_partial",
@@ -610,9 +646,7 @@ Seja minucioso, preciso e baseado em evidências.
                     )
                 )
             if rule_results:
-                logger.info(
-                    f"Clinical rules found {len(rule_results)} interactions"
-                )
+                logger.info(f"Clinical rules found {len(rule_results)} interactions")
                 for i in rule_results:
                     i["source"] = "clinical_rules"
                 interactions.extend(rule_results)
@@ -753,9 +787,7 @@ Seja minucioso, preciso e baseado em evidências.
         # consultar o identificador de drogas. Antes, a string combinada
         # inteira (ex: "varfarina, aspirina") era enviada como um único
         # nome e falhava a identificação ("Medicamento não identificado").
-        drugs_to_check = [
-            m.strip() for m in medication_text.split(",") if m.strip()
-        ]
+        drugs_to_check = [m.strip() for m in medication_text.split(",") if m.strip()]
         if len(drugs_to_check) <= 1:
             drugs_to_check = [medication_text]
 
@@ -791,9 +823,7 @@ Seja minucioso, preciso e baseado em evidências.
         das interações críticas já identificadas, sem duplicar.
         """
         derived: List[Dict[str, Any]] = []
-        seen = {
-            (c.get("type", ""), c.get("description", "")) for c in existing
-        }
+        seen = {(c.get("type", ""), c.get("description", "")) for c in existing}
         for interaction in interactions:
             if str(interaction.get("severity", "")).lower() != "critical":
                 continue
@@ -809,8 +839,7 @@ Seja minucioso, preciso e baseado em evidências.
                 "source": interaction.get("source", "Base de Interações"),
                 "recommendation": interaction.get(
                     "recommendation",
-                    "CONTRAINDICADO - Evitar combinação; "
-                    "consultar prescritor",
+                    "CONTRAINDICADO - Evitar combinação; " "consultar prescritor",
                 ),
             }
             key = (entry["type"], entry["description"])
@@ -820,8 +849,7 @@ Seja minucioso, preciso e baseado em evidências.
 
         if derived:
             logger.info(
-                "   Derived %d contraindication(s) from critical "
-                "interactions",
+                "   Derived %d contraindication(s) from critical " "interactions",
                 len(derived),
             )
         return derived
@@ -895,13 +923,27 @@ Seja minucioso, preciso e baseado em evidências.
         patient_data = state["patient_data"]
         medication = state["medication_text"]
 
+        # Anamnese COMPLETA no contexto do LLM — sem ela o modelo não tem
+        # como deliberar sobre gravidez, condições e medicamentos em uso.
         context = {
-            "Medication": medication,
-            "Patient Age": patient_data.get("age", "Not provided"),
-            "Patient Weight": patient_data.get("weight", "Not provided"),
-            "Risk Level": risk_level.value,
-            "Interactions Count": len(interactions),
-            "Contraindications Count": len(contraindications),
+            "Medicamento avaliado": medication,
+            "Idade": patient_data.get("age", "não informado"),
+            "Peso (kg)": patient_data.get("weight_kg")
+            or patient_data.get("weight", "não informado"),
+            "Gestante": (
+                "sim"
+                if patient_data.get("pregnant") or patient_data.get("is_pregnant")
+                else "não/não informado"
+            ),
+            "Condições clínicas": ", ".join(patient_data.get("conditions") or [])
+            or "nenhuma informada",
+            "Alergias": ", ".join(patient_data.get("allergies") or [])
+            or "nenhuma informada",
+            "Medicamentos em uso": ", ".join(
+                patient_data.get("current_medications") or []
+            )
+            or "nenhum informado",
+            "Risco preliminar (rule-based)": risk_level.value,
         }
 
         # Summarize interactions - with Portuguese severity labels
@@ -914,7 +956,8 @@ Seja minucioso, preciso e baseado em evidências.
         interactions_summary = (
             "\n".join(
                 [
-                    f"- {i['drug1']} + {i['drug2']}: {severity_pt.get(i['severity'].lower(), i['severity'].upper())} - {i['description'][:150]}"
+                    f"- {i['drug1']} + {i['drug2']}: "
+                    f"{severity_pt.get(i['severity'].lower(), i['severity'].upper())} - {i['description'][:150]}"
                     for i in interactions[:5]  # Top 5
                 ]
             )
@@ -926,7 +969,8 @@ Seja minucioso, preciso e baseado em evidências.
         contraindications_summary = (
             "\n".join(
                 [
-                    f"- {c['type']}: {severity_pt.get(c['severity'].lower(), c['severity'].upper())} - {c['description'][:150]}"
+                    f"- {c['type']}: "
+                    f"{severity_pt.get(c['severity'].lower(), c['severity'].upper())} - {c['description'][:150]}"
                     for c in contraindications[:5]  # Top 5
                 ]
             )
@@ -934,57 +978,74 @@ Seja minucioso, preciso e baseado em evidências.
             else "Nenhuma contraindicação identificada"
         )
 
-        # Build prompt - Em português
-        prompt = f"""Gere recomendações clínicas detalhadas para este paciente:
+        # Deliberação estruturada: anamnese + achados rule-based → JSON estrito
+        prompt = f"""Faça a análise de segurança medicamentosa COMPLETA do caso
+descrito na seção CONTEXT (anamnese do paciente e medicamento avaliado).
 
-**Interações Medicamentosas Identificadas:**
+**Achados das bases de dados (rule-based) — interações:**
 {interactions_summary}
 
-**Contraindicações:**
+**Achados das bases de dados (rule-based) — contraindicações:**
 {contraindications_summary}
 
-**Nível de Risco Geral:** {risk_level.value.upper()}
+**Nível de risco preliminar (rule-based):** {risk_level.value.upper()}
 
-Forneça em PORTUGUÊS BRASILEIRO:
+DELIBERE clinicamente considerando TODOS os dados da anamnese (idade, peso,
+gravidez, condições clínicas, alergias e medicamentos em uso). Complete o que
+as bases de dados não cobriram — inclusive contraindicações e interações que
+você identificar além das listadas acima.
 
-1. **AJUSTES DE DOSAGEM** (se necessário):
-   - Reduções ou aumentos específicos de dose
-   - Intervalos de administração recomendados
+Responda SOMENTE com um objeto JSON válido (sem markdown, sem texto fora do JSON), neste formato exato:
+{{
+  "risk_level": "low|medium|high|critical",
+  "risk_score": 0,
+  "rationale": "raciocínio clínico resumido",
+  "contraindications": [{{"type": "absoluta|relativa", "description": "...", "severity": "low|medium|high|critical"}}],
+  "interactions": [{{"drug1": "...", "drug2": "...", "severity": "low|medium|high|critical", "description": "..."}}],
+  "adverse_reactions": [{{"description": "...", "severity": "low|medium|high|critical"}}],
+  "dosage_adjustments": [{{"recommendation": "..."}}]
+}}
 
-2. **REAÇÕES ADVERSAS A MONITORAR**:
-   - Sinais e sintomas específicos
-   - Frequência de monitoramento
-
-3. **CONTRAINDICAÇÕES ABSOLUTAS E RELATIVAS**:
-   - Condições que impedem o uso
-   - Condições que exigem cautela especial
-
-4. **RECOMENDAÇÕES CLÍNICAS**:
-   - Alternativas terapêuticas quando aplicável
-   - Exames laboratoriais necessários
-   - Orientações específicas para o paciente
-
-5. **ORIENTAÇÕES AO PACIENTE**:
-   - Sintomas de alerta para procurar atendimento
-   - Interações com alimentos ou outros medicamentos
-
-Seja específico, prático e acionável para clínicos."""
+Regras:
+- Tudo em PORTUGUÊS BRASILEIRO.
+- "risk_score" é um inteiro de 0 a 100 coerente com "risk_level".
+- Liste apenas achados clinicamente relevantes para ESTE paciente; listas vazias ([]) são válidas.
+- Não invente fontes; na dúvida, seja conservador em favor da segurança do paciente."""
 
         # Add feedback if refinement cycle
         if feedback:
             prompt += f"\n\n**Feedback de Reflexão:**\n{feedback}\n\nAborde o feedback nas suas recomendações."
 
-        # Invoke LLM
-        recommendations_text = self.invoke_llm(prompt, context=context)
+        # Invoke LLM — deliberação estruturada (JSON) com retry único limitado
+        raw = self.invoke_llm(prompt, context=context)
+        data = self._parse_llm_json(raw)
+        if data is None:
+            self.agent_logger.progress(
+                "Resposta do LLM não era JSON válido — retry único"
+            )
+            raw_retry = self.invoke_llm(
+                prompt + "\n\nATENÇÃO: a resposta anterior não era JSON válido. "
+                "Responda SOMENTE o objeto JSON.",
+                context=context,
+            )
+            data = self._parse_llm_json(raw_retry)
+            if data is not None:
+                raw = raw_retry
 
-        # Parse recommendations (simple parsing for now)
-        return {
-            "dosage_adjustments": self._extract_dosage_adjustments(
-                recommendations_text
-            ),
-            "adverse_reactions": self._extract_adverse_reactions(recommendations_text),
-            "recommendations_text": recommendations_text,
-        }
+        if data is None:
+            # Fallback: extração por keywords do texto livre (comportamento
+            # antigo), agora filtrando cabeçalhos markdown.
+            logger.warning(
+                "Deliberação estruturada falhou (JSON inválido 2x); "
+                "usando extração por texto"
+            )
+            return {
+                "dosage_adjustments": self._extract_dosage_adjustments(raw),
+                "adverse_reactions": self._extract_adverse_reactions(raw),
+                "recommendations_text": raw,
+            }
+
+        return self._normalize_deliberation(data, medication, raw)
 
     def _generate_fallback_recommendations(
         self,
@@ -1092,6 +1153,10 @@ Seja específico, prático e acionável para clínicos."""
         ]
 
         for line in text.split("\n"):
+            stripped = line.strip().lstrip("-•*#").strip()
+            # Cabeçalhos markdown ("1. **Ajustes de Dosagem:**") não são itens
+            if re.match(r"^(\d+\.\s*)?\*\*[^*]+\*\*:?\s*$", stripped):
+                continue
             line_lower = line.lower()
             if any(keyword in line_lower for keyword in dosage_keywords):
                 cleaned = line.strip().lstrip("-•*")
@@ -1128,6 +1193,10 @@ Seja específico, prático e acionável para clínicos."""
         ]
 
         for line in text.split("\n"):
+            stripped = line.strip().lstrip("-•*#").strip()
+            # Cabeçalhos markdown ("2. **Reações Adversas:**") não são itens
+            if re.match(r"^(\d+\.\s*)?\*\*[^*]+\*\*:?\s*$", stripped):
+                continue
             line_lower = line.lower()
             if any(keyword in line_lower for keyword in reaction_keywords):
                 cleaned = line.strip().lstrip("-•*")
@@ -1137,6 +1206,189 @@ Seja específico, prático e acionável para clínicos."""
                     )
 
         return reactions[:7]  # Top 7
+
+    @staticmethod
+    def _parse_llm_json(text: str) -> Optional[Dict[str, Any]]:
+        """Extrai o primeiro objeto JSON da resposta do LLM (tolerante a fences)."""
+        if not text:
+            return None
+        cleaned = re.sub(r"```(?:json)?", "", text)
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start == -1 or end <= start:
+            return None
+        candidate = cleaned[start : end + 1]
+        try:
+            data = json.loads(candidate)
+        except json.JSONDecodeError:
+            # Remove vírgulas penduradas comuns em saída de LLM e tenta de novo
+            try:
+                data = json.loads(re.sub(r",\s*([}\]])", r"\1", candidate))
+            except json.JSONDecodeError:
+                return None
+        return data if isinstance(data, dict) else None
+
+    @staticmethod
+    def _merge_llm_findings(
+        base: List[Dict[str, Any]],
+        extra: List[Dict[str, Any]],
+        key: str = "description",
+    ) -> List[Dict[str, Any]]:
+        """Anexa achados do LLM sem duplicar os rule-based (dedup por descrição)."""
+
+        def _sig(item: Dict[str, Any]) -> str:
+            return re.sub(r"\W+", " ", str(item.get(key, ""))).strip().lower()[:80]
+
+        seen = {_sig(b) for b in base}
+        merged = list(base)
+        for item in extra:
+            s = _sig(item)
+            if s and s not in seen:
+                seen.add(s)
+                merged.append(item)
+        return merged
+
+    _RISK_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+
+    def _reconcile_risk(
+        self, rule_level: RiskLevel, llm_level: Optional[str]
+    ) -> RiskLevel:
+        """LLM só pode ELEVAR o risco rule-based, nunca rebaixar (cautela)."""
+        risk_map = {
+            "low": RiskLevel.LOW,
+            "medium": RiskLevel.MEDIUM,
+            "high": RiskLevel.HIGH,
+            "critical": RiskLevel.CRITICAL,
+        }
+        llm = risk_map.get(str(llm_level or "").strip().lower())
+        if llm is None:
+            return rule_level
+        if self._RISK_ORDER[llm.value] > self._RISK_ORDER[rule_level.value]:
+            return llm
+        return rule_level
+
+    # Bandas de score por nível: (mínimo, máximo, default sem score do LLM)
+    _SCORE_BANDS = {
+        "low": (5, 39, 20),
+        "medium": (40, 59, 50),
+        "high": (60, 79, 70),
+        "critical": (80, 100, 90),
+    }
+
+    def _score_from_level(
+        self, level: RiskLevel, llm_score: Optional[int] = None
+    ) -> int:
+        """Score numérico coerente com o nível (clampa o score do LLM na banda)."""
+        lo, hi, default = self._SCORE_BANDS[level.value]
+        if llm_score is None:
+            return default
+        return max(lo, min(hi, llm_score))
+
+    @staticmethod
+    def _patient_risk_factors(patient_data: Dict[str, Any]) -> List[str]:
+        """Fatores de risco derivados diretamente da anamnese (para a UI)."""
+        factors: List[str] = []
+        age = patient_data.get("age")
+        if isinstance(age, (int, float)):
+            if age >= 65:
+                factors.append(f"Idade avançada ({int(age)} anos)")
+            elif age < 18:
+                factors.append(f"Paciente pediátrico ({int(age)} anos)")
+        if patient_data.get("pregnant") or patient_data.get("is_pregnant"):
+            factors.append("Gestante")
+        for cond in patient_data.get("conditions") or []:
+            factors.append(f"Condição: {cond}")
+        meds = patient_data.get("current_medications") or []
+        if len(meds) >= 3:
+            factors.append(f"Polifarmácia ({len(meds)} medicamentos em uso)")
+        return factors
+
+    def _normalize_deliberation(
+        self, data: Dict[str, Any], medication: str, raw: str
+    ) -> Dict[str, Any]:
+        """Valida/normaliza o JSON de deliberação do LLM para o shape do state."""
+        sev_ok = {"low", "medium", "high", "critical"}
+
+        def _norm_sev(value: Any, default: str = "medium") -> str:
+            v = str(value or "").strip().lower()
+            return v if v in sev_ok else default
+
+        def _items(key: str, limit: int) -> List[Dict[str, Any]]:
+            out: List[Dict[str, Any]] = []
+            for item in data.get(key) or []:
+                if isinstance(item, str):
+                    item = {"description": item}
+                if isinstance(item, dict):
+                    out.append(item)
+                if len(out) >= limit:
+                    break
+            return out
+
+        contraindications = []
+        for c in _items("contraindications", 10):
+            desc = str(c.get("description") or c.get("reason") or "").strip()
+            if desc:
+                contraindications.append(
+                    {
+                        "type": str(c.get("type") or "Contraindicação").strip(),
+                        "description": desc,
+                        "severity": _norm_sev(c.get("severity"), "high"),
+                        "source": "ClinicalAgent-LLM",
+                    }
+                )
+
+        interactions = []
+        for i in _items("interactions", 10):
+            desc = str(i.get("description") or "").strip()
+            if desc:
+                interactions.append(
+                    {
+                        "drug1": str(i.get("drug1") or medication).strip(),
+                        "drug2": str(i.get("drug2") or "medicamento em uso").strip(),
+                        "severity": _norm_sev(i.get("severity")),
+                        "description": desc,
+                        "source": "ClinicalAgent-LLM",
+                    }
+                )
+
+        adverse_reactions = []
+        for r in _items("adverse_reactions", 10):
+            desc = str(r.get("description") or "").strip()
+            if desc:
+                adverse_reactions.append(
+                    {
+                        "description": desc,
+                        "severity": _norm_sev(r.get("severity"), "low"),
+                        "source": "ClinicalAgent-LLM",
+                    }
+                )
+
+        dosage_adjustments = []
+        for d in _items("dosage_adjustments", 5):
+            rec = str(d.get("recommendation") or d.get("description") or "").strip()
+            if rec:
+                dosage_adjustments.append(
+                    {"recommendation": rec, "source": "ClinicalAgent-LLM"}
+                )
+
+        try:
+            risk_score: Optional[int] = max(0, min(100, int(data.get("risk_score"))))
+        except (TypeError, ValueError):
+            risk_score = None
+
+        llm_level = str(data.get("risk_level") or "").strip().lower()
+        rationale = str(data.get("rationale") or "").strip()
+
+        return {
+            "dosage_adjustments": dosage_adjustments,
+            "adverse_reactions": adverse_reactions,
+            "recommendations_text": rationale or raw,
+            "llm_contraindications": contraindications,
+            "llm_interactions": interactions,
+            "llm_risk_level": llm_level if llm_level in sev_ok else None,
+            "risk_score": risk_score,
+            "rationale": rationale,
+        }
 
     def _build_patient_context(self, patient_data: Dict[str, Any]) -> PatientContext:
         """

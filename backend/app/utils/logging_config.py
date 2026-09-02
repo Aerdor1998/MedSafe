@@ -16,7 +16,7 @@ import logging
 import sys
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Optional
 
 
 class LogLevel(str, Enum):
@@ -116,7 +116,7 @@ class ColoredFormatter(logging.Formatter):
             log_parts.append(f"{color}  └─ Agent: {reset}{record.agent_name}")
 
         # Adicionar traceback se houver exceção
-        if record.exc_info and record.exc_info != True:
+        if record.exc_info and record.exc_info is not True:
             log_parts.append(f"\n{color}  └─ Exception:{reset}")
             log_parts.append(self.formatException(record.exc_info))
 
@@ -248,6 +248,12 @@ class AgentLogger:
 
     def error(self, message: str, exc_info=None, **kwargs):
         """Log erro do agente"""
+        # makeRecord exige tupla/None; exc_info=True (estilo logging padrão)
+        # causava TypeError e mascarava o erro original.
+        if exc_info is True:
+            exc_info = sys.exc_info()
+            if exc_info[0] is None:
+                exc_info = None
         record = self.logger.makeRecord(
             self.logger.name,
             logging.ERROR,
@@ -299,8 +305,11 @@ def setup_logging(
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, log_level.upper()))
 
-    # Remover handlers existentes
-    root_logger.handlers.clear()
+    # Remover e fechar handlers existentes. Em Windows, apenas limpar a lista
+    # deixa FileHandlers com o arquivo aberto e impede rotação/remoção do log.
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+        handler.close()
 
     # Remover filtros existentes
     root_logger.filters.clear()

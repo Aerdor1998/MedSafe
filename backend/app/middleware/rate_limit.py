@@ -10,10 +10,10 @@ SKILLS: @api-design-principles, @backend-dev-guidelines
 
 import logging
 import os
+from ipaddress import ip_address
 
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -49,9 +49,8 @@ def get_rate_limit_key(request: Request) -> str:
     Extract identifier for rate limiting.
 
     Priority:
-    1. API key from header (if present)
-    2. User ID from session (if authenticated)
-    3. IP address (fallback)
+    1. User ID from a valid JWT
+    2. Validated proxy/client IP address (fallback)
 
     Args:
         request: FastAPI/Starlette Request object
@@ -59,11 +58,6 @@ def get_rate_limit_key(request: Request) -> str:
     Returns:
         Identifier string for rate limiting
     """
-    # Try API key header first
-    api_key = request.headers.get("X-API-Key")
-    if api_key:
-        return f"api_key:{api_key}"
-
     # Try Authorization: Bearer <JWT> (prefer user_id when authenticated)
     auth = request.headers.get("Authorization", "")
     if auth.lower().startswith("bearer "):
@@ -88,12 +82,32 @@ def get_rate_limit_key(request: Request) -> str:
                 # Invalid/expired token -> fall back to IP-based limiting
                 pass
 
-    # Fallback to IP address
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        ip = forwarded.split(",")[0].strip()
-    else:
-        ip = request.client.host if request.client else "unknown"
+    # Honor proxy headers only when the deployment opts in. Otherwise any
+    # client could rotate X-Forwarded-For values and bypass rate limiting.
+    trust_proxy_headers = os.getenv("TRUST_PROXY_HEADERS", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    candidates = []
+    if trust_proxy_headers:
+        candidates.extend(
+            [
+                request.headers.get("CF-Connecting-IP"),
+                (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip(),
+            ]
+        )
+    candidates.append(request.client.host if request.client else None)
+
+    ip = "unknown"
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            ip = str(ip_address(candidate))
+            break
+        except ValueError:
+            continue
 
     return f"ip:{ip}"
 

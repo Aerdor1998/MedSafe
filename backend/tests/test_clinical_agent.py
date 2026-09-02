@@ -5,10 +5,7 @@ Tests clinical analysis, drug interactions, risk calculation, and recommendation
 without requiring actual LLM or database connections.
 """
 
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from backend.app.langgraph_agents.clinical_agent import (
     ClinicalAgent,

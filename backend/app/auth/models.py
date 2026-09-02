@@ -7,6 +7,8 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
+from .rbac import UserRole
+
 
 class UserBase(BaseModel):
     """Schema base de usuário"""
@@ -21,6 +23,7 @@ class UserCreate(UserBase):
     """Schema para criação de usuário"""
 
     password: str = Field(..., min_length=8)
+    role: UserRole = UserRole.READONLY
 
 
 class UserUpdate(BaseModel):
@@ -33,9 +36,17 @@ class UserUpdate(BaseModel):
 
 
 class User(UserBase):
-    """Schema de usuário completo"""
+    """Schema de usuário completo.
 
+    `email` é `str` (não `EmailStr`) de propósito: este é um schema de
+    RESPOSTA e precisa serializar usuários já persistidos (ex.: `admin@admin`,
+    sem ponto no domínio), senão `/auth/me` estoura 500. Validação estrita de
+    email fica na entrada (`UserCreate`/`UserUpdate`).
+    """
+
+    email: str
     id: str
+    role: UserRole
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -62,9 +73,14 @@ class TokenPayload(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    """Schema de requisição de login"""
+    """Schema de requisição de login.
 
-    email: EmailStr
+    `email` é `str` (não `EmailStr`) de propósito: o login só compara
+    igualdade com o valor persistido, e `EmailStr` rejeita TLDs reservados
+    como o `admin@medsafe.local` seedado (422 antes de chegar à rota).
+    """
+
+    email: str
     password: str
 
 
@@ -72,3 +88,10 @@ class RefreshTokenRequest(BaseModel):
     """Schema de requisição de refresh token"""
 
     refresh_token: str
+
+
+class ChangePasswordRequest(BaseModel):
+    """Authenticated password rotation request."""
+
+    current_password: str
+    new_password: str = Field(..., min_length=12)

@@ -1,0 +1,20 @@
+[
+  {"id": "warfarin_aspirin_elderly", "medications": ["varfarina", "aspirina"], "patient": {"age": 70},
+   "expect": {"risk_level": "CRITICAL", "min_interactions": 1, "reason_contains": "CRITICA"}},
+  {"id": "warfarin_aspirin_en", "medications": ["warfarin", "aspirin"], "patient": {"age": 55},
+   "expect": {"risk_level": "CRITICAL", "min_interactions": 1, "reason_contains": "CRITICA"}},
+  {"id": "spironolactone_losartan_ckd", "medications": ["espironolactona", "losartana"],
+   "patient": {"age": 65, "creatinine": 2.0, "weight": 70, "sex": "M"},
+   "expect": {"risk_level": "HIGH", "min_interactions": 1}},
+  {"id": "spironolactone_losartan_healthy", "medications": ["espironolactona", "losartana"], "patient": {"age": 40},
+   "expect": {"min_interactions": 1}},
+  {"id": "paracetamol_alone", "medications": ["paracetamol"], "patient": {"age": 30},
+   "expect": {"risk_level": "LOW", "max_interactions": 0}},
+  {"id": "metformin_renal_failure", "medications": ["metformina"],
+   "patient": {"age": 80, "creatinine": 3.0, "weight": 60, "sex": "F"},
+   "expect": {"reason_contains": "alto risco"}},
+  {"id": "ibuprofen_pregnant", "medications": ["ibuprofeno"], "patient": {"age": 30, "pregnant": true},
+   "expect": {"reason_contains": "alto risco"}},
+  {"id": "empty_medications", "medications": [], "patient": {"age": 30},
+   "expect": {"max_interactions": 0}}
+]

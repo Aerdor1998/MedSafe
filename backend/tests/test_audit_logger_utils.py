@@ -4,11 +4,6 @@ Unit tests for audit logger
 Tests AuditLogger, AuditEvent, and audit log functions.
 """
 
-from datetime import datetime
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 
 class TestAuditEventType:
     """Tests for AuditEventType enum"""

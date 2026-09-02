@@ -4,10 +4,6 @@ Unit tests for drug identifier service
 Tests HybridDrugIdentifier and drug identification functionality.
 """
 
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 
 class TestIdentificationMethod:
     """Tests for IdentificationMethod enum"""
@@ -157,7 +153,7 @@ class TestGetDrugIdentifier:
         id2 = get_drug_identifier()
 
         # Should be same instance or equivalent
-        assert id1 is id2 or type(id1) == type(id2)
+        assert id1 is id2 or type(id1) is type(id2)
 
 
 class TestResetIdentifier:
@@ -171,7 +167,7 @@ class TestResetIdentifier:
         )
 
         # Get initial identifier
-        id1 = get_drug_identifier()
+        get_drug_identifier()
 
         # Reset
         reset_identifier()

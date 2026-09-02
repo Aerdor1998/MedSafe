@@ -20,11 +20,9 @@ CRITICAL: For medical systems, evidence MUST be real and verifiable.
 No LLM synthesis without explicit warning to downstream agents.
 """
 
-import json
 import logging
 from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from ..db.vector_store import MedicalVectorStore, get_vector_store
 from ..services.drug_interactions import normalize_drug_name
@@ -520,19 +518,24 @@ If evidence is insufficient for a particular aspect, state this clearly.
         citations = []
 
         for doc in evidence:
-            metadata = doc.get("metadata", {})
-            source = metadata.get("source", "Unknown")
-            source_url = metadata.get("source_url", "")
-            drug_name = metadata.get("drug_name", "")
-            section = metadata.get("section", "")
+            metadata = doc.get("metadata", {}) or {}
+            source = (metadata.get("source") or "").strip()
+            source_url = (metadata.get("source_url") or "").strip()
+            drug_name = (metadata.get("drug_name") or "").strip()
+            section = (metadata.get("section") or "").strip()
 
-            # Create citation string
-            citation = f"{source}: {drug_name} - {section}"
+            # Metadata vazio produzia lixo ":  - " na UI — pula documentos
+            # sem qualquer informação citável.
+            details = " - ".join(p for p in (drug_name, section) if p)
+            if not (source or details or source_url):
+                continue
 
+            citation = f"{source or 'Fonte'}: {details}" if details else source
             if source_url:
-                citation = f"[{citation}]({source_url})"
+                citation = f"[{citation or source_url}]({source_url})"
 
-            citations.append(citation)
+            if citation:
+                citations.append(citation)
 
         return citations
 

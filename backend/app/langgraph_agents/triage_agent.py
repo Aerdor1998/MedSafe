@@ -136,7 +136,6 @@ Output format: Structured JSON with validated fields.
                 updates["triage_llm_failed"] = True
 
             # Log completion
-            duration = (datetime.now() - start_time).total_seconds()
             self.agent_logger.end(
                 "Triagem concluída"
                 + (" (parcial - LLM falhou)" if llm_failed else " com sucesso"),

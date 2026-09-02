@@ -29,6 +29,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="js/risk-display.js"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -79,57 +80,57 @@
 
     <style>
         /* =====================================================================
-           MedSafe Design Tokens — "receituário moderno"
-           Claro: papel clínico quente + tinta teal. Escuro: verde-negro profundo.
-           Todos os valores são triplets RGB para funcionar com <alpha-value>.
+           MedSafe Design Tokens — tom clínico/profissional
+           Claro: papel neutro + tinta teal. Escuro: grafite-verde profundo.
+           Valores em triplets RGB para funcionar com <alpha-value> do Tailwind.
            ===================================================================== */
         :root {
-            --bg: 246 244 240;
+            --bg: 245 246 246;
             --sf-1: 255 255 255;
-            --sf-2: 238 235 229;
-            --sf-3: 228 224 216;
-            --ln: 25 37 34;
-            --tx-1: 24 36 33;
-            --tx-2: 47 61 57;
-            --tx-3: 92 106 102;
-            --tx-4: 124 137 133;
-            --tx-5: 152 163 159;
-            --c-teal: 15 118 110;
-            --c-cyan: 14 116 144;
-            --c-emerald: 5 150 105;
-            --c-amber: 217 119 6;
-            --c-rose: 225 29 72;
-            --c-violet-400: 124 58 237;
-            --c-violet-500: 109 40 217;
-            --c-red-400: 220 38 38;
-            --c-red-500: 185 28 28;
+            --sf-2: 240 242 242;
+            --sf-3: 229 233 232;
+            --ln: 28 38 36;
+            --tx-1: 20 30 28;
+            --tx-2: 45 58 55;
+            --tx-3: 90 104 100;
+            --tx-4: 122 135 131;
+            --tx-5: 150 161 157;
+            --c-teal: 13 110 103;
+            --c-cyan: 14 110 140;
+            --c-emerald: 5 140 98;
+            --c-amber: 200 110 5;
+            --c-rose: 205 30 65;
+            --c-violet-400: 112 58 220;
+            --c-violet-500: 100 40 205;
+            --c-red-400: 208 38 38;
+            --c-red-500: 178 28 28;
             --btn-tx: 255 255 255;
-            --glow: 15 118 110;
-            --card-shadow: 0 1px 2px rgb(25 37 34 / .05), 0 12px 32px -16px rgb(25 37 34 / .14);
+            --glow: 13 110 103;
+            --card-shadow: 0 1px 2px rgb(28 38 36 / .05), 0 8px 24px -16px rgb(28 38 36 / .12);
         }
         .dark {
-            --bg: 10 14 15;
-            --sf-1: 19 26 27;
-            --sf-2: 27 36 37;
-            --sf-3: 36 47 48;
-            --ln: 226 236 233;
-            --tx-1: 233 238 236;
-            --tx-2: 202 211 208;
-            --tx-3: 146 159 155;
-            --tx-4: 108 121 117;
-            --tx-5: 82 94 91;
-            --c-teal: 45 212 191;
-            --c-cyan: 34 211 238;
-            --c-emerald: 52 211 153;
-            --c-amber: 251 191 36;
-            --c-rose: 251 113 133;
-            --c-violet-400: 167 139 250;
-            --c-violet-500: 139 92 246;
-            --c-red-400: 248 113 113;
-            --c-red-500: 239 68 68;
-            --btn-tx: 6 24 22;
-            --glow: 45 212 191;
-            --card-shadow: 0 1px 2px rgb(0 0 0 / .35), 0 16px 40px -20px rgb(0 0 0 / .55);
+            --bg: 12 15 16;
+            --sf-1: 21 26 27;
+            --sf-2: 29 36 37;
+            --sf-3: 38 47 48;
+            --ln: 222 232 229;
+            --tx-1: 232 237 235;
+            --tx-2: 200 209 206;
+            --tx-3: 146 158 154;
+            --tx-4: 110 122 118;
+            --tx-5: 84 96 93;
+            --c-teal: 56 200 180;
+            --c-cyan: 60 195 225;
+            --c-emerald: 62 200 145;
+            --c-amber: 240 180 50;
+            --c-rose: 240 110 130;
+            --c-violet-400: 165 140 248;
+            --c-violet-500: 140 95 245;
+            --c-red-400: 245 110 110;
+            --c-red-500: 235 70 70;
+            --btn-tx: 8 22 21;
+            --glow: 56 200 180;
+            --card-shadow: 0 1px 2px rgb(0 0 0 / .35), 0 12px 32px -20px rgb(0 0 0 / .5);
         }
 
         html { color-scheme: light; }
@@ -142,73 +143,82 @@
             transition: background-color .3s ease, color .3s ease;
         }
 
-        ::selection { background: rgb(var(--c-teal) / .25); }
+        ::selection { background: rgb(var(--c-teal) / .22); }
         :focus-visible { outline: 2px solid rgb(var(--c-teal) / .7); outline-offset: 2px; border-radius: 4px; }
-
-        /* --- Fundo: papel milimetrado + auroras discretas ------------------- */
-        .decor { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
-        .decor::before {
-            content: '';
-            position: absolute; inset: 0;
-            background-image:
-                linear-gradient(rgb(var(--ln) / .045) 1px, transparent 1px),
-                linear-gradient(90deg, rgb(var(--ln) / .045) 1px, transparent 1px);
-            background-size: 32px 32px;
-            -webkit-mask-image: linear-gradient(to bottom, black, transparent 75%);
-            mask-image: linear-gradient(to bottom, black, transparent 75%);
-        }
-        .dark .decor::before { opacity: .55; }
-        .decor-blob { position: absolute; border-radius: 9999px; filter: blur(90px); opacity: .16; }
-        .dark .decor-blob { opacity: .13; }
-        .blob-a { width: 480px; height: 480px; top: -160px; right: -100px; background: radial-gradient(circle, rgb(var(--c-teal)), transparent 70%); }
-        .blob-b { width: 420px; height: 420px; top: 140px; left: -160px; background: radial-gradient(circle, rgb(var(--c-cyan)), transparent 70%); }
 
         /* --- Superfícies ----------------------------------------------------- */
         .glass-card {
-            background: rgb(var(--sf-1) / .8);
-            border: 1px solid rgb(var(--ln) / .09);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            background: rgb(var(--sf-1));
+            border: 1px solid rgb(var(--ln) / .1);
             box-shadow: var(--card-shadow);
         }
+        .dark .glass-card { background: rgb(var(--sf-1) / .92); }
         .result-card {
-            background: rgb(var(--sf-1) / .85);
-            border: 1px solid rgb(var(--ln) / .09);
-            border-radius: 1rem;
+            background: rgb(var(--sf-1));
+            border: 1px solid rgb(var(--ln) / .1);
+            border-radius: .9rem;
             overflow: hidden;
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            box-shadow: var(--card-shadow);
         }
         .result-card-header {
             display: flex; align-items: center; gap: .65rem;
             padding: .7rem 1rem;
             border-bottom: 1px solid rgb(var(--ln) / .07);
         }
+        .divider { border-top: 1px solid rgb(var(--ln) / .09); }
+
+        /* --- Abas (hero, relatório) ------------------------------------------ */
+        .tabs { display: flex; flex-wrap: wrap; gap: .25rem; border-bottom: 1px solid rgb(var(--ln) / .1); }
+        .tabs-compact { gap: .15rem; }
+        .tabs-compact .tab-btn { padding: .55rem .5rem; font-size: .74rem; gap: .3rem; }
+        .tab-btn {
+            position: relative; flex: none;
+            display: inline-flex; align-items: center; gap: .45rem;
+            padding: .6rem .9rem; margin-bottom: -1px;
+            font-size: .8rem; font-weight: 600; color: rgb(var(--tx-4));
+            border-bottom: 2px solid transparent; white-space: nowrap; cursor: pointer;
+            transition: color .15s ease, border-color .15s ease;
+        }
+        .tab-btn:hover { color: rgb(var(--tx-2)); }
+        .tab-btn[aria-selected="true"] { color: rgb(var(--c-teal)); border-bottom-color: rgb(var(--c-teal)); }
+        .tab-btn i { font-size: .72rem; opacity: .85; }
+        .tab-count {
+            font-family: 'IBM Plex Mono', monospace; font-size: .66rem; font-weight: 600;
+            min-width: 1.35rem; padding: .05rem .4rem; border-radius: 999px; text-align: center;
+            background: rgb(var(--sf-2)); color: rgb(var(--tx-3));
+            border: 1px solid rgb(var(--ln) / .1);
+        }
+        .tab-btn[aria-selected="true"] .tab-count { background: rgb(var(--c-teal) / .12); color: rgb(var(--c-teal)); border-color: rgb(var(--c-teal) / .25); }
+        .tab-panel { display: none; }
+        .tab-panel.is-active { display: block; animation: fadeUp .3s cubic-bezier(.16, 1, .3, 1) both; }
+        .info-grid { display: grid; gap: .9rem; }
+        @media (min-width: 768px) { .info-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        .info-item { display: flex; gap: .7rem; align-items: flex-start; font-size: .8rem; line-height: 1.55; color: rgb(var(--tx-3)); }
+        .info-item i { flex: none; margin-top: .2rem; width: 1.6rem; height: 1.6rem; border-radius: .5rem;
+            display: inline-flex; align-items: center; justify-content: center; font-size: .7rem;
+            background: rgb(var(--c-teal) / .1); color: rgb(var(--c-teal)); }
+        .info-item b { display: block; color: rgb(var(--tx-1)); font-weight: 600; margin-bottom: .1rem; }
 
         /* --- Navegação do wizard --------------------------------------------- */
         .nav-item {
             display: flex; align-items: center; gap: .7rem; width: 100%;
-            padding: .6rem .7rem; border-radius: .9rem;
+            padding: .6rem .7rem; border-radius: .7rem;
             border: 1px solid transparent; background: transparent;
             text-align: left; cursor: pointer;
             transition: background .2s ease, border-color .2s ease;
         }
-        .nav-item:hover { background: rgb(var(--sf-2) / .55); }
-        .nav-item.active { background: rgb(var(--c-teal) / .09); border-color: rgb(var(--c-teal) / .25); }
+        .nav-item:hover { background: rgb(var(--sf-2) / .7); }
+        .nav-item.active { background: rgb(var(--c-teal) / .08); border-color: rgb(var(--c-teal) / .22); }
         .step-num {
-            width: 1.9rem; height: 1.9rem; border-radius: .65rem; flex: none;
+            width: 1.8rem; height: 1.8rem; border-radius: .55rem; flex: none;
             display: flex; align-items: center; justify-content: center;
-            font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: .8rem;
-            background: rgb(var(--sf-2) / .8); color: rgb(var(--tx-3));
+            font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: .78rem;
+            background: rgb(var(--sf-2)); color: rgb(var(--tx-3));
             border: 1px solid rgb(var(--ln) / .1);
-            transition: background .2s ease, color .2s ease, box-shadow .2s ease;
+            transition: background .2s ease, color .2s ease;
         }
-        .nav-item.active .step-num {
-            background: linear-gradient(135deg, rgb(var(--c-teal)), rgb(var(--c-cyan)));
-            color: rgb(var(--btn-tx)); border-color: transparent;
-            box-shadow: 0 4px 14px -4px rgb(var(--glow) / .5);
-        }
+        .nav-item.active .step-num { background: rgb(var(--c-teal)); color: rgb(var(--btn-tx)); border-color: transparent; }
+        .nav-item.done .step-num { background: rgb(var(--c-emerald) / .14); color: rgb(var(--c-emerald)); border-color: rgb(var(--c-emerald) / .3); font-size: 0; }
+        .nav-item.done .step-num::before { content: '\f00c'; font-family: 'Font Awesome 6 Free'; font-weight: 900; font-size: .7rem; }
         .nav-title { color: rgb(var(--tx-2)); }
         .nav-item.active .nav-title { color: rgb(var(--tx-1)); }
         .status-text { color: rgb(var(--tx-4)); }
@@ -216,72 +226,68 @@
         /* --- Steps (contrato do app: .step-content / .block / .fade-in) ------ */
         .step-content { display: none; }
         .step-content.block { display: block; }
-        .fade-in { animation: fadeUp .45s cubic-bezier(.16, 1, .3, 1) both; }
+        .fade-in { animation: fadeUp .4s cubic-bezier(.16, 1, .3, 1) both; }
         @keyframes fadeUp {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: none; }
         }
-        .reveal { opacity: 0; animation: fadeUp .6s cubic-bezier(.16, 1, .3, 1) forwards; animation-delay: calc(var(--d, 0) * 80ms); }
+        .reveal { opacity: 0; animation: fadeUp .5s cubic-bezier(.16, 1, .3, 1) forwards; animation-delay: calc(var(--d, 0) * 70ms); }
+        .step-kicker { font-family: 'IBM Plex Mono', monospace; font-size: .68rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: rgb(var(--c-teal)); }
 
         /* --- Botões ----------------------------------------------------------- */
         .btn-primary {
-            background: linear-gradient(135deg, rgb(var(--c-teal)), rgb(var(--c-cyan)));
+            background: rgb(var(--c-teal));
             color: rgb(var(--btn-tx));
             font-weight: 700;
-            box-shadow: 0 6px 20px -8px rgb(var(--glow) / .55), inset 0 1px 0 rgb(255 255 255 / .18);
-            transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+            box-shadow: 0 4px 14px -8px rgb(var(--glow) / .6);
+            transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
         }
-        .btn-primary:hover {
-            transform: translateY(-1px);
-            filter: brightness(1.06);
-            box-shadow: 0 10px 26px -8px rgb(var(--glow) / .6), inset 0 1px 0 rgb(255 255 255 / .18);
-        }
+        .btn-primary:hover { filter: brightness(1.07); transform: translateY(-1px); }
         .btn-primary:active { transform: translateY(0); }
         .btn-ghost {
             border: 1px solid rgb(var(--ln) / .14);
-            background: rgb(var(--sf-1) / .6);
+            background: rgb(var(--sf-1));
             color: rgb(var(--tx-2));
             font-weight: 600;
-            transition: background .18s ease, border-color .18s ease;
+            transition: background .15s ease, border-color .15s ease;
         }
-        .btn-ghost:hover { background: rgb(var(--sf-2) / .7); }
+        .btn-ghost:hover { background: rgb(var(--sf-2)); }
+        .btn-link { font-size: .78rem; font-weight: 600; color: rgb(var(--c-teal)); background: none; border: 0; cursor: pointer; padding: 0; }
+        .btn-link:hover { text-decoration: underline; }
 
         /* --- Formulário -------------------------------------------------------- */
         .field-label {
             display: block; font-size: .7rem; font-weight: 700;
-            letter-spacing: .07em; text-transform: uppercase;
+            letter-spacing: .06em; text-transform: uppercase;
             color: rgb(var(--tx-3)); margin-bottom: .45rem;
         }
+        .field-help { font-size: .7rem; color: rgb(var(--tx-4)); margin-top: .35rem; }
         .input-field {
-            background: rgb(var(--sf-1) / .75);
-            border: 1px solid rgb(var(--ln) / .13);
+            background: rgb(var(--sf-1));
+            border: 1px solid rgb(var(--ln) / .15);
             color: rgb(var(--tx-1));
-            transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+            transition: border-color .15s ease, box-shadow .15s ease;
         }
         .input-field::placeholder { color: rgb(var(--tx-4)); }
         .input-field:focus {
             outline: none;
             border-color: rgb(var(--c-teal) / .6);
             box-shadow: 0 0 0 3px rgb(var(--c-teal) / .14);
-            background: rgb(var(--sf-1));
         }
         .radio-card {
             display: flex; align-items: center; justify-content: center; gap: .5rem;
-            padding: .65rem .75rem; border-radius: .8rem;
-            border: 1px solid rgb(var(--ln) / .14);
-            background: rgb(var(--sf-2) / .4);
+            padding: .65rem .75rem; border-radius: .65rem;
+            border: 1px solid rgb(var(--ln) / .15);
+            background: rgb(var(--sf-1));
             font-size: .85rem; font-weight: 600; color: rgb(var(--tx-3));
             transition: border-color .15s ease, background .15s ease, color .15s ease;
         }
         input[type="radio"]:checked + .radio-card {
-            border-color: rgb(var(--c-teal) / .55);
-            background: rgb(var(--c-teal) / .1);
+            border-color: rgb(var(--c-teal) / .6);
+            background: rgb(var(--c-teal) / .08);
             color: rgb(var(--tx-1));
-            box-shadow: inset 0 0 0 1px rgb(var(--c-teal) / .35);
         }
-        input[type="radio"]:focus-visible + .radio-card {
-            outline: 2px solid rgb(var(--c-teal) / .7); outline-offset: 2px;
-        }
+        input[type="radio"]:focus-visible + .radio-card { outline: 2px solid rgb(var(--c-teal) / .7); outline-offset: 2px; }
         .count-badge {
             font-family: 'IBM Plex Mono', monospace;
             background: rgb(var(--c-teal) / .12); color: rgb(var(--c-teal));
@@ -289,12 +295,19 @@
             font-size: .72rem; font-weight: 600;
         }
         .upload-area {
-            border: 1.5px dashed rgb(var(--ln) / .2);
-            border-radius: 1rem; padding: 1.6rem; text-align: center; cursor: pointer;
-            background: rgb(var(--sf-2) / .3);
+            border: 1.5px dashed rgb(var(--ln) / .22);
+            border-radius: .9rem; padding: 1.4rem 1rem; text-align: center; cursor: pointer;
+            background: rgb(var(--sf-2) / .5);
             transition: border-color .2s ease, background .2s ease;
         }
-        .upload-area:hover { border-color: rgb(var(--c-cyan) / .5); background: rgb(var(--c-cyan) / .05); }
+        .upload-area:hover { border-color: rgb(var(--c-teal) / .5); background: rgb(var(--c-teal) / .05); }
+        .option-card {
+            border: 1px solid rgb(var(--ln) / .1); border-radius: .9rem; padding: 1.1rem;
+            background: rgb(var(--sf-1));
+        }
+        .option-card h3 { display: flex; align-items: center; gap: .5rem; font-weight: 600; font-size: .88rem; color: rgb(var(--tx-1)); }
+        .option-card h3 span { width: 1.5rem; height: 1.5rem; border-radius: .45rem; display: inline-flex; align-items: center; justify-content: center;
+            background: rgb(var(--c-teal) / .1); color: rgb(var(--c-teal)); font-size: .7rem; }
 
         /* --- Severidade (classes geradas pelo app) ---------------------------- */
         .severity-high { background: rgb(var(--c-rose) / .06); border: 1px solid rgb(var(--c-rose) / .16); }
@@ -306,11 +319,7 @@
         .med-item:hover { transform: translateX(2px); }
 
         /* --- Detalhes ----------------------------------------------------------- */
-        .gradient-text {
-            background: linear-gradient(100deg, rgb(var(--c-teal)), rgb(var(--c-cyan)) 60%, rgb(var(--c-emerald)));
-            -webkit-background-clip: text; background-clip: text;
-            -webkit-text-fill-color: transparent; color: transparent;
-        }
+        .gradient-text { color: rgb(var(--tx-1)); }
         .progress-ring { transform: rotate(-90deg); }
         #risk-circle { transition: stroke-dashoffset 1s cubic-bezier(.16, 1, .3, 1), stroke .4s ease; }
 
@@ -318,14 +327,13 @@
             display: inline-flex; align-items: center; gap: .45rem;
             padding: .35rem .8rem; border-radius: 999px;
             border: 1px solid rgb(var(--ln) / .12);
-            background: rgb(var(--sf-1) / .7);
+            background: rgb(var(--sf-1));
             font-size: .72rem; font-weight: 600; color: rgb(var(--tx-3));
-            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
         }
         .hint-card {
             display: flex; gap: .65rem; align-items: flex-start;
-            padding: .8rem .95rem; border-radius: .9rem;
-            background: rgb(var(--c-teal) / .07);
+            padding: .75rem .9rem; border-radius: .7rem;
+            background: rgb(var(--c-teal) / .06);
             border: 1px solid rgb(var(--c-teal) / .16);
             font-size: .78rem; line-height: 1.55; color: rgb(var(--tx-2));
         }
@@ -333,39 +341,89 @@
         .legend-dot { width: .7rem; height: .7rem; border-radius: 999px; flex: none; margin-top: .25rem; }
 
         .theme-toggle {
-            width: 2.4rem; height: 2.4rem; border-radius: .8rem;
+            width: 2.4rem; height: 2.4rem; border-radius: .7rem;
             border: 1px solid rgb(var(--ln) / .13);
-            background: rgb(var(--sf-1) / .7); color: rgb(var(--tx-2));
+            background: rgb(var(--sf-1)); color: rgb(var(--tx-2));
             display: inline-flex; align-items: center; justify-content: center;
-            cursor: pointer; transition: background .18s ease, transform .18s ease;
+            cursor: pointer; transition: background .15s ease;
         }
-        .theme-toggle:hover { background: rgb(var(--sf-2) / .8); transform: rotate(12deg); }
+        .theme-toggle:hover { background: rgb(var(--sf-2)); }
 
-        /* --- Assinatura: linha de vida (ECG) ----------------------------------- */
-        .ecg-track { stroke: rgb(var(--tx-5) / .35); }
-        .ecg-pulse {
-            stroke: rgb(var(--c-teal));
-            filter: drop-shadow(0 0 6px rgb(var(--glow) / .6));
-            stroke-dasharray: 90 510;
-            animation: ecgflow 3s linear infinite;
-        }
-        .ecg-fast .ecg-pulse { animation-duration: 1.3s; stroke: rgb(var(--c-cyan)); }
-        @keyframes ecgflow {
-            from { stroke-dashoffset: 600; }
-            to { stroke-dashoffset: 0; }
+        @media (max-width: 480px) {
+            #api-status span { display: none; }
+            #api-status { padding-left: .55rem; padding-right: .55rem; }
+            .theme-toggle { width: 2.1rem; height: 2.1rem; flex: none; }
         }
 
-        /* Pipeline de agentes (didático, step 3) */
-        .stage-dot {
-            width: .5rem; height: .5rem; border-radius: 999px; flex: none;
+        /* --- Onboarding (primeira visita) --------------------------------------- */
+        .onboard {
+            display: grid; gap: .8rem; align-items: center;
+            padding: .9rem 1.1rem; border-radius: .9rem;
+            background: rgb(var(--c-teal) / .06); border: 1px solid rgb(var(--c-teal) / .18);
+        }
+        @media (min-width: 768px) { .onboard { grid-template-columns: 1fr auto; } }
+        .onboard-steps { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; font-size: .78rem; color: rgb(var(--tx-2)); }
+        .onboard-steps span { display: inline-flex; align-items: center; gap: .45rem; }
+        .onboard-steps b { font-family: 'IBM Plex Mono', monospace; font-size: .68rem; font-weight: 600; width: 1.25rem; height: 1.25rem;
+            border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
+            background: rgb(var(--c-teal)); color: rgb(var(--btn-tx)); }
+        .onboard.hidden { display: none; }
+
+        /* --- Monitor ECG (step 3) -----------------------------------------------
+           Único indicador de carregamento: um traçado de batimento que corre da
+           esquerda para a direita. Duas vars no #ecg-monitor:
+             --bpm  frequência (acelera com o progresso)
+             --p    progresso 0..1 (barra + intensidade do traçado) ------------- */
+        .ecg-monitor {
+            --bpm: 60; --p: 0;
+            position: relative; border-radius: .9rem; overflow: hidden;
+            background: rgb(var(--sf-2) / .6);
+            border: 1px solid rgb(var(--ln) / .1);
+        }
+        .dark .ecg-monitor { background: rgb(8 12 13); }
+        .ecg-readout {
+            display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+            padding: .7rem 1rem .2rem;
+            font-family: 'IBM Plex Mono', monospace; font-size: .7rem; color: rgb(var(--tx-4));
+        }
+        .ecg-readout b { font-size: 1.35rem; font-weight: 600; color: rgb(var(--c-teal)); letter-spacing: -.02em; }
+        .ecg-readout small { margin-left: .25rem; }
+        .ecg-readout .ecg-pct { color: rgb(var(--tx-2)); font-weight: 600; font-size: .85rem; }
+        .ecg-svg { display: block; width: 100%; height: 132px; }
+        .ecg-grid line { stroke: rgb(var(--ln) / .06); stroke-width: 1; }
+        .ecg-base { fill: none; stroke: rgb(var(--tx-5) / .3); stroke-width: 1.4; }
+        .ecg-trace {
+            fill: none; stroke: rgb(var(--c-teal)); stroke-width: 2.2;
+            stroke-linecap: round; stroke-linejoin: round;
+            stroke-dasharray: 220 780; stroke-dashoffset: 1000;
+            filter: drop-shadow(0 0 5px rgb(var(--glow) / calc(.35 + var(--p) * .5)));
+            animation: ecgSweep calc(180s / var(--bpm)) linear infinite;
+        }
+        @keyframes ecgSweep { to { stroke-dashoffset: 0; } }
+        .ecg-progress { height: 3px; background: rgb(var(--ln) / .08); }
+        .ecg-progress-fill {
+            height: 100%; width: calc(var(--p) * 100%);
             background: rgb(var(--c-teal));
-            animation: stagePulse 1.8s ease-in-out infinite;
-            animation-delay: var(--d, 0s);
+            transition: width .8s cubic-bezier(.16, 1, .3, 1), background .3s ease;
         }
-        @keyframes stagePulse {
-            0%, 100% { opacity: .25; transform: scale(.85); }
-            50% { opacity: 1; transform: scale(1.15); }
+        .ecg-monitor.done .ecg-trace, .ecg-monitor.done .ecg-readout b { stroke: rgb(var(--c-emerald)); color: rgb(var(--c-emerald)); }
+        .ecg-monitor.done .ecg-progress-fill { background: rgb(var(--c-emerald)); }
+
+        /* Fases da análise (lista vertical, dirigida por EcgLoader.setPhase) */
+        .phase { display: flex; align-items: center; gap: .7rem; padding: .55rem .2rem; font-size: .8rem; color: rgb(var(--tx-4)); }
+        .phase + .phase { border-top: 1px solid rgb(var(--ln) / .07); }
+        .phase-ico {
+            width: 1.5rem; height: 1.5rem; border-radius: 999px; flex: none;
+            display: inline-flex; align-items: center; justify-content: center; font-size: .62rem;
+            border: 1px solid rgb(var(--ln) / .14); color: rgb(var(--tx-4));
         }
+        .phase.is-current { color: rgb(var(--tx-1)); font-weight: 600; }
+        .phase.is-current .phase-ico { border-color: rgb(var(--c-teal)); color: rgb(var(--c-teal)); }
+        .phase.is-current .phase-ico::before { content: ''; width: .5rem; height: .5rem; border-radius: 999px; background: rgb(var(--c-teal)); animation: phasePulse 1.2s ease-in-out infinite; }
+        .phase.is-done { color: rgb(var(--tx-3)); }
+        .phase.is-done .phase-ico { background: rgb(var(--c-emerald) / .14); border-color: rgb(var(--c-emerald) / .3); color: rgb(var(--c-emerald)); }
+        .phase.is-done .phase-ico::before { content: '\f00c'; font-family: 'Font Awesome 6 Free'; font-weight: 900; }
+        @keyframes phasePulse { 0%, 100% { opacity: .35; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.1); } }
 
         /* --- Scrollbar ----------------------------------------------------------- */
         .custom-scroll { scrollbar-width: thin; scrollbar-color: rgb(var(--tx-5) / .45) transparent; }
@@ -389,22 +447,16 @@
         <p style="padding:1rem;text-align:center">O MedSafe precisa de JavaScript para funcionar.</p>
     </noscript>
 
-    <!-- Fundo decorativo -->
-    <div class="decor" aria-hidden="true">
-        <div class="decor-blob blob-a"></div>
-        <div class="decor-blob blob-b"></div>
-    </div>
-
     <!-- ===================== TOPBAR ===================== -->
     <header class="max-w-7xl mx-auto px-5 pt-5 pb-2 flex items-center justify-between gap-4 reveal" style="--d:0">
         <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-lg"
-                 style="background: linear-gradient(135deg, rgb(var(--c-teal)), rgb(var(--c-cyan))); box-shadow: 0 6px 18px -6px rgb(var(--glow) / .55);">
-                <i class="fas fa-heart-pulse text-lg" aria-hidden="true"></i>
+            <div class="w-9 h-9 rounded-lg flex items-center justify-center"
+                 style="background: rgb(var(--c-teal)); color: rgb(var(--btn-tx));">
+                <i class="fas fa-wave-square text-sm" aria-hidden="true"></i>
             </div>
             <div>
                 <p class="font-display font-bold text-lg leading-none text-slate-200">MedSafe</p>
-                <p class="text-[11px] text-slate-500 mt-0.5">interações medicamentosas com IA</p>
+                <p class="text-[11px] text-slate-500 mt-0.5">Apoio à decisão em segurança medicamentosa</p>
             </div>
         </div>
         <div class="flex items-center gap-2.5">
@@ -420,39 +472,79 @@
         </div>
     </header>
 
-    <!-- ===================== HERO ===================== -->
-    <section class="max-w-7xl mx-auto px-5 pt-8 pb-6 reveal" style="--d:1">
-        <p class="text-[11px] font-bold uppercase tracking-[.18em] text-brand-teal mb-3">
-            <i class="fas fa-wave-square mr-1.5" aria-hidden="true"></i>Segurança medicamentosa com IA
-        </p>
-        <h1 class="font-display font-extrabold tracking-tight text-slate-200 max-w-3xl"
-            style="font-size: clamp(1.7rem, 3.4vw, 2.7rem); line-height: 1.12;">
-            Misturar remédios não deveria ser<br class="hidden sm:block">
-            um <span class="gradient-text">jogo de adivinhação</span>.
-        </h1>
-        <p class="mt-3 max-w-2xl text-sm sm:text-[15px] leading-relaxed text-slate-400">
-            O MedSafe cruza o novo medicamento com o perfil do paciente e a medicação em uso —
-            consultando bases <strong class="text-slate-300 font-semibold">ANVISA</strong> e
-            <strong class="text-slate-300 font-semibold">OMS</strong> com um time de agentes de IA —
-            e devolve um relatório de risco em português claro.
-        </p>
-        <div class="flex flex-wrap gap-2 mt-5">
-            <span class="chip"><i class="fas fa-shield-halved text-brand-teal" aria-hidden="true"></i>Bases ANVISA · OMS</span>
-            <span class="chip"><i class="fas fa-diagram-project text-brand-cyan" aria-hidden="true"></i>IA multi-agente com revisão crítica</span>
-            <span class="chip"><i class="fas fa-lock text-brand-emerald" aria-hidden="true"></i>Dados tratados conforme LGPD</span>
-            <span class="chip"><i class="fas fa-user-doctor text-brand-amber" aria-hidden="true"></i>Para pacientes e profissionais</span>
+    <!-- ===================== APRESENTAÇÃO ===================== -->
+    <section class="max-w-7xl mx-auto px-5 pt-6 pb-5 reveal" style="--d:1">
+        <div class="glass-card rounded-2xl p-5 sm:p-6">
+            <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+                <div class="max-w-2xl">
+                    <p class="step-kicker mb-2">Análise de interações medicamentosas</p>
+                    <h1 class="font-display font-bold tracking-tight text-slate-200" style="font-size: clamp(1.35rem, 2.4vw, 1.9rem); line-height: 1.2;">
+                        Avalie a segurança de um novo medicamento para um paciente específico.
+                    </h1>
+                    <p class="mt-2 text-sm leading-relaxed text-slate-400">
+                        Informe o perfil do paciente e o medicamento. O sistema cruza os dados com bases
+                        ANVISA e OMS e devolve um relatório de risco com contraindicações, interações e recomendações.
+                    </p>
+                </div>
+                <div class="flex flex-wrap gap-2 flex-none">
+                    <span class="chip"><i class="fas fa-shield-halved text-brand-teal" aria-hidden="true"></i>ANVISA · OMS</span>
+                    <span class="chip"><i class="fas fa-user-check text-brand-teal" aria-hidden="true"></i>Revisão humana</span>
+                    <span class="chip"><i class="fas fa-lock text-brand-teal" aria-hidden="true"></i>LGPD</span>
+                </div>
+            </div>
+
+            <!-- Textos importantes, organizados em abas -->
+            <div class="mt-5" data-tabs>
+                <div class="tabs" role="tablist" aria-label="Informações sobre o MedSafe">
+                    <button class="tab-btn" role="tab" aria-selected="true" aria-controls="info-how" id="tab-how"><i class="fas fa-list-ol" aria-hidden="true"></i>Como funciona</button>
+                    <button class="tab-btn" role="tab" aria-selected="false" aria-controls="info-method" id="tab-method"><i class="fas fa-book-medical" aria-hidden="true"></i>Fontes e método</button>
+                    <button class="tab-btn" role="tab" aria-selected="false" aria-controls="info-risk" id="tab-risk"><i class="fas fa-gauge" aria-hidden="true"></i>Como ler o risco</button>
+                    <button class="tab-btn" role="tab" aria-selected="false" aria-controls="info-privacy" id="tab-privacy"><i class="fas fa-lock" aria-hidden="true"></i>Privacidade</button>
+                    <button class="tab-btn" role="tab" aria-selected="false" aria-controls="info-limits" id="tab-limits"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i>Limitações</button>
+                </div>
+
+                <div id="info-how" class="tab-panel is-active pt-4" role="tabpanel" aria-labelledby="tab-how">
+                    <div class="info-grid">
+                        <div class="info-item"><i class="fas fa-user" aria-hidden="true"></i><span><b>1. Perfil do paciente</b>Idade, peso, sexo, condições, alergias e medicamentos em uso. Leva cerca de 1 minuto.</span></div>
+                        <div class="info-item"><i class="fas fa-pills" aria-hidden="true"></i><span><b>2. Medicamento a avaliar</b>Digite o nome ou envie uma foto da embalagem para reconhecimento automático.</span></div>
+                        <div class="info-item"><i class="fas fa-file-medical" aria-hidden="true"></i><span><b>3. Relatório de risco</b>Contraindicações, interações, reações adversas e recomendações — exportável em JSON.</span></div>
+                    </div>
+                </div>
+                <div id="info-method" class="tab-panel pt-4" role="tabpanel" aria-labelledby="tab-method">
+                    <div class="info-grid">
+                        <div class="info-item"><i class="fas fa-database" aria-hidden="true"></i><span><b>Bases consultadas</b>Bulário eletrônico da ANVISA e classificação ATC/OMS, com normalização de nomes comerciais e princípios ativos.</span></div>
+                        <div class="info-item"><i class="fas fa-diagram-project" aria-hidden="true"></i><span><b>Agentes especializados</b>Um agente farmacológico produz a análise; um revisor crítico questiona as conclusões; um relator redige o laudo.</span></div>
+                        <div class="info-item"><i class="fas fa-user-doctor" aria-hidden="true"></i><span><b>Revisão humana</b>Casos de risco alto ou crítico entram em fila para decisão de um profissional antes da liberação.</span></div>
+                    </div>
+                </div>
+                <div id="info-risk" class="tab-panel pt-4" role="tabpanel" aria-labelledby="tab-risk">
+                    <ul class="grid sm:grid-cols-2 gap-x-8 gap-y-2.5 text-[13px] leading-snug text-slate-400">
+                        <li class="flex gap-2.5"><span class="legend-dot bg-brand-emerald"></span><span><strong class="text-slate-300 font-semibold">Baixo</strong> — sem sinais relevantes; mantenha o acompanhamento de rotina.</span></li>
+                        <li class="flex gap-2.5"><span class="legend-dot bg-brand-amber"></span><span><strong class="text-slate-300 font-semibold">Moderado</strong> — monitore sintomas e confirme doses com quem prescreveu.</span></li>
+                        <li class="flex gap-2.5"><span class="legend-dot bg-brand-rose"></span><span><strong class="text-slate-300 font-semibold">Alto</strong> — converse com médico ou farmacêutico antes de usar.</span></li>
+                        <li class="flex gap-2.5"><span class="legend-dot bg-red-500"></span><span><strong class="text-slate-300 font-semibold">Crítico</strong> — combinação potencialmente perigosa; procure orientação imediata.</span></li>
+                    </ul>
+                </div>
+                <div id="info-privacy" class="tab-panel pt-4" role="tabpanel" aria-labelledby="tab-privacy">
+                    <div class="info-grid">
+                        <div class="info-item"><i class="fas fa-user-secret" aria-hidden="true"></i><span><b>Sem identificação</b>Não pedimos nome, CPF ou documento. O perfil é composto apenas de dados clínicos necessários à análise.</span></div>
+                        <div class="info-item"><i class="fas fa-clock-rotate-left" aria-hidden="true"></i><span><b>Retenção limitada</b>Análises são mantidas apenas pelo período configurado para auditoria e depois removidas automaticamente.</span></div>
+                        <div class="info-item"><i class="fas fa-key" aria-hidden="true"></i><span><b>Acesso controlado</b>A execução exige conta autorizada; todo acesso a laudos é registrado, conforme a LGPD.</span></div>
+                    </div>
+                </div>
+                <div id="info-limits" class="tab-panel pt-4" role="tabpanel" aria-labelledby="tab-limits">
+                    <div class="info-grid">
+                        <div class="info-item"><i class="fas fa-stethoscope" aria-hidden="true"></i><span><b>Apoio, não substituição</b>O relatório apoia a decisão clínica; não substitui a avaliação de médico ou farmacêutico.</span></div>
+                        <div class="info-item"><i class="fas fa-robot" aria-hidden="true"></i><span><b>Modelo de linguagem</b>Se o modelo estiver indisponível, a análise cai para regras determinísticas e é sinalizada como parcial.</span></div>
+                        <div class="info-item"><i class="fas fa-truck-medical" aria-hidden="true"></i><span><b>Emergências</b>Em caso de reação grave ou suspeita de intoxicação, procure atendimento imediatamente.</span></div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <!-- Assinatura: linha de vida -->
-        <svg class="w-full mt-6" height="44" viewBox="0 0 600 44" preserveAspectRatio="none" aria-hidden="true">
-            <path class="ecg-track" fill="none" stroke-width="1.5"
-                  d="M0 26 H150 L162 26 L170 10 L180 40 L188 18 L194 26 H340 L352 26 L360 10 L370 40 L378 18 L384 26 H600"/>
-            <path class="ecg-pulse" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" pathLength="600"
-                  d="M0 26 H150 L162 26 L170 10 L180 40 L188 18 L194 26 H340 L352 26 L360 10 L370 40 L378 18 L384 26 H600"/>
-        </svg>
     </section>
 
     <!-- ===================== APP ===================== -->
-    <main class="max-w-7xl mx-auto px-5 pb-14 grid lg:grid-cols-[264px_1fr] gap-5 items-start">
+    <main class="max-w-7xl mx-auto px-5 pb-14 grid lg:grid-cols-[250px_1fr] gap-5 items-start">
 
         <!-- Sidebar: passos -->
         <aside class="space-y-3 reveal lg:sticky lg:top-5" style="--d:2">
@@ -495,11 +587,11 @@
                 </button>
             </nav>
 
-            <div class="hint-card hidden lg:flex">
-                <i class="fas fa-circle-info" aria-hidden="true"></i>
-                <span><strong class="font-semibold text-slate-200">Como funciona?</strong>
-                Você descreve o paciente, informa o medicamento e três agentes de IA analisam
-                contraindicações, interações e reações — com revisão crítica antes do laudo.</span>
+            <div class="hidden lg:block glass-card rounded-2xl p-4 text-[11px] leading-relaxed text-slate-400">
+                <p class="font-semibold text-slate-300 mb-1.5">Tempo estimado</p>
+                <p>Preenchimento: ~1 min<br>Análise: 1–2 min</p>
+                <p class="mt-3 font-semibold text-slate-300 mb-1.5">Precisa de ajuda?</p>
+                <p>Use a aba <button class="btn-link" onclick="activateTab('tab-how')">Como funciona</button> acima ou o botão <em>Preencher exemplo</em> no passo 1.</p>
             </div>
 
             <div class="hidden lg:flex items-center justify-between px-2 text-[10px] text-slate-500">
@@ -513,20 +605,41 @@
 
             <!-- ========== STEP 1 · Paciente ========== -->
             <div id="step-1" class="step-content block">
-                <div class="glass-card rounded-3xl p-6 sm:p-8">
-                    <div class="mb-6">
-                        <h2 class="font-display text-xl font-bold text-slate-200">Quem vai tomar o medicamento?</h2>
-                        <p class="text-[13px] text-slate-400 mt-1">A mesma dose pode ser segura para uma pessoa e arriscada para outra.</p>
+                <div class="onboard mb-4" id="onboard-banner">
+                    <div>
+                        <p class="text-sm font-semibold text-slate-200 mb-1.5">Primeira vez aqui? São três passos.</p>
+                        <div class="onboard-steps">
+                            <span><b>1</b>Descreva o paciente</span>
+                            <span><b>2</b>Informe o medicamento</span>
+                            <span><b>3</b>Receba o relatório</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="fillExample()" class="btn-ghost px-3.5 py-2 rounded-lg text-xs flex items-center gap-2">
+                            <i class="fas fa-wand-magic-sparkles text-brand-teal" aria-hidden="true"></i> Preencher exemplo
+                        </button>
+                        <button onclick="dismissOnboard()" class="btn-link text-xs" aria-label="Ocultar orientação inicial">Ocultar</button>
+                    </div>
+                </div>
+
+                <div class="glass-card rounded-2xl p-6 sm:p-8">
+                    <div class="mb-6 flex items-start justify-between gap-4 flex-wrap">
+                        <div>
+                            <p class="step-kicker mb-1">Passo 1 de 3</p>
+                            <h2 class="font-display text-xl font-bold text-slate-200">Perfil do paciente</h2>
+                            <p class="text-[13px] text-slate-400 mt-1">Esses dados determinam como o organismo processa cada medicamento.</p>
+                        </div>
+                        <button onclick="fillExample()" class="btn-link flex items-center gap-1.5"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>Preencher exemplo</button>
                     </div>
 
-                    <div class="grid sm:grid-cols-2 gap-5">
+                    <div class="grid sm:grid-cols-2 gap-6">
                         <div class="space-y-5">
                             <div class="grid grid-cols-2 gap-3">
                                 <div>
                                     <label for="age" class="field-label">Idade</label>
                                     <div class="relative">
                                         <input id="age" type="number" min="0" max="120" value="45"
-                                               class="input-field font-mono w-full rounded-xl px-3.5 py-2.5 text-sm pr-12">
+                                               class="input-field font-mono w-full rounded-lg px-3.5 py-2.5 text-sm pr-12">
                                         <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 pointer-events-none">anos</span>
                                     </div>
                                 </div>
@@ -534,7 +647,7 @@
                                     <label for="weight" class="field-label">Peso</label>
                                     <div class="relative">
                                         <input id="weight" type="number" min="0" max="300" step="0.1" value="78"
-                                               class="input-field font-mono w-full rounded-xl px-3.5 py-2.5 text-sm pr-10">
+                                               class="input-field font-mono w-full rounded-lg px-3.5 py-2.5 text-sm pr-10">
                                         <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-500 pointer-events-none">kg</span>
                                     </div>
                                 </div>
@@ -555,16 +668,16 @@
                             </div>
 
                             <div>
-                                <label for="conditions" class="field-label">Condições de saúde</label>
-                                <textarea id="conditions" rows="2" class="input-field w-full rounded-xl px-3.5 py-2.5 text-sm resize-none"
-                                          placeholder="ex.: hipertensão, diabetes tipo 2, gestação…"></textarea>
+                                <label for="conditions" class="field-label">Condições de saúde <span class="normal-case font-medium tracking-normal text-slate-500">(opcional)</span></label>
+                                <textarea id="conditions" rows="2" class="input-field w-full rounded-lg px-3.5 py-2.5 text-sm resize-none"
+                                          placeholder="ex.: hipertensão, diabetes tipo 2, gestação"></textarea>
                             </div>
 
                             <div>
-                                <label for="allergies" class="field-label">Alergias conhecidas</label>
-                                <textarea id="allergies" rows="2" class="input-field w-full rounded-xl px-3.5 py-2.5 text-sm resize-none"
-                                          placeholder="ex.: dipirona, penicilina…"></textarea>
-                                <p class="text-[10px] text-slate-500 mt-1.5">Separe itens por vírgula ou por linha.</p>
+                                <label for="allergies" class="field-label">Alergias conhecidas <span class="normal-case font-medium tracking-normal text-slate-500">(opcional)</span></label>
+                                <textarea id="allergies" rows="2" class="input-field w-full rounded-lg px-3.5 py-2.5 text-sm resize-none"
+                                          placeholder="ex.: dipirona, penicilina"></textarea>
+                                <p class="field-help">Separe itens por vírgula ou por linha.</p>
                             </div>
                         </div>
 
@@ -574,28 +687,23 @@
                                 <span id="current-meds-count" class="count-badge">0</span>
                             </div>
                             <div class="flex gap-2">
-                                <input id="current-med-input" class="input-field flex-1 rounded-xl px-3.5 py-2.5 text-sm"
-                                       placeholder="ex.: losartana 50mg"
+                                <input id="current-med-input" class="input-field flex-1 rounded-lg px-3.5 py-2.5 text-sm"
+                                       placeholder="ex.: losartana 50mg — Enter para adicionar"
                                        onkeydown="if(event.key==='Enter'){event.preventDefault();addCurrentMed();}">
-                                <button onclick="addCurrentMed()" class="btn-primary px-4 rounded-xl" aria-label="Adicionar medicamento à lista">
+                                <button onclick="addCurrentMed()" class="btn-primary px-4 rounded-lg" aria-label="Adicionar medicamento à lista">
                                     <i class="fas fa-plus" aria-hidden="true"></i>
                                 </button>
                             </div>
+                            <p class="field-help">Inclua dose quando souber. Deixe vazio se o paciente não usa nenhum medicamento.</p>
                             <div id="current-meds-list" class="mt-3 space-y-2 overflow-y-auto custom-scroll max-h-56 flex-1">
                                 <p class="text-[11px] text-slate-500 text-center py-3">Nenhum medicamento adicionado</p>
-                            </div>
-
-                            <div class="hint-card mt-4">
-                                <i class="fas fa-lightbulb" aria-hidden="true"></i>
-                                <span><strong class="font-semibold text-slate-200">Por que pedimos isso?</strong>
-                                Idade, peso, condições e o que você já toma mudam como o corpo processa cada
-                                remédio — é esse cruzamento que revela interações invisíveis na bula.</span>
                             </div>
                         </div>
                     </div>
 
-                    <div class="flex justify-end mt-7 pt-5" style="border-top: 1px solid rgb(var(--ln) / .08);">
-                        <button onclick="nextStep(2)" class="btn-primary px-6 py-2.5 rounded-xl text-sm flex items-center gap-2">
+                    <div class="flex items-center justify-between gap-3 mt-7 pt-5 divider">
+                        <p class="text-[11px] text-slate-500">A seguir: informar o medicamento a avaliar.</p>
+                        <button onclick="nextStep(2)" class="btn-primary px-6 py-2.5 rounded-lg text-sm flex items-center gap-2">
                             Continuar <i class="fas fa-arrow-right text-xs" aria-hidden="true"></i>
                         </button>
                     </div>
@@ -604,115 +712,118 @@
 
             <!-- ========== STEP 2 · Medicamento ========== -->
             <div id="step-2" class="step-content">
-                <div class="glass-card rounded-3xl p-6 sm:p-8">
+                <div class="glass-card rounded-2xl p-6 sm:p-8">
                     <div class="mb-6">
-                        <h2 class="font-display text-xl font-bold text-slate-200">Qual medicamento você quer checar?</h2>
-                        <p class="text-[13px] text-slate-400 mt-1">Vamos analisá-lo contra o perfil e a medicação em uso.</p>
+                        <p class="step-kicker mb-1">Passo 2 de 3</p>
+                        <h2 class="font-display text-xl font-bold text-slate-200">Medicamento a avaliar</h2>
+                        <p class="text-[13px] text-slate-400 mt-1">Será analisado contra o perfil e a medicação em uso informados no passo anterior.</p>
                     </div>
 
-                    <label for="medication-search" class="field-label">Novo medicamento</label>
-                    <div class="relative">
-                        <i class="fas fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm" aria-hidden="true"></i>
-                        <input id="medication-search"
-                               class="input-field w-full rounded-2xl pl-11 pr-4 py-3.5 text-base font-medium"
-                               placeholder="ex.: sertralina, ibuprofeno, AAS…">
-                    </div>
-
-                    <div class="flex items-center gap-3 my-6" aria-hidden="true">
-                        <div class="flex-1 h-px" style="background: rgb(var(--ln) / .1);"></div>
-                        <span class="text-[11px] uppercase tracking-wider font-semibold text-slate-500">ou identifique pela embalagem</span>
-                        <div class="flex-1 h-px" style="background: rgb(var(--ln) / .1);"></div>
-                    </div>
-
-                    <div id="image-upload-area" class="upload-area" role="button" tabindex="0" aria-label="Enviar foto da embalagem do medicamento">
-                        <div class="w-11 h-11 mx-auto mb-3 rounded-xl flex items-center justify-center"
-                             style="background: rgb(var(--c-cyan) / .1); color: rgb(var(--c-cyan));">
-                            <i class="fas fa-camera" aria-hidden="true"></i>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="option-card">
+                            <h3><span>A</span>Digitar o nome</h3>
+                            <p class="text-[12px] text-slate-400 mt-1 mb-3">Nome comercial ou princípio ativo. Dose é opcional.</p>
+                            <label for="medication-search" class="sr-only">Novo medicamento</label>
+                            <div class="relative">
+                                <i class="fas fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm" aria-hidden="true"></i>
+                                <input id="medication-search"
+                                       class="input-field w-full rounded-lg pl-10 pr-4 py-3 text-base font-medium"
+                                       placeholder="ex.: sertralina 50mg">
+                            </div>
                         </div>
-                        <p class="text-sm font-semibold text-slate-300">Arraste uma foto da caixa ou clique para enviar</p>
-                        <p class="text-[11px] text-slate-500 mt-1">Nossa IA lê o nome do medicamento para você · JPG ou PNG · até 10MB</p>
-                    </div>
-                    <input type="file" id="image-upload" accept="image/png,image/jpeg,image/jpg" class="hidden" aria-hidden="true">
 
-                    <div id="image-preview" class="hidden mt-4 glass-card rounded-xl p-3 flex items-center gap-3">
-                        <img id="preview-img" alt="Pré-visualização da embalagem enviada" class="w-16 h-16 object-cover rounded-lg flex-none">
-                        <p id="ocr-result" class="text-xs text-slate-400 leading-relaxed" aria-live="polite"></p>
+                        <div class="option-card">
+                            <h3><span>B</span>Fotografar a embalagem</h3>
+                            <p class="text-[12px] text-slate-400 mt-1 mb-3">O reconhecimento por imagem identifica o nome e preenche o campo ao lado.</p>
+                            <div id="image-upload-area" class="upload-area" role="button" tabindex="0" aria-label="Enviar foto da embalagem do medicamento">
+                                <i class="fas fa-camera text-brand-teal mb-2" aria-hidden="true"></i>
+                                <p class="text-sm font-semibold text-slate-300">Arraste a foto ou clique para enviar</p>
+                                <p class="text-[11px] text-slate-500 mt-1">JPG ou PNG · até 10 MB</p>
+                            </div>
+                            <input type="file" id="image-upload" accept="image/png,image/jpeg,image/jpg" class="hidden" aria-hidden="true">
+                            <div id="image-preview" class="hidden mt-3 rounded-lg p-2.5 flex items-center gap-3" style="border: 1px solid rgb(var(--ln) / .1);">
+                                <img id="preview-img" alt="Pré-visualização da embalagem enviada" class="w-14 h-14 object-cover rounded-md flex-none">
+                                <p id="ocr-result" class="text-xs text-slate-400 leading-relaxed" aria-live="polite"></p>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="hint-card mt-5">
-                        <i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>
-                        <span><strong class="font-semibold text-slate-200">Dica:</strong> não sabe o nome exato?
-                        Fotografe a embalagem — o reconhecimento por imagem (OCR) identifica o medicamento
-                        e preenche o campo automaticamente.</span>
-                    </div>
-
-                    <div class="flex items-center justify-between mt-7 pt-5" style="border-top: 1px solid rgb(var(--ln) / .08);">
-                        <button onclick="goToStep(1)" class="btn-ghost px-5 py-2.5 rounded-xl text-sm flex items-center gap-2">
+                    <div class="flex items-center justify-between gap-3 mt-7 pt-5 divider">
+                        <button onclick="goToStep(1)" class="btn-ghost px-5 py-2.5 rounded-lg text-sm flex items-center gap-2">
                             <i class="fas fa-arrow-left text-xs" aria-hidden="true"></i> Voltar
                         </button>
-                        <button onclick="startAnalysis()" class="btn-primary px-6 py-2.5 rounded-xl text-sm flex items-center gap-2">
-                            <i class="fas fa-shield-heart text-xs" aria-hidden="true"></i> Analisar segurança
-                        </button>
+                        <div class="flex items-center gap-3">
+                            <p class="text-[11px] text-slate-500 hidden sm:block">A análise leva de 1 a 2 minutos.</p>
+                            <button onclick="startAnalysis()" class="btn-primary px-6 py-2.5 rounded-lg text-sm flex items-center gap-2">
+                                <i class="fas fa-shield-heart text-xs" aria-hidden="true"></i> Analisar segurança
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- ========== STEP 3 · Análise em andamento ========== -->
             <div id="step-3" class="step-content">
-                <div class="glass-card rounded-3xl p-8 sm:p-12 text-center max-w-2xl mx-auto">
-                    <svg class="w-full max-w-sm mx-auto ecg-fast" height="52" viewBox="0 0 600 52" preserveAspectRatio="none" aria-hidden="true">
-                        <path class="ecg-track" fill="none" stroke-width="1.5"
-                              d="M0 30 H150 L162 30 L170 10 L180 46 L188 20 L194 30 H340 L352 30 L360 10 L370 46 L378 20 L384 30 H600"/>
-                        <path class="ecg-pulse" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" pathLength="600"
-                              d="M0 30 H150 L162 30 L170 10 L180 46 L188 20 L194 30 H340 L352 30 L360 10 L370 46 L378 20 L384 30 H600"/>
-                    </svg>
-
-                    <h2 class="font-display text-xl font-bold text-slate-200 mt-6 mb-1.5">Processando análise</h2>
-                    <p class="text-sm text-slate-400" id="loading-text" aria-live="polite">Conectando com LLM...</p>
-                    <p class="text-[11px] text-slate-500 mt-2" id="loading-time">Tempo estimado: 30 a 60 segundos</p>
-
-                    <div class="mt-6 p-4 glass-card rounded-2xl max-w-sm mx-auto">
-                        <p class="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1">Analisando</p>
-                        <p id="analyzing-med" class="font-display font-bold text-brand-cyan text-base">---</p>
-                        <p id="analyzing-vs" class="text-[11px] text-slate-500 mt-1"></p>
+                <div class="glass-card rounded-2xl p-6 sm:p-8 max-w-3xl mx-auto">
+                    <div class="mb-5 flex items-start justify-between gap-4 flex-wrap">
+                        <div>
+                            <p class="step-kicker mb-1">Passo 3 de 3</p>
+                            <h2 class="font-display text-xl font-bold text-slate-200">Análise em andamento</h2>
+                            <p class="text-sm text-slate-400 mt-1" id="loading-text" aria-live="polite">Conectando com LLM...</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[10px] uppercase tracking-wider font-bold text-slate-500">Analisando</p>
+                            <p id="analyzing-med" class="font-display font-bold text-slate-200 text-base">---</p>
+                            <p id="analyzing-vs" class="text-[11px] text-slate-500 mt-0.5 max-w-xs truncate"></p>
+                        </div>
                     </div>
 
-                    <!-- Pipeline didático: quem está trabalhando agora -->
-                    <div class="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 mt-7">
-                        <span class="flex items-center gap-2 text-[11px] font-semibold text-slate-400">
-                            <span class="stage-dot" style="--d:0s"></span> Farmacologista IA
-                        </span>
-                        <i class="fas fa-angle-right text-[10px] text-slate-600" aria-hidden="true"></i>
-                        <span class="flex items-center gap-2 text-[11px] font-semibold text-slate-400">
-                            <span class="stage-dot" style="--d:.6s"></span> Revisor crítico
-                        </span>
-                        <i class="fas fa-angle-right text-[10px] text-slate-600" aria-hidden="true"></i>
-                        <span class="flex items-center gap-2 text-[11px] font-semibold text-slate-400">
-                            <span class="stage-dot" style="--d:1.2s"></span> Relator clínico
-                        </span>
+                    <!-- Monitor ECG: único indicador de progresso -->
+                    <div class="ecg-monitor" id="ecg-monitor" style="--bpm:60;--p:0" role="img" aria-label="Progresso da análise">
+                        <div class="ecg-readout">
+                            <span>FC <b id="ecg-bpm">60</b><small>bpm</small></span>
+                            <span class="ecg-pct" id="ecg-pct">0%</span>
+                            <span>tempo <b class="!text-sm !font-medium" style="color: rgb(var(--tx-3))" id="ecg-elapsed">00:00</b></span>
+                        </div>
+                        <svg class="ecg-svg" viewBox="0 0 600 120" preserveAspectRatio="none" aria-hidden="true">
+                            <g class="ecg-grid">
+                                <line x1="0" y1="30" x2="600" y2="30"/><line x1="0" y1="60" x2="600" y2="60"/><line x1="0" y1="90" x2="600" y2="90"/>
+                                <line x1="100" y1="0" x2="100" y2="120"/><line x1="200" y1="0" x2="200" y2="120"/><line x1="300" y1="0" x2="300" y2="120"/>
+                                <line x1="400" y1="0" x2="400" y2="120"/><line x1="500" y1="0" x2="500" y2="120"/>
+                            </g>
+                            <path class="ecg-base"
+                                  d="M0 70 H60 L70 62 L80 70 H100 L106 70 L112 22 L120 104 L128 58 L134 70 H160 L172 60 L184 70 H260 L270 62 L280 70 H300 L306 70 L312 22 L320 104 L328 58 L334 70 H360 L372 60 L384 70 H460 L470 62 L480 70 H500 L506 70 L512 22 L520 104 L528 58 L534 70 H560 L572 60 L584 70 H600"/>
+                            <path class="ecg-trace" pathLength="1000"
+                                  d="M0 70 H60 L70 62 L80 70 H100 L106 70 L112 22 L120 104 L128 58 L134 70 H160 L172 60 L184 70 H260 L270 62 L280 70 H300 L306 70 L312 22 L320 104 L328 58 L334 70 H360 L372 60 L384 70 H460 L470 62 L480 70 H500 L506 70 L512 22 L520 104 L528 58 L534 70 H560 L572 60 L584 70 H600"/>
+                        </svg>
+                        <div class="ecg-progress"><div class="ecg-progress-fill"></div></div>
                     </div>
-                    <p class="text-[10px] text-slate-500 mt-3 max-w-sm mx-auto">
-                        Cada análise passa por um agente especialista, um revisor que questiona as
-                        conclusões e um relator que redige o laudo final.
-                    </p>
+
+                    <div class="mt-5" aria-label="Fases da análise">
+                        <div class="phase" id="phase-pending"><span class="phase-ico"></span><span>Solicitação recebida e enfileirada</span></div>
+                        <div class="phase" id="phase-running"><span class="phase-ico"></span><span>Agentes analisando contraindicações, interações e reações</span></div>
+                        <div class="phase" id="phase-review"><span class="phase-ico"></span><span>Revisão crítica e redação do laudo</span></div>
+                    </div>
+                    <p class="text-[11px] text-slate-500 mt-4" id="loading-time">Tempo estimado: 1 a 2 minutos. Você pode manter esta aba aberta.</p>
                 </div>
             </div>
-
             <!-- ========== STEP 4 · Relatório ========== -->
             <div id="step-4" class="step-content">
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
                     <!-- Resultados principais -->
-                    <div class="lg:col-span-2 space-y-4 overflow-y-auto custom-scroll max-h-[70vh] pr-1">
+                    <div class="lg:col-span-2 space-y-4">
 
-                        <div class="flex items-center justify-between mb-1">
-                            <h2 class="font-display text-lg font-bold gradient-text">Relatório de Segurança</h2>
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <p class="step-kicker mb-1">Resultado</p>
+                                <h2 class="font-display text-xl font-bold text-slate-200">Relatório de segurança</h2>
+                            </div>
                             <span id="risk-badge" class="px-3 py-1 rounded-full text-[10px] font-bold glass-card text-slate-400" aria-live="polite">
                                 <i class="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i> Carregando
                             </span>
                         </div>
 
-                        <!-- Contraindicações -->
                         <!-- Guardrail: revisão humana -->
                         <div id="human-review-banner" class="hidden result-card border border-brand-amber/40">
                             <div class="p-4 flex items-start gap-3">
@@ -725,70 +836,53 @@
                                 </div>
                             </div>
                         </div>
-                        <div id="contraindications-section" class="result-card">
-                            <div class="result-card-header bg-brand-rose/5">
-                                <div class="w-7 h-7 rounded-lg bg-brand-rose/15 text-brand-rose flex items-center justify-center text-xs">
-                                    <i class="fas fa-ban" aria-hidden="true"></i>
-                                </div>
-                                <div class="min-w-0">
-                                    <h3 class="font-display font-semibold text-slate-200 text-sm leading-tight">Contraindicações</h3>
-                                    <p class="text-[10px] text-slate-500">Situações em que este medicamento não deve ser usado</p>
-                                </div>
-                                <span id="contraindication-count" class="ml-auto text-[9px] bg-brand-rose/15 text-brand-rose px-2 py-0.5 rounded-full font-semibold">0</span>
-                            </div>
-                            <div id="contraindications-list" class="p-4">
-                                <p class="text-slate-500 text-sm">Nenhuma contraindicação identificada</p>
-                            </div>
-                        </div>
 
-                        <!-- Interações -->
-                        <div id="interactions-section" class="result-card">
-                            <div class="result-card-header bg-brand-amber/5">
-                                <div class="w-7 h-7 rounded-lg bg-brand-amber/15 text-brand-amber flex items-center justify-center text-xs">
-                                    <i class="fas fa-exchange-alt" aria-hidden="true"></i>
-                                </div>
-                                <div class="min-w-0">
-                                    <h3 class="font-display font-semibold text-slate-200 text-sm leading-tight">Interações Medicamentosas</h3>
-                                    <p class="text-[10px] text-slate-500">Como este medicamento conversa com os que já estão em uso</p>
-                                </div>
-                                <span id="interaction-count" class="ml-auto text-[9px] bg-brand-amber/15 text-brand-amber px-2 py-0.5 rounded-full font-semibold">0</span>
+                        <!-- Seções do laudo em abas -->
+                        <div class="glass-card rounded-2xl p-2 sm:p-3" data-tabs>
+                            <div class="tabs tabs-compact" role="tablist" aria-label="Seções do relatório">
+                                <button class="tab-btn" role="tab" aria-selected="true" aria-controls="report-contra" id="tab-contra">
+                                    <i class="fas fa-ban text-brand-rose" aria-hidden="true"></i>Contraindicações
+                                    <span id="contraindication-count" class="tab-count">0</span>
+                                </button>
+                                <button class="tab-btn" role="tab" aria-selected="false" aria-controls="report-inter" id="tab-inter">
+                                    <i class="fas fa-exchange-alt text-brand-amber" aria-hidden="true"></i>Interações
+                                    <span id="interaction-count" class="tab-count">0</span>
+                                </button>
+                                <button class="tab-btn" role="tab" aria-selected="false" aria-controls="report-adverse" id="tab-adverse">
+                                    <i class="fas fa-allergies text-violet-400" aria-hidden="true"></i>Reações adversas
+                                    <span id="adverse-count" class="tab-count">0</span>
+                                </button>
+                                <button class="tab-btn" role="tab" aria-selected="false" aria-controls="report-reco" id="tab-reco">
+                                    <i class="fas fa-user-md text-brand-cyan" aria-hidden="true"></i>Recomendações
+                                    <span id="recommendation-count" class="tab-count">0</span>
+                                </button>
                             </div>
-                            <div id="interactions-list" class="p-4">
-                                <p class="text-slate-500 text-sm">Nenhuma interação significativa</p>
-                            </div>
-                        </div>
 
-                        <!-- Reações adversas -->
-                        <div id="adverse-section" class="result-card">
-                            <div class="result-card-header bg-violet-500/5">
-                                <div class="w-7 h-7 rounded-lg bg-violet-500/15 text-violet-400 flex items-center justify-center text-xs">
-                                    <i class="fas fa-allergies" aria-hidden="true"></i>
+                            <div class="overflow-y-auto custom-scroll max-h-[62vh]">
+                                <div id="report-contra" class="tab-panel is-active" role="tabpanel" aria-labelledby="tab-contra">
+                                    <p class="text-[11px] text-slate-500 px-4 pt-4">Situações em que este medicamento não deve ser usado para este perfil.</p>
+                                    <div id="contraindications-list" class="p-4">
+                                        <p class="text-slate-500 text-sm">Nenhuma contraindicação identificada</p>
+                                    </div>
                                 </div>
-                                <div class="min-w-0">
-                                    <h3 class="font-display font-semibold text-slate-200 text-sm leading-tight">Reações Adversas Potenciais</h3>
-                                    <p class="text-[10px] text-slate-500">Efeitos indesejados possíveis para este perfil</p>
+                                <div id="report-inter" class="tab-panel" role="tabpanel" aria-labelledby="tab-inter">
+                                    <p class="text-[11px] text-slate-500 px-4 pt-4">Como este medicamento interage com os que já estão em uso.</p>
+                                    <div id="interactions-list" class="p-4">
+                                        <p class="text-slate-500 text-sm">Nenhuma interação significativa</p>
+                                    </div>
                                 </div>
-                                <span id="adverse-count" class="ml-auto text-[9px] bg-violet-500/15 text-violet-400 px-2 py-0.5 rounded-full font-semibold">0</span>
-                            </div>
-                            <div id="adverse-reactions-list" class="p-4">
-                                <p class="text-slate-500 text-sm">Perfil de segurança favorável</p>
-                            </div>
-                        </div>
-
-                        <!-- Recomendações -->
-                        <div id="recommendations-section" class="result-card">
-                            <div class="result-card-header bg-brand-cyan/5">
-                                <div class="w-7 h-7 rounded-lg bg-brand-cyan/15 text-brand-cyan flex items-center justify-center text-xs">
-                                    <i class="fas fa-user-md" aria-hidden="true"></i>
+                                <div id="report-adverse" class="tab-panel" role="tabpanel" aria-labelledby="tab-adverse">
+                                    <p class="text-[11px] text-slate-500 px-4 pt-4">Efeitos indesejados possíveis para este perfil.</p>
+                                    <div id="adverse-reactions-list" class="p-4">
+                                        <p class="text-slate-500 text-sm">Perfil de segurança favorável</p>
+                                    </div>
                                 </div>
-                                <div class="min-w-0">
-                                    <h3 class="font-display font-semibold text-slate-200 text-sm leading-tight">Recomendações Clínicas</h3>
-                                    <p class="text-[10px] text-slate-500">O que fazer com essas informações</p>
+                                <div id="report-reco" class="tab-panel" role="tabpanel" aria-labelledby="tab-reco">
+                                    <p class="text-[11px] text-slate-500 px-4 pt-4">O que fazer com essas informações.</p>
+                                    <div id="recommendations-list" class="p-4">
+                                        <p class="text-slate-500 text-sm">Aguardando análise</p>
+                                    </div>
                                 </div>
-                                <span id="recommendation-count" class="ml-auto text-[9px] bg-brand-cyan/15 text-brand-cyan px-2 py-0.5 rounded-full font-semibold">0</span>
-                            </div>
-                            <div id="recommendations-list" class="p-4">
-                                <p class="text-slate-500 text-sm">Aguardando análise</p>
                             </div>
                         </div>
                     </div>
@@ -797,7 +891,7 @@
                     <div class="space-y-4">
                         <!-- Risco combinado -->
                         <div class="glass-card p-4 rounded-2xl">
-                            <h4 class="font-display font-semibold text-slate-200 text-sm mb-3 text-center">Risco Combinado</h4>
+                            <h4 class="font-display font-semibold text-slate-200 text-sm mb-3 text-center">Risco combinado</h4>
                             <div class="relative w-28 h-28 mx-auto">
                                 <svg class="w-full h-full progress-ring" role="img" aria-label="Indicador de risco combinado">
                                     <circle cx="56" cy="56" r="48" style="stroke: rgb(var(--tx-5) / .25);" stroke-width="8" fill="none"/>
@@ -816,18 +910,19 @@
                                 </div>
                             </div>
                             <div class="grid grid-cols-2 gap-2 mt-4">
-                                <div class="p-2 rounded-lg glass-card">
+                                <div class="p-2 rounded-lg" style="border: 1px solid rgb(var(--ln) / .1);">
                                     <p class="text-[8px] text-slate-500 uppercase font-semibold text-center mb-1">Confiabilidade</p>
                                     <p id="confidence-value" class="font-display font-bold text-brand-cyan text-sm text-center">--%</p>
                                     <div class="mt-1.5 h-1 bg-surface-700 rounded-full overflow-hidden">
                                         <div id="confidence-bar" class="h-full bg-brand-cyan rounded-full transition-all duration-500" style="width: 0%"></div>
                                     </div>
                                 </div>
-                                <div class="text-center p-2 rounded-lg glass-card">
+                                <div class="text-center p-2 rounded-lg" style="border: 1px solid rgb(var(--ln) / .1);">
                                     <p class="text-[8px] text-slate-500 uppercase font-semibold">Modelo</p>
                                     <p id="model-used" class="font-display font-bold text-slate-200 text-[10px] mt-1">--</p>
                                 </div>
                             </div>
+                            <p class="text-[10px] text-slate-500 mt-3 text-center">Escala na aba <button class="btn-link text-[10px]" onclick="activateTab('tab-risk'); window.scrollTo({top:0,behavior:'smooth'})">Como ler o risco</button>.</p>
                         </div>
 
                         <!-- Resumo -->
@@ -844,40 +939,16 @@
                             </div>
                         </div>
 
-                        <!-- Didático: como ler o risco -->
-                        <div class="glass-card p-4 rounded-2xl">
-                            <h4 class="font-display font-semibold text-sm text-slate-200 mb-3">Como ler o risco</h4>
-                            <ul class="space-y-2.5 text-[11px] leading-snug text-slate-400">
-                                <li class="flex gap-2.5">
-                                    <span class="legend-dot bg-brand-emerald"></span>
-                                    <span><strong class="text-slate-300 font-semibold">Baixo</strong> — sem sinais relevantes; mantenha o acompanhamento de rotina.</span>
-                                </li>
-                                <li class="flex gap-2.5">
-                                    <span class="legend-dot bg-brand-amber"></span>
-                                    <span><strong class="text-slate-300 font-semibold">Moderado</strong> — monitore sintomas e confirme doses com quem prescreveu.</span>
-                                </li>
-                                <li class="flex gap-2.5">
-                                    <span class="legend-dot bg-brand-rose"></span>
-                                    <span><strong class="text-slate-300 font-semibold">Alto</strong> — converse com médico ou farmacêutico antes de usar.</span>
-                                </li>
-                                <li class="flex gap-2.5">
-                                    <span class="legend-dot bg-red-500"></span>
-                                    <span><strong class="text-slate-300 font-semibold">Crítico</strong> — combinação potencialmente perigosa; procure orientação imediata.</span>
-                                </li>
-                            </ul>
-                        </div>
-
                         <!-- Ações -->
-                        <button onclick="resetAnalysis()" class="w-full py-2.5 rounded-xl glass-card text-slate-300 font-semibold hover:bg-surface-600/50 transition flex items-center justify-center gap-2 text-sm">
-                            <i class="fas fa-redo text-slate-500 text-xs" aria-hidden="true"></i> Nova Análise
-                        </button>
-                        <button onclick="downloadReport()" class="w-full py-2.5 rounded-xl btn-primary flex items-center justify-center gap-2 text-sm">
+                        <button onclick="downloadReport()" class="w-full py-2.5 rounded-lg btn-primary flex items-center justify-center gap-2 text-sm">
                             <i class="fas fa-file-arrow-down text-xs" aria-hidden="true"></i> Exportar laudo (JSON)
+                        </button>
+                        <button onclick="resetAnalysis()" class="w-full py-2.5 rounded-lg btn-ghost flex items-center justify-center gap-2 text-sm">
+                            <i class="fas fa-redo text-slate-500 text-xs" aria-hidden="true"></i> Nova análise
                         </button>
                     </div>
                 </div>
             </div>
-
             <!-- ========== HITL · Revisão Humana ========== -->
             <div id="step-hitl" class="step-content">
                 <div class="glass-card rounded-3xl p-6 sm:p-8">
@@ -897,6 +968,7 @@
                     <ul id="hitl-list" class="space-y-3" aria-label="Fila de revisão humana"></ul>
                 </div>
             </div>
+
 
         </section>
     </main>
@@ -948,6 +1020,55 @@
             var dark = document.documentElement.classList.toggle('dark');
             try { localStorage.setItem('medsafe-theme', dark ? 'dark' : 'light'); } catch (e) { /* ok */ }
         }
+
+        // =====================================================================
+        // Abas — qualquer [data-tabs] com .tab-btn[aria-controls] + .tab-panel.
+        // Acessível: role=tab/tabpanel, setas ← → navegam, Home/End.
+        // =====================================================================
+        function activateTab(btnOrId) {
+            var btn = typeof btnOrId === 'string' ? document.getElementById(btnOrId) : btnOrId;
+            if (!btn) return;
+            var group = btn.closest('[data-tabs]');
+            if (!group) return;
+            group.querySelectorAll('.tab-btn').forEach(function (b) {
+                var on = b === btn;
+                b.setAttribute('aria-selected', on ? 'true' : 'false');
+                b.tabIndex = on ? 0 : -1;
+                var panel = document.getElementById(b.getAttribute('aria-controls'));
+                if (panel) panel.classList.toggle('is-active', on);
+            });
+        }
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('[data-tabs] .tab-btn');
+            if (btn) activateTab(btn);
+        });
+        document.addEventListener('keydown', function (e) {
+            var btn = e.target.closest ? e.target.closest('[data-tabs] .tab-btn') : null;
+            if (!btn) return;
+            var tabs = Array.prototype.slice.call(btn.closest('[data-tabs]').querySelectorAll('.tab-btn'));
+            var i = tabs.indexOf(btn), next = null;
+            if (e.key === 'ArrowRight') next = tabs[(i + 1) % tabs.length];
+            else if (e.key === 'ArrowLeft') next = tabs[(i - 1 + tabs.length) % tabs.length];
+            else if (e.key === 'Home') next = tabs[0];
+            else if (e.key === 'End') next = tabs[tabs.length - 1];
+            if (next) { e.preventDefault(); next.focus(); activateTab(next); }
+        });
+        document.querySelectorAll('[data-tabs]').forEach(function (g) {
+            g.querySelectorAll('.tab-btn').forEach(function (b, i) { b.tabIndex = i === 0 ? 0 : -1; });
+        });
+
+        // Onboarding do passo 1: some depois que o usuário dispensa (persistido).
+        function dismissOnboard() {
+            var el = document.getElementById('onboard-banner');
+            if (el) el.classList.add('hidden');
+            try { localStorage.setItem('medsafe-onboard', 'dismissed'); } catch (e) { /* ok */ }
+        }
+        try {
+            if (localStorage.getItem('medsafe-onboard') === 'dismissed') {
+                var ob = document.getElementById('onboard-banner');
+                if (ob) ob.classList.add('hidden');
+            }
+        } catch (e) { /* ok */ }
 
         // =====================================================================
         // Auth — sessão JWT (login, refresh com rotação, fetch autenticado)
@@ -1095,7 +1216,12 @@
                             403: 'Conta bloqueada por tentativas seguidas. Aguarde 30 minutos.',
                             429: 'Muitas tentativas. Aguarde um instante e tente de novo.'
                         };
-                        throw new Error(msgs[resp.status] || err.detail || 'Falha no login.');
+                        // err.detail pode ser string ou lista de erros de validação
+                        // do FastAPI (objetos) — nunca renderizar objeto cru.
+                        const detail = Array.isArray(err.detail)
+                            ? err.detail.map(d => (d && d.msg) || '').filter(Boolean).join(' ')
+                            : (typeof err.detail === 'string' ? err.detail : '');
+                        throw new Error(msgs[resp.status] || detail || 'Falha no login.');
                     }
                     const tok = await resp.json();
                     this.access = tok.access_token;
@@ -1134,6 +1260,9 @@
             },
 
             renderChip() {
+                // Sincroniza UI dependente de sessão (nav HITL vive em outro
+                // <script>; guarda para ordem de parse).
+                if (typeof updateHitlNav === 'function') updateHitlNav();
                 const el = document.getElementById('auth-chip');
                 if (!el) return;
                 if (this.access) {
@@ -1461,13 +1590,21 @@
         }
 
         // ===================== HITL (Human-in-the-Loop) =====================
-        // Nav visível apenas quando o backend reporta hitl_enabled em /health.
+        // Nav visível apenas com hitl_enabled em /health E sessão autenticada
+        // (as rotas de triagem exigem JWT; anônimo só receberia 401).
+        let hitlEnabled = false;
         async function initHitl() {
             try {
                 const resp = await fetch(`${API_URL}/api/v2/health`);
                 const h = await resp.json();
-                if (h && h.hitl_enabled) document.getElementById('nav-hitl').classList.remove('hidden');
+                hitlEnabled = !!(h && h.hitl_enabled);
             } catch (e) { /* backend indisponível: mantém oculto */ }
+            updateHitlNav();
+        }
+
+        function updateHitlNav() {
+            const nav = document.getElementById('nav-hitl');
+            if (nav) nav.classList.toggle('hidden', !(hitlEnabled && Auth.hasSession()));
         }
 
         function goToHitl() {
@@ -1678,14 +1815,72 @@
 
         function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-        async function pollAnalysisStatus(sessionId, timeoutMs = 600000, intervalMs = 2000) {
+        // Monitor ECG do passo 3. O único indicador de progresso é a medida do
+        // batimento: FC (48→100 bpm), velocidade do traçado e barra sobem com o
+        // progresso estimado contra a duração típica com GPU (~65 s), saturando
+        // em 92% até o resultado chegar. Status do backend → fase visual.
+        const EcgLoader = (() => {
+            const EXPECTED_MS = 75000;
+            const PHASES = ['pending', 'running', 'review'];
+            const STATUS_TO_PHASE = { pending: 'pending', running: 'running', awaiting_review: 'review', completed: 'done' };
+            let start = 0, phase = 'pending', timer = null;
+            const $ = id => document.getElementById(id);
+
+            function fmt(ms) {
+                const s = Math.max(0, Math.floor(ms / 1000));
+                return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+            }
+
+            function render() {
+                const monitor = $('ecg-monitor');
+                if (!monitor) return;
+                const elapsed = Date.now() - start;
+                let p;
+                if (phase === 'pending') p = Math.min(0.08, elapsed / EXPECTED_MS);
+                else if (phase === 'running') p = Math.min(0.92, 0.08 + (elapsed / EXPECTED_MS) * 0.84);
+                else if (phase === 'review') p = 0.96;
+                else p = 1;
+                const bpm = Math.round(48 + p * 52);
+                monitor.style.setProperty('--p', p.toFixed(3));
+                monitor.style.setProperty('--bpm', bpm);
+                monitor.classList.toggle('done', phase === 'done');
+                $('ecg-bpm').textContent = bpm;
+                $('ecg-pct').textContent = Math.round(p * 100) + '%';
+                $('ecg-elapsed').textContent = fmt(elapsed);
+                const idx = phase === 'done' ? PHASES.length : PHASES.indexOf(phase);
+                PHASES.forEach((name, i) => {
+                    const el = $('phase-' + name);
+                    if (!el) return;
+                    el.classList.toggle('is-done', i < idx);
+                    el.classList.toggle('is-current', i === idx);
+                });
+            }
+
+            return {
+                start() { start = Date.now(); phase = 'pending'; clearInterval(timer); timer = setInterval(render, 500); render(); },
+                setPhase(status) { const p = STATUS_TO_PHASE[status]; if (p && p !== phase) { phase = p; render(); } },
+                // Sucesso: congela em 100% (verde). Falha: apenas para o relógio.
+                finish() { phase = 'done'; render(); clearInterval(timer); timer = null; },
+                stop() { clearInterval(timer); timer = null; },
+            };
+        })();
+
+        async function pollAnalysisStatus(sessionId, timeoutMs = 600000, intervalMs = 3000) {
             const start = Date.now();
+            let delay = intervalMs;
             while (true) {
                 if (Date.now() - start > timeoutMs) {
                     throw new Error('Análise excedeu o tempo limite. Tente novamente.');
                 }
 
                 const resp = await Auth.fetch(`${API_URL}/api/v2/status/${encodeURIComponent(sessionId)}`, { method: 'GET' });
+                if (resp.status === 429) {
+                    // Rate limit: respeita Retry-After (ou backoff) e continua o polling em vez de falhar.
+                    const retryAfter = parseInt(resp.headers.get('Retry-After') || '0', 10);
+                    delay = Math.min(Math.max(retryAfter * 1000, delay * 2), 30000);
+                    await sleep(delay);
+                    continue;
+                }
                 if (!resp.ok) {
                     const err = await resp.json().catch(() => ({}));
                     throw new Error(err.detail || `Erro ao consultar status: ${resp.status}`);
@@ -1701,6 +1896,7 @@
                 if (statusMessages[status]) {
                     document.getElementById('loading-text').innerText = statusMessages[status];
                 }
+                EcgLoader.setPhase(status);
 
                 if (status === 'completed' || status === 'failed' || status === 'rejected' || status === 'awaiting_review') {
                     return data;
@@ -1735,6 +1931,7 @@
                 ? `vs. ${currentMedications.map(m => m.name).join(', ')}`
                 : 'Paciente sem medicamentos em uso';
 
+            EcgLoader.start();
             const loadingText = document.getElementById('loading-text');
             const messages = [
                 "Conectando com LLM...",
@@ -1775,6 +1972,7 @@
 
                 analysisResult = await pollAnalysisStatus(sessionId);
                 clearInterval(interval);
+                EcgLoader.finish();
 
                 displayResults();
                 goToStep(4);
@@ -1785,6 +1983,7 @@
 
             } catch (error) {
                 clearInterval(interval);
+                EcgLoader.stop();
                 if (error && error.message === 'AUTH_REQUIRED') { goToStep(2); return; }
                 let errorMsg = 'Erro ao analisar medicamento';
                 if (error.name === 'AbortError') {
@@ -1804,8 +2003,9 @@
         function displayResults() {
             if (!analysisResult) return;
 
-            const riskLevel = analysisResult.risk_level || 'low';
-            updateRiskDisplay(riskLevel);
+            // Sem fallback para 'low': ausência/valor desconhecido vira 'unknown'
+            // (Indeterminado) — nunca minimizar risco por defeito de dados.
+            updateRiskDisplay(analysisResult.risk_level, analysisResult.risk_score);
 
             // Guardrail: revisão humana obrigatória (ex.: medicamento não identificado)
             const hrBanner = document.getElementById('human-review-banner');
@@ -1907,18 +2107,24 @@
             document.getElementById('agent-summary').textContent = cleanText(summary).substring(0, 180);
         }
 
-        function updateRiskDisplay(risk) {
-            const riskConfig = {
-                'low': { score: 2.5, label: 'Baixo', color: '#10b981', bgColor: 'bg-brand-emerald/10', textColor: 'text-brand-emerald', offset: 242 },
-                'medium': { score: 5.0, label: 'Moderado', color: '#f59e0b', bgColor: 'bg-brand-amber/10', textColor: 'text-brand-amber', offset: 151 },
-                'high': { score: 7.5, label: 'Alto', color: '#f43f5e', bgColor: 'bg-brand-rose/10', textColor: 'text-brand-rose', offset: 75 },
-                'critical': { score: 9.5, label: 'Crítico', color: '#dc2626', bgColor: 'bg-red-500/10', textColor: 'text-red-500', offset: 30 }
+        function updateRiskDisplay(risk, backendScore) {
+            // Nível/label/nota vêm do módulo compartilhado (js/risk-display.js) —
+            // fonte única de verdade, espelhando o enum RiskLevel do backend.
+            // A nota NUNCA é inventada: sem score numérico do backend, exibe '--'.
+            const d = MedSafeRisk.riskDisplay(risk, backendScore);
+
+            // Aqui fica apenas apresentação (cores/gauge), chaveada por nível.
+            const presentation = {
+                'low':      { color: '#10b981', bgColor: 'bg-brand-emerald/10', textColor: 'text-brand-emerald', offset: 242 },
+                'medium':   { color: '#f59e0b', bgColor: 'bg-brand-amber/10',   textColor: 'text-brand-amber',   offset: 151 },
+                'high':     { color: '#f43f5e', bgColor: 'bg-brand-rose/10',    textColor: 'text-brand-rose',    offset: 75 },
+                'critical': { color: '#dc2626', bgColor: 'bg-red-500/10',       textColor: 'text-red-500',       offset: 30 },
+                'unknown':  { color: '#64748b', bgColor: 'bg-slate-500/10',     textColor: 'text-slate-400',     offset: 242 }
             };
+            const config = presentation[d.level];
 
-            const config = riskConfig[risk] || riskConfig['low'];
-
-            document.getElementById('risk-score').textContent = config.score.toFixed(1);
-            document.getElementById('risk-label').textContent = config.label;
+            document.getElementById('risk-score').textContent = d.scoreText;
+            document.getElementById('risk-label').textContent = d.label;
             document.getElementById('risk-label').className = `text-[9px] uppercase font-bold mt-0.5 px-2 py-0.5 rounded-full ${config.bgColor} ${config.textColor}`;
 
             const circle = document.getElementById('risk-circle');
@@ -1927,7 +2133,7 @@
 
             const badge = document.getElementById('risk-badge');
             badge.className = `px-3 py-1 rounded-full text-[10px] font-bold ${config.bgColor} ${config.textColor}`;
-            badge.innerHTML = `<i class="fas fa-exclamation-triangle mr-1"></i> ${config.label}`;
+            badge.innerHTML = `<i class="fas fa-exclamation-triangle mr-1"></i> ${d.label}`;
         }
 
         function displayContraindications(items) {

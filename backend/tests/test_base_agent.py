@@ -5,7 +5,6 @@ Tests the abstract base class functionality for all MedSafe agents.
 """
 
 import time
-from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import httpx

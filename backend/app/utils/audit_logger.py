@@ -516,9 +516,9 @@ class AuditLogger:
 
         # Tentar executar em event loop existente
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             # Se há um loop rodando, agendar como task
-            future = asyncio.ensure_future(self.log(event_type, action, **kwargs))
+            asyncio.ensure_future(self.log(event_type, action, **kwargs))
             return str(uuid4())  # Retornar ID temporário
         except RuntimeError:
             # Não há event loop, fazer log apenas

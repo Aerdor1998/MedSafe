@@ -69,12 +69,12 @@ class OpenFDAService:
         if self._circuit_open_time:
             elapsed = (datetime.now() - self._circuit_open_time).total_seconds()
             if elapsed >= OPENFDA_CIRCUIT_RECOVERY_TIMEOUT:
-                logger.info(f"OpenFDA circuit breaker HALF-OPEN (testing recovery)")
+                logger.info("OpenFDA circuit breaker HALF-OPEN (testing recovery)")
                 self._circuit_open = False
                 self._failure_count = 0
                 return True
 
-        logger.warning(f"OpenFDA circuit breaker OPEN - skipping request")
+        logger.warning("OpenFDA circuit breaker OPEN - skipping request")
         return False
 
     def _record_success(self):

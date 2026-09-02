@@ -87,7 +87,8 @@ def import_interactions():
         cursor,
         """
         INSERT INTO drug_interactions
-        (drug_a, drug_b, drug_a_norm, drug_b_norm, interaction_type, severity, mechanism, clinical_effect, recommendation, source)
+        (drug_a, drug_b, drug_a_norm, drug_b_norm, interaction_type,
+         severity, mechanism, clinical_effect, recommendation, source)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """,
         interactions,

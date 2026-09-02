@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "promote_threshold": 2,
+  "window_days": 45,
+  "quarantine_threshold": 2,
+  "next_id": 5,
+  "lessons": [
+    {
+      "id": "L-001",
+      "key": "surviving_mutant::when testing login rejection add a test that mocks a real password hash and posts the wrong password to exercise verify password directly a test that only mocks user none never reaches that branch",
+      "text": "When testing login rejection, add a test that mocks a real password hash and POSTs the wrong password to exercise verify_password() directly - a test that only mocks user=None never reaches that branch.",
+      "signal": "surviving_mutant",
+      "scope": "backend/tests/test_api_endpoints.py",
+      "status": "candidate",
+      "features": [
+        "production-readiness"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "backend/app/routers/auth.py:152 (mutant #1) (backend/tests/test_api_endpoints.py)"
+      ],
+      "created": "2026-08-06T01:21:48Z",
+      "last_seen": "2026-08-06T01:21:48Z"
+    },
+    {
+      "id": "L-002",
+      "key": "surviving_mutant::security validation tests that always patch dict a valid secret env var never exercise the sentinel default absence rejection branch add an explicit absent value test with env file none to bypass env auto loading",
+      "text": "Security-validation tests that always patch.dict a valid secret env var never exercise the sentinel-default/absence-rejection branch - add an explicit absent-value test with _env_file=None to bypass .env auto-loading.",
+      "signal": "surviving_mutant",
+      "scope": "backend/tests/test_config.py",
+      "status": "candidate",
+      "features": [
+        "production-readiness"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "backend/app/config.py:355-359 (mutant #5) (backend/tests/test_config.py)"
+      ],
+      "created": "2026-08-06T01:21:48Z",
+      "last_seen": "2026-08-06T01:21:48Z"
+    },
+    {
+      "id": "L-003",
+      "key": "spec_precision_gap::a two branch spec criterion e g risk level in high critical needs a direct outcome assertion for each branch a test that only asserts the intermediate risk level for one branch high can mask a missing final outcome assertion requires human review that the other branch critical does cover",
+      "text": "A two-branch spec criterion (e.g. risk_level in {high, critical}) needs a direct outcome assertion for EACH branch - a test that only asserts the intermediate risk_level for one branch (HIGH) can mask a missing final-outcome assertion (requires_human_review) that the other branch (CRITICAL) does cover.",
+      "signal": "spec_precision_gap",
+      "scope": "backend/app/langgraph_agents/safety_agent.py",
+      "status": "candidate",
+      "features": [
+        "production-readiness"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "AC-08.1 (backend/app/langgraph_agents/safety_agent.py)"
+      ],
+      "created": "2026-08-06T01:21:48Z",
+      "last_seen": "2026-08-06T01:21:48Z"
+    },
+    {
+      "id": "L-004",
+      "key": "spec_deviation::an nginx upstream block resolving a docker service hostname without a resolver directive caches the ip at start reload document or automate a nginx restart reload step whenever that upstream container is recreated independently",
+      "text": "An nginx upstream block resolving a Docker service hostname without a resolver directive caches the IP at start/reload - document (or automate) a nginx restart/reload step whenever that upstream container is recreated independently.",
+      "signal": "spec_deviation",
+      "scope": "infra/nginx/nginx.conf",
+      "status": "candidate",
+      "features": [
+        "production-readiness"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "E2 (spec.md edge cases) (infra/nginx/nginx.conf)"
+      ],
+      "created": "2026-08-06T01:21:48Z",
+      "last_seen": "2026-08-06T01:21:48Z"
+    }
+  ]
+}

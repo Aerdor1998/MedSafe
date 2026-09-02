@@ -1,7 +1,5 @@
 import types
 
-import pytest
-
 from backend.app.db import vector_store as vs
 
 
@@ -55,7 +53,9 @@ def test_hybrid_search_keyword_only_when_semantic_empty(monkeypatch):
     monkeypatch.setattr(vs.rag_search_cache, "set", lambda key, value: None)
 
     store.semantic_search = lambda *a, **k: []  # type: ignore[assignment]
-    store._keyword_search = lambda *a, **k: [{"content": "kw", "metadata": {}, "score": 0.5, "relevance": "MEDIUM"}]  # type: ignore[assignment]
+    store._keyword_search = lambda *a, **k: [  # type: ignore[assignment]
+        {"content": "kw", "metadata": {}, "score": 0.5, "relevance": "MEDIUM"}
+    ]
     out = store.hybrid_search("aspirin", k=1)
     assert out and out[0]["content"] == "kw"
 

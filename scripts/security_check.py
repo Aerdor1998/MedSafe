@@ -23,7 +23,7 @@ class SecurityChecker:
 
     def _should_skip_file(self, path: Path) -> bool:
         """Skip files that should not be scanned (avoid self-reporting noise)."""
-        rel = str(path.relative_to(self.project_root))
+        rel = path.relative_to(self.project_root).as_posix()
         if rel == "scripts/security_check.py":
             return True
         return False
@@ -442,6 +442,11 @@ class SecurityChecker:
 
 def main():
     """Função principal"""
+    # Evita UnicodeEncodeError nos consoles Windows com code page legado.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
     # Detectar diretório do projeto
     current_dir = Path.cwd()
     
@@ -463,4 +468,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

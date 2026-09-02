@@ -1,8 +1,6 @@
 """
 Serviços da aplicação MedSafe
-"""
 
-"""
 IMPORTANT:
 This package must remain import-light to avoid circular imports.
 

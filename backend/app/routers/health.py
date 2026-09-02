@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Health & Monitoring"])
 
-APP_VERSION = "2.0.0-langgraph"
+APP_VERSION = settings.app_version
 
 # Ollama probe tuning:
 # - Short timeout keeps probes fast even when Ollama is unreachable.
@@ -147,26 +147,6 @@ async def health_check() -> JSONResponse:
                 "timestamp": datetime.now().isoformat(),
             },
         )
-
-
-@router.get("/metrics")
-async def metrics() -> Dict[str, Any]:
-    """
-    (DEPRECATED) Metrics endpoint.
-
-    NOTE:
-    - The canonical Prometheus endpoint is provided by
-      `backend.app.middleware.prometheus` at `GET /metrics` (text format).
-    - This JSON endpoint conflicted with the Prometheus endpoint and could
-      break app startup.
-    """
-    return {
-        "deprecated": True,
-        "message": (
-            "This JSON metrics endpoint was deprecated. "
-            "Use GET /metrics for Prometheus scraping."
-        ),
-    }
 
 
 @router.get("/readyz")

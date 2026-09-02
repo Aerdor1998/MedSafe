@@ -5,9 +5,10 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  workflow_dispatch:
 
 env:
-  PYTHON_VERSION: "3.10"
+  PYTHON_VERSION: "3.12"
   POSTGRES_USER: medsafe
   POSTGRES_PASSWORD: test_password_ci
   POSTGRES_DB: medsafe_test
@@ -47,7 +48,7 @@ jobs:
       
       - name: 🔍 Run Flake8 linting
         run: flake8 backend/ --max-line-length=120 --extend-ignore=E203,W503
-        continue-on-error: true
+        continue-on-error: false
       
       - name: 🔒 Run Bandit security scan
         run: |
@@ -75,7 +76,7 @@ jobs:
       - name: 📦 Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.lock
           pip install mypy types-redis types-python-dateutil
       
       - name: 🔍 Run MyPy type checking
@@ -127,7 +128,7 @@ jobs:
       - name: 📦 Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.lock
           pip install -r requirements-test.txt
       
       - name: 🧪 Run unit tests
@@ -197,7 +198,7 @@ jobs:
       - name: 📦 Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.lock
           pip install -r requirements-test.txt
       
       - name: 🔗 Run integration tests
@@ -242,8 +243,7 @@ jobs:
         continue-on-error: true
       
       - name: 🔍 Check dependencies for vulnerabilities (pip-audit)
-        run: pip-audit -r requirements.txt
-        continue-on-error: true
+        run: pip-audit -r requirements.lock
       
       - name: 🔒 Run Bandit security analysis
         run: |
@@ -253,7 +253,6 @@ jobs:
             --exclude "**/tests/**" \
             -f json \
             -o bandit-report.json
-        continue-on-error: true
       
       - name: 📤 Upload security report
         uses: actions/upload-artifact@v4
@@ -283,18 +282,21 @@ jobs:
         with:
           context: .
           push: false
+          load: true  # exporta para o daemon local; sem isso o Trivy não encontra medsafe:test
           tags: medsafe:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
       
+      # Imagem oficial do Trivy (evita o install.sh do trivy-action, que falha
+      # ao baixar o binário do GitHub Releases dentro do runner)
       - name: 🔍 Scan Docker image for vulnerabilities
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: medsafe:test
-          format: 'table'
-          exit-code: '0'
-          severity: 'CRITICAL,HIGH'
-        continue-on-error: true
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache/trivy:/root/.cache/trivy" \
+            aquasec/trivy:0.65.0 image \
+              --format table --exit-code 1 --severity CRITICAL,HIGH \
+              --ignore-unfixed medsafe:test
 
   # =================================================================
   # JOB 7: E2E Tests (só em push para main)
@@ -304,50 +306,52 @@ jobs:
     runs-on: ubuntu-latest
     needs: [integration-tests, docker-build]
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    environment: staging
+    timeout-minutes: 45
     
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
-      
-      - name: 🐳 Set up Docker Compose
-        run: |
-          docker compose version
-      
-      - name: 🚀 Start services with Docker Compose
-        env:
-          SECRET_KEY: ${{ env.SECRET_KEY }}
-          JWT_SECRET: ${{ env.JWT_SECRET }}
-          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-        run: |
-          docker compose -f docker-compose.yml up -d db redis
-          sleep 10
-      
-      - name: 🐍 Set up Python
-        uses: actions/setup-python@v5
+
+      - name: 📦 Set up pnpm
+        uses: pnpm/action-setup@v4
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: "pip"
-      
-      - name: 📦 Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-test.txt
-      
-      - name: 🎭 Run E2E tests
+          version: 11.19.0
+          run_install: false
+
+      - name: 🟢 Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: tests/e2e/playwright/pnpm-lock.yaml
+
+      - name: 📦 Install browser test dependencies
+        working-directory: tests/e2e/playwright
+        run: pnpm install --frozen-lockfile
+
+      - name: 🌐 Install Chromium
+        working-directory: tests/e2e/playwright
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: 🎭 Run blocking Playwright suite against staging
+        working-directory: tests/e2e/playwright
         env:
-          TESTING: "true"
-          DATABASE_URL: postgresql://medsafe:${{ env.POSTGRES_PASSWORD }}@localhost:5433/medsafe
-          REDIS_URL: redis://localhost:6379/0
-          SECRET_KEY: ${{ env.SECRET_KEY }}
-          JWT_SECRET: ${{ env.JWT_SECRET }}
+          E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
         run: |
-          pytest backend/tests/e2e/ -v --tb=short
-        continue-on-error: true
-      
-      - name: 🧹 Cleanup
-        if: always()
-        run: docker compose down -v
+          test -n "$E2E_BASE_URL" -a -n "$E2E_EMAIL" -a -n "$E2E_PASSWORD"
+          pnpm test
+
+      - name: 📤 Upload Playwright failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-evidence
+          path: tests/e2e/playwright/shots/
+          if-no-files-found: ignore
+          retention-days: 14
 
   # =================================================================
   # JOB 8: Summary
@@ -355,7 +359,7 @@ jobs:
   ci-summary:
     name: 📋 CI Summary
     runs-on: ubuntu-latest
-    needs: [lint, type-check, unit-tests, integration-tests, security-scan, docker-build]
+    needs: [lint, type-check, unit-tests, integration-tests, security-scan, docker-build, e2e-tests]
     if: always()
     
     steps:
@@ -371,6 +375,7 @@ jobs:
           echo "| 🔗 Integration Tests | ${{ needs.integration-tests.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 🔒 Security Scan | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| 🐳 Docker Build | ${{ needs.docker-build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🎭 E2E Playwright | ${{ needs.e2e-tests.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY

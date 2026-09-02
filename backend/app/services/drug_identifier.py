@@ -64,6 +64,15 @@ class HybridDrugIdentifier:
 
     # Mapeamento completo de sinônimos (português → inglês científico)
     DRUG_SYNONYMS = {
+        # ===== NOMES PT-BR FALTANTES (detectados em smoke test 2026-09-01) =====
+        "amiodarona": "amiodarone",
+        "ancoron": "amiodarone",
+        "digoxina": "digoxin",
+        "claritromicina": "clarithromycin",
+        "fluconazol": "fluconazole",
+        "anlodipino": "amlodipine",
+        "amlodipina": "amlodipine",
+        "dabigatrana": "dabigatran",
         # ===== DIURÉTICOS =====
         "espironolactona": "spironolactone",
         "spironolactona": "spironolactone",
@@ -321,7 +330,7 @@ class HybridDrugIdentifier:
         # Vocabulário de nomes conhecidos (sinônimos + base CSV), usado para
         # ANCORAR o fallback LLM e impedir alucinação de fármacos inexistentes
         self._known_drug_names: Optional[set] = None
-        logger.info(f"HybridDrugIdentifier inicializado")
+        logger.info("HybridDrugIdentifier inicializado")
         logger.info(f"   - {len(self.DRUG_SYNONYMS)} sinônimos mapeados")
         logger.info(f"   - {len(self.DRUG_PATTERNS)} padrões regex")
         logger.info(
@@ -603,7 +612,7 @@ class HybridDrugIdentifier:
 
         try:
             prompt = f"""Identify the canonical English scientific name for this medication.
-            
+
 Input: "{original}" (processed: "{processed}")
 
 Rules:

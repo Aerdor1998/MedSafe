@@ -192,6 +192,26 @@ class TestSecurityValidation:
             ):
                 Settings()
 
+    def test_postgres_password_placeholder_rejected_in_production(self):
+        """Regressão (discrimination sensor): sem POSTGRES_PASSWORD no env,
+        o placeholder default deve derrubar o startup em production
+        (config.py, bloco is_strict_env) — nunca subir com fallback."""
+        from backend.app.config import Settings
+
+        with pytest.raises(ValueError, match="POSTGRES_PASSWORD"):
+            with patch.dict(
+                os.environ,
+                {
+                    "ENVIRONMENT": "production",
+                    "SECRET_KEY": "test-secret-key-minimum-32-characters-long",
+                    "JWT_SECRET": "test-jwt-secret-minimum-32-characters-long",
+                    "DEBUG": "false",
+                    "MEDSAFE_FORCE_STRICT": "true",
+                },
+                clear=True,
+            ):
+                Settings()
+
     def test_secret_minimum_length(self):
         """Test that secrets must be at least 32 characters"""
         from backend.app.config import Settings

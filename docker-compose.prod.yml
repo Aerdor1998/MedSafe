@@ -67,6 +67,34 @@ services:
       - medsafe_network
     restart: unless-stopped
 
+  # Gate de schema: todos os processos da aplicação só iniciam depois que a
+  # revisão Alembic mais recente foi aplicada com sucesso.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: medsafe_migrate
+    logging: *default-logging
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-medsafe}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-medsafe}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set in .env}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:?ALLOWED_ORIGINS must be set explicitly}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:?ALLOWED_HOSTS must be set explicitly}
+      # Obrigatória no primeiro deploy; pode ficar vazia após a rotação porque
+      # as revisões 006/008 já estarão registradas no alembic_version.
+      - ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - medsafe_network
+    restart: "no"
+
   # Ollama com modelos
   ollama:
     image: ollama/ollama:0.32.5
@@ -124,6 +152,9 @@ services:
       - DEBUG=false
       # SECURITY: Passwords via env vars - no defaults in production
       - DATABASE_URL=postgresql://${POSTGRES_USER:-medsafe}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-medsafe}
+      # FIX: validador de produção (config.py:355) exige POSTGRES_PASSWORD no env do
+      # container — sem isto a app sobe com o default CHANGE_ME e crash-loopa.
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       # Ollama nativo do host (GPU via WSL) — ver comentário no serviço "ollama"
       - OLLAMA_HOST=http://host.docker.internal:11434
@@ -141,7 +172,10 @@ services:
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:?ALLOWED_HOSTS must list the public hostname(s), e.g. api.seudominio.com}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ENABLE_METRICS=true
-      - METRICS_PORT=9090
+      - METRICS_AUTH_TOKEN_FILE=/run/secrets/metrics_auth_token
+      # O tráfego externo chega por proxy Cloudflare local; só neste deployment
+      # os cabeçalhos de IP do proxy são aceitos pelo rate limiter.
+      - TRUST_PROXY_HEADERS=true
       # PERFORMANCE: Use Redis for distributed rate limiting in production
       - RATE_LIMIT_STORAGE=redis://:${REDIS_PASSWORD}@redis:6379/1
       # Error tracking (vazio = desabilitado; ver docker-compose.glitchtip.yml)
@@ -164,9 +198,6 @@ services:
       # CSP estrito (nonces, sem 'unsafe-inline'): lido em middleware/security.py:42.
       # Default false = o default seguro do próprio código; ver env.prod.example.
       - CSP_STRICT_MODE=${CSP_STRICT_MODE:-false}
-      # Senha do admin semeado pelas migrações alembic (rodam neste container).
-      # A migração 006 FALHA se vazia — obrigatória no primeiro deploy. Nunca é logada.
-      - ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD:-}
     # PRODUCTION: No bind-mounts for code - use immutable image only
     # Only mount data directories that need persistence
     volumes:
@@ -174,6 +205,8 @@ services:
       - ./data:/app/data
       # Static files are built into the image - only mount for uploads if needed
       # - ./static:/app/static
+    secrets:
+      - metrics_auth_token
     # SKILL: debugging-strategies
     # FIX: Port 9000 conflitava com processo Python existente
     # Mudado para 9001 no host, mantém 9000 interno no container
@@ -184,14 +217,14 @@ services:
     # SECURITY: bind em 127.0.0.1. A porta 9001 é o alvo do Cloudflare Tunnel (que roda
     # no host, então alcança o loopback); publicá-la em 0.0.0.0 deixava qualquer host da
     # rede falar direto com a API, pulando o nginx, seu rate limit e o bloqueio de /docs.
-    # A 9090 é a de métricas Prometheus — o nginx a bloqueia (nginx.conf:137-140), mas
-    # publicada em 0.0.0.0 esse bloqueio era contornável.
-    ports:
+    # !override: sem isso o merge com docker-compose.yml ACUMULA os mapeamentos
+    # (0.0.0.0:9001 do base + 127.0.0.1:9001 daqui) e o segundo bind falha com
+    # "address already in use", mesmo com a porta livre no host.
+    ports: !override
       - "127.0.0.1:9001:9000"
-      - "127.0.0.1:9090:9090"
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     healthcheck:
@@ -231,6 +264,9 @@ services:
       - ENVIRONMENT=production
       - DEBUG=false
       - DATABASE_URL=postgresql://${POSTGRES_USER:-medsafe}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-medsafe}
+      # FIX: validador de produção (config.py:355) exige POSTGRES_PASSWORD no env do
+      # container — sem isto a app sobe com o default CHANGE_ME e crash-loopa.
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       # Ollama nativo do host (GPU via WSL) — ver comentário no serviço "ollama"
       - OLLAMA_HOST=http://host.docker.internal:11434
@@ -256,8 +292,8 @@ services:
       - ./logs:/app/logs
       - ./data:/app/data
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     # FIX: sobrescreve o HEALTHCHECK do Dockerfile (curl :9000/healthz),
@@ -296,6 +332,9 @@ services:
       - ENVIRONMENT=production
       - DEBUG=false
       - DATABASE_URL=postgresql://${POSTGRES_USER:-medsafe}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-medsafe}
+      # FIX: validador de produção (config.py:355) exige POSTGRES_PASSWORD no env do
+      # container — sem isto a app sobe com o default CHANGE_ME e crash-loopa.
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - SECRET_KEY=${SECRET_KEY}
       - JWT_SECRET=${JWT_SECRET}
@@ -303,8 +342,8 @@ services:
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE:-0.0}
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "grep -q data_retention_worker /proc/1/cmdline || exit 1"]
       interval: 60s
@@ -377,6 +416,7 @@ services:
     networks:
       - medsafe_network
     restart: unless-stopped
+    profiles: ["tls"]
 
   # Prometheus para métricas
   prometheus:
@@ -394,6 +434,8 @@ services:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
+    secrets:
+      - metrics_auth_token
     # SECURITY: bind em 127.0.0.1 — Prometheus roda com --web.enable-lifecycle,
     # que permite recarregar/desligar via HTTP para quem alcançar a porta.
     ports:
@@ -603,6 +645,10 @@ volumes:
   pgadmin_data:
     driver: local
 
+secrets:
+  metrics_auth_token:
+    file: ./secrets/prometheus/metrics_auth_token
+
 networks:
   medsafe_network:
     driver: bridge
@@ -615,5 +661,3 @@ networks:
     ipam:
       config:
         - subnet: 172.22.0.0/16
-
-

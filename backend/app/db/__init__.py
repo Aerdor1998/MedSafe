@@ -2,8 +2,8 @@
 Módulo de banco de dados do MedSafe
 """
 
-from .database import get_db, init_db
-from .models import *
+from .database import Base, get_db, init_db
+from .models import Document, Embedding, IngestJob, Report, Triage
 
 __all__ = [
     "get_db",
