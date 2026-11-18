@@ -1,0 +1,73 @@
+name: Synthetic staging
+on:
+  workflow_dispatch:
+  push:
+    branches: [go-live/readiness-wave-1]
+permissions:
+  contents: read
+concurrency:
+  group: synthetic-staging-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      COMPOSE_FILE: docker-compose.prod.yml:docker-compose.staging.yml
+      POSTGRES_DB: medsafe_ci
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      ALLOWED_ORIGINS: http://localhost:9001
+      E2E_BASE_URL: http://localhost:9001
+      E2E_EMAIL: admin@medsafe.local
+      OLLAMA_LLM: medgemma1.5:4b
+      OLLAMA_VLM: medgemma1.5:4b
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare isolated credentials
+        run: |
+          umask 077
+          for key in SECRET_KEY JWT_SECRET POSTGRES_PASSWORD REDIS_PASSWORD GRAFANA_PASSWORD PGADMIN_PASSWORD ADMIN_INITIAL_PASSWORD; do
+            value=$(openssl rand -hex 32)
+            echo "::add-mask::$value"
+            echo "$key=$value" >> "$GITHUB_ENV"
+          done
+          openssl rand -hex 32 > secrets/prometheus/metrics_auth_token
+          mkdir -p logs
+          sudo chown 1000:1000 logs
+          # Make room for the inference service and weights on this disposable runner.
+          sudo rm -rf /usr/local/lib/android
+      - name: Start inference and load model manifests
+        run: |
+          docker compose up -d staging-ollama
+          for attempt in {1..30}; do
+            docker compose exec -T staging-ollama ollama list && break
+            sleep 2
+          done
+          docker compose exec -T staging-ollama ollama pull "$OLLAMA_LLM"
+          docker compose exec -T staging-ollama ollama pull qwen3-embedding:0.6b
+      - name: Build candidate and start API and workers
+        run: |
+          docker compose build api
+          docker compose up -d --no-build --scale worker=2 api worker
+          curl --retry 30 --retry-delay 2 --retry-all-errors -fsS "$E2E_BASE_URL/readyz"
+          curl -fsS "$E2E_BASE_URL/healthz" | jq -e '.status == "healthy"'
+          docker compose exec -T api python -c 'import json,os,urllib.request; models=json.load(urllib.request.urlopen(os.environ["OLLAMA_HOST"]+"/api/tags"))["models"]; print([(m["name"],m["digest"]) for m in models])'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - name: Run browser suite on the candidate
+        working-directory: tests/e2e/playwright
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+          E2E_PASSWORD="$ADMIN_INITIAL_PASSWORD" E2E_ANALYSIS_TIMEOUT_MS=600000 pnpm test
+      - name: Confirm LLM served inference during the browser run
+        run: |
+          docker compose logs --no-color staging-ollama | grep -E '200 .*POST +"/api/(chat|generate)"' > "$RUNNER_TEMP/inference-requests.log"
+          wc -l "$RUNNER_TEMP/inference-requests.log"
+      - name: Release ephemeral resources
+        if: always()
+        run: docker compose down --volumes --remove-orphans

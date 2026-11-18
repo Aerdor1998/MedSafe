@@ -24,7 +24,7 @@ const BASE = process.env.E2E_BASE_URL || 'https://localhost';
 const EMAIL = process.env.E2E_EMAIL;
 const PASSWORD = process.env.E2E_PASSWORD;
 const SHOTS = path.join(__dirname, 'shots');
-const ANALYSIS_TIMEOUT = 180_000; // análise LLM leva ~15-30s; margem p/ cold start
+const ANALYSIS_TIMEOUT = Number(process.env.E2E_ANALYSIS_TIMEOUT_MS || 180_000); // análise LLM leva ~15-30s; margem p/ cold start
 
 if (!EMAIL || !PASSWORD) {
   console.error('Defina E2E_EMAIL e E2E_PASSWORD (conta physician de smoke test do stack local).');
