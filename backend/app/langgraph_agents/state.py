@@ -103,6 +103,7 @@ class MedSafeState(TypedDict):
     # ========================================================================
     # OUTPUT: Final analysis (Step 5: Observe and Iterate)
     # ========================================================================
+    analysis_metadata: Dict[str, Any]  # ClinicalAgent inference and fallback evidence
     risk_level: RiskLevel  # Overall risk assessment
     dosage_adjustments: List[Dict[str, Any]]  # Dose recommendations
     adverse_reactions: List[Dict[str, Any]]  # Potential side effects

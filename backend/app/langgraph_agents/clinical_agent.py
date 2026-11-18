@@ -245,6 +245,15 @@ Seja minucioso, preciso e baseado em evidências.
                 recommendations = self._generate_recommendations(
                     state, interactions, contraindications, risk_level, feedback
                 )
+                if recommendations.pop("unstructured_fallback", False):
+                    llm_failed = True
+                    analysis_metadata.update(
+                        fallback_triggered=True, partial_analysis=True
+                    )
+                    needs_escalation = True
+                    escalation_reasons = list(escalation_reasons) + [
+                        "Resposta do modelo sem estrutura válida. Revisão humana obrigatória."
+                    ]
                 # Merge da deliberação estruturada do LLM nos achados
                 # rule-based (dedup por descrição; LLM nunca rebaixa risco).
                 interactions = self._merge_llm_findings(
@@ -299,8 +308,12 @@ Seja minucioso, preciso e baseado em evidências.
         except Exception as e:
             self.agent_logger.error("Falha na análise clínica", exc_info=True)
             logger.error(f"ClinicalAgent critical error: {e}")
-            # Even on critical error, try to preserve any partial results
-            # The error will be logged but we'll return what we have
+            llm_failed = True
+            analysis_metadata.update(fallback_triggered=True, partial_analysis=True)
+            recommendations["escalation_needed"] = True
+            recommendations.setdefault("escalation_reasons", []).append(
+                "Análise clínica incompleta por erro interno. Revisão humana obrigatória."
+            )
 
         # Step 5: Calculate confidence score (doesn't need LLM)
         try:
@@ -1040,6 +1053,7 @@ Regras:
                 "usando extração por texto"
             )
             return {
+                "unstructured_fallback": True,
                 "dosage_adjustments": self._extract_dosage_adjustments(raw),
                 "adverse_reactions": self._extract_adverse_reactions(raw),
                 "recommendations_text": raw,

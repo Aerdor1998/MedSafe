@@ -287,6 +287,38 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       
+      - name: Exercise production migrations, two workers and isolated restore
+        timeout-minutes: 12
+        shell: bash
+        run: |
+          set -euo pipefail
+          # All resources are created on the ephemeral GitHub-hosted runner.
+          for key in SECRET_KEY JWT_SECRET POSTGRES_PASSWORD REDIS_PASSWORD GRAFANA_PASSWORD PGADMIN_PASSWORD ADMIN_INITIAL_PASSWORD; do
+            export "$key=$(openssl rand -hex 32)"
+          done
+          export POSTGRES_DB=medsafe_ci POSTGRES_USER=medsafe
+          export ALLOWED_HOSTS=localhost,127.0.0.1 ALLOWED_ORIGINS=https://localhost
+          openssl rand -hex 32 > secrets/prometheus/metrics_auth_token
+          mkdir -p logs
+          sudo chown 1000:1000 logs
+          override="$RUNNER_TEMP/medsafe-ci.yml"
+          printf '%s\n' 'services:' '  api:' '    image: medsafe:test' '  migrate:' '    image: medsafe:test' '  worker:' '    image: medsafe:test' > "$override"
+          stack=(docker compose -f docker-compose.prod.yml -f docker-compose.pilot.yml -f "$override")
+          "${stack[@]}" up --no-build -d --scale worker=2 api worker
+          curl --retry 25 --retry-delay 2 --retry-all-errors -fsS http://127.0.0.1:9001/readyz
+          test "$("${stack[@]}" ps --status running -q worker | wc -l)" -eq 2
+          "${stack[@]}" exec -T -e ADMIN_INITIAL_PASSWORD api python - < tests/e2e/review_transaction.py
+          db=("${stack[@]}" exec -T db)
+          "${db[@]}" pg_dump -U medsafe -Fc medsafe_ci > "$RUNNER_TEMP/medsafe.dump"
+          "${db[@]}" createdb -U medsafe medsafe_restore
+          "${db[@]}" pg_restore -U medsafe -d medsafe_restore --exit-on-error < "$RUNNER_TEMP/medsafe.dump"
+          for database in medsafe_ci medsafe_restore; do
+            "${db[@]}" psql -U medsafe -d "$database" -At -v ON_ERROR_STOP=1 \
+              -c 'SELECT version_num FROM alembic_version' -c 'SELECT count(*) FROM users' -c 'SELECT approved FROM hitl_reviews ORDER BY id' > "$RUNNER_TEMP/$database.state"
+          done
+          test -s "$RUNNER_TEMP/medsafe_ci.state"
+          diff -u "$RUNNER_TEMP/medsafe_ci.state" "$RUNNER_TEMP/medsafe_restore.state"
+
       # Imagem oficial do Trivy (evita o install.sh do trivy-action, que falha
       # ao baixar o binário do GitHub Releases dentro do runner)
       - name: 🔍 Scan Docker image for vulnerabilities
@@ -385,3 +417,19 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Enforce required job results
+        env:
+          JOBS: ${{ toJSON(needs) }}
+        run: |
+          python - <<'PYTHON'
+          import json, os
+          jobs = json.loads(os.environ["JOBS"])
+          failed = [name for name, job in jobs.items()
+                    if job["result"] != "success"
+                    and not (name == "e2e-tests" and job["result"] == "skipped"
+                             and os.environ["GITHUB_EVENT_NAME"] != "workflow_dispatch"
+                             and os.environ["GITHUB_REF"] != "refs/heads/main")]
+          if failed:
+              raise SystemExit("Required checks incomplete: " + ", ".join(failed))
+          PYTHON

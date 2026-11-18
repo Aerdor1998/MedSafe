@@ -25,8 +25,8 @@ Marque tudo antes de atender paciente real:
 - [ ] Entrega de alertas configurada no Alertmanager (seção 7)
 - [ ] `SENTRY_DSN` preenchido (seção 7)
 - [ ] Gate clínico verde no commit que vai subir (seção 9)
-- [ ] `python scripts/preflight_prod.py --first-deploy --vercel` termina com `PREFLIGHT OK`
-- [ ] Variável de repositório `E2E_BASE_URL` definida e ambiente GitHub `staging` possui os secrets `E2E_EMAIL` e `E2E_PASSWORD` (sem a variável, o job E2E do CI é pulado, não falha)
+- [ ] `python scripts/preflight_prod.py --first-deploy --vercel --verify-ollama http://localhost:11434` termina com `PREFLIGHT OK`
+- [ ] Variável de repositório `E2E_BASE_URL` definida e ambiente GitHub `staging` possui os secrets `E2E_EMAIL` e `E2E_PASSWORD` (em main e nas execuções manuais, o resumo do CI exige sucesso do E2E)
 
 ---
 
@@ -36,6 +36,8 @@ Marque tudo antes de atender paciente real:
 cp env.prod.example .env
 python3 -c 'import secrets; print(secrets.token_urlsafe(48))'   # gere cada secret
 ```
+
+Registre no `.env` os digests completos de LLM, VLM e embeddings aprovados na avaliação clínica. A opção `--verify-ollama` compara os três valores com o inventário do servidor que atenderá a instalação. Execute-a no host com acesso ao Ollama e repita a checagem após atualizar modelos.
 
 Preencha no `.env`: `SECRET_KEY`, `JWT_SECRET`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD`,
 `ADMIN_INITIAL_PASSWORD`, `GRAFANA_PASSWORD`, `PGADMIN_PASSWORD`, `ALLOWED_ORIGINS`,
@@ -97,7 +99,7 @@ ativava o profile e falhava na reserva de GPU).
 ## 3. Subir a stack
 
 ```bash
-python3 scripts/preflight_prod.py --first-deploy --vercel
+python3 scripts/preflight_prod.py --first-deploy --vercel --verify-ollama http://localhost:11434
 docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml ps -a
 docker compose -f docker-compose.prod.yml logs migrate
@@ -506,3 +508,11 @@ docker compose -f docker-compose.prod.yml restart nginx
 
 Verificação: `curl -sk https://localhost/api/v2/health` deve voltar 200 com
 `"status": "healthy"`.
+
+## CSS do frontend
+
+A página carrega os utilitários de estilo do próprio artefato. Ao alterar as classes ou o tema, regenere o CSS a partir da raiz do repositório e inclua a saída na mesma revisão.
+
+```sh
+npx --yes tailwindcss@3.4.17 --config frontend/tailwind.config.cjs --output frontend/css/tailwind.css --minify
+```

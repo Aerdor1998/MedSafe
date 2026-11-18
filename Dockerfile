@@ -54,6 +54,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Network utilities
     curl \
     ca-certificates \
+    # Refresh the compression library inherited from the base image.
+    zlib1g \
     # PostgreSQL runtime library
     libpq5 \
     && apt-get clean \

@@ -8,10 +8,15 @@ placeholder usage, required secret files, YAML syntax, and Docker Compose struct
 from __future__ import annotations
 
 import argparse
+import json
+import os
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
+from urllib.request import urlopen
 
 import yaml
 
@@ -37,6 +42,34 @@ def load_env(path: Path) -> dict[str, str]:
     return values
 
 
+def verify_models(env: dict[str, str], url: str) -> list[str]:
+    """Compare the served Ollama manifests with the digests approved for release."""
+    try:
+        if urlsplit(url).scheme not in {"http", "https"}:
+            return ["URL do Ollama deve usar HTTP ou HTTPS"]
+        with urlopen(url.rstrip("/") + "/api/tags", timeout=5) as response:
+            inventory = json.load(response)["models"]
+        served = {entry["name"]: entry["digest"] for entry in inventory}
+    except (OSError, ValueError, KeyError, TypeError):
+        return ["Ollama indisponível ou inventário de modelos inválido"]
+
+    errors = []
+    for setting, default in (
+        ("OLLAMA_LLM", "medgemma:latest"),
+        ("OLLAMA_VLM", "qwen2.5vl:7b"),
+        ("EMBEDDING_MODEL", "qwen3-embedding:0.6b"),
+    ):
+        name = os.environ.get(setting, env.get(setting)) or default
+        if ":" not in name.rsplit("/", 1)[-1]:
+            name += ":latest"
+        expected = env.get(f"{setting}_DIGEST", "").removeprefix("sha256:")
+        if not re.fullmatch(r"[0-9a-f]{64}", expected):
+            errors.append(f"{setting}_DIGEST precisa do SHA-256 aprovado")
+        elif str(served.get(name, "")).removeprefix("sha256:") != expected:
+            errors.append(f"{setting}: modelo ausente ou digest divergente")
+    return errors
+
+
 def validate(args: argparse.Namespace) -> tuple[list[str], list[str]]:
     """Return blocking errors and non-blocking deployment warnings."""
     errors: list[str] = []
@@ -46,6 +79,9 @@ def validate(args: argparse.Namespace) -> tuple[list[str], list[str]]:
         return [f"arquivo ausente: {env_path.name}"], warnings
 
     env = load_env(env_path)
+    if args.verify_ollama:
+        errors.extend(verify_models(env, args.verify_ollama))
+
     for key, minimum in SECRET_MINIMUMS.items():
         value = env.get(key, "")
         if len(value) < minimum:
@@ -87,7 +123,12 @@ def validate(args: argparse.Namespace) -> tuple[list[str], list[str]]:
     ):
         path = ROOT / relative_path
         try:
-            yaml.safe_load(path.read_text(encoding="utf-8"))
+            source = path.read_text(encoding="utf-8")
+            if relative_path == "docker-compose.prod.yml":
+                # Compose owns merge tags such as !override; check syntax here.
+                yaml.compose(source, Loader=yaml.SafeLoader)
+            else:
+                yaml.safe_load(source)
         except (OSError, yaml.YAMLError) as exc:
             errors.append(f"YAML inválido em {relative_path}: {type(exc).__name__}")
 
@@ -102,7 +143,16 @@ def validate(args: argparse.Namespace) -> tuple[list[str], list[str]]:
     docker = shutil.which("docker")
     if docker:
         result = subprocess.run(
-            [docker, "compose", "-f", "docker-compose.prod.yml", "config", "--quiet"],
+            [
+                docker,
+                "compose",
+                "--env-file",
+                str(env_path),
+                "-f",
+                "docker-compose.prod.yml",
+                "config",
+                "--quiet",
+            ],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -126,6 +176,10 @@ def main() -> int:
     parser.add_argument("--env-file", default=".env")
     parser.add_argument("--first-deploy", action="store_true")
     parser.add_argument("--vercel", action="store_true")
+    parser.add_argument(
+        "--verify-ollama", metavar="URL",
+        help="Verifica os três digests no servidor de inferência",
+    )
     args = parser.parse_args()
 
     errors, warnings = validate(args)
