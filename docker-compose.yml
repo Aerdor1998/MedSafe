@@ -179,7 +179,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: medsafe_worker
     command: ["python", "-m", "backend.app.workers.analysis_worker"]
     environment:
       - DEBUG=${DEBUG:-false}

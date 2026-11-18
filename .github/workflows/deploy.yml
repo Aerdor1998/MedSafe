@@ -40,38 +40,47 @@ jobs:
     steps:
       - name: Resolve URL alvo
         id: target
+        env:
+          INPUT_URL: ${{ inputs.target_url || vars.MEDSAFE_PUBLIC_URL }}
         run: |
-          URL="${{ inputs.target_url || vars.MEDSAFE_PUBLIC_URL }}"
+          URL="$INPUT_URL"
           if [ -z "$URL" ]; then
             echo "::error::Nenhuma URL configurada. Defina a variável de repositório MEDSAFE_PUBLIC_URL ou passe target_url."
+            exit 1
+          fi
+          if [[ "$URL" != https://* || "$URL" =~ [[:space:]] ]]; then
+            echo "::error::Use uma URL HTTPS sem espaços."
             exit 1
           fi
           echo "url=${URL%/}" >> "$GITHUB_OUTPUT"
           echo "Alvo: ${URL%/}"
 
-      - name: /healthz responde e não está unhealthy
+      - name: /healthz confirma dependências saudáveis
+        env:
+          URL: ${{ steps.target.outputs.url }}
         run: |
-          URL="${{ steps.target.outputs.url }}"
           BODY=$(curl -fsS --max-time 20 "$URL/healthz")
           echo "$BODY"
           STATUS=$(echo "$BODY" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))')
           echo "status=$STATUS"
           case "$STATUS" in
             healthy)  echo "OK: todas as dependências no ar" ;;
-            degraded) echo "::warning::Aplicação DEGRADADA (provável Ollama fora) — analisa não completa" ;;
+            degraded) echo "::error::Aplicação degradada. Verifique as dependências antes do aceite."; exit 1 ;;
             *)        echo "::error::status inesperado: '$STATUS'"; exit 1 ;;
           esac
 
       - name: /readyz aceita tráfego
+        env:
+          URL: ${{ steps.target.outputs.url }}
         run: |
-          URL="${{ steps.target.outputs.url }}"
           # /readyz devolve 503 quando uma dependência dura (Postgres/Redis) está fora;
           # -f faz o curl falhar nesse caso, que é exatamente o que queremos aqui.
           curl -fsS --max-time 20 "$URL/readyz"
 
       - name: Endpoint de análise exige autenticação
+        env:
+          URL: ${{ steps.target.outputs.url }}
         run: |
-          URL="${{ steps.target.outputs.url }}"
           # Guardrail de segurança: ALLOW_ANONYMOUS_ANALYSIS deve estar false em produção.
           # Sem token, POST /api/v2/analyze tem que ser recusado (401/403).
           CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
@@ -85,14 +94,15 @@ jobs:
           fi
 
       - name: Documentação interativa não exposta
+        env:
+          URL: ${{ steps.target.outputs.url }}
         run: |
-          URL="${{ steps.target.outputs.url }}"
           # /docs e /redoc só existem quando DEBUG=true — em produção devem dar 404.
           for path in /docs /redoc; do
             CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$URL$path")
             echo "$path -> HTTP $CODE"
-            if [ "$CODE" = "200" ]; then
-              echo "::error::$path está exposto — DEBUG provavelmente está true em produção."
+            if [ "$CODE" != "404" ]; then
+              echo "::error::$path retornou HTTP $CODE. Esperado 404 em produção."
               exit 1
             fi
           done

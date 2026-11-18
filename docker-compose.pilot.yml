@@ -20,6 +20,8 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on: !override
+      migrate:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       redis:
@@ -31,6 +33,8 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on: !override
+      migrate:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       redis:

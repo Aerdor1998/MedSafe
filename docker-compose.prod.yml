@@ -249,7 +249,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: medsafe_worker
     logging: *default-logging
     # host-gateway → IP do docker0 (172.17.0.1), onde o Ollama nativo do host escuta
     extra_hosts:
