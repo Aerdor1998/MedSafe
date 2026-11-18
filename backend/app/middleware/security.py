@@ -56,7 +56,6 @@ ALLOWED_STYLE_HASHES: List[str] = [
 # Trusted CDN domains for scripts and styles
 TRUSTED_SCRIPT_SOURCES_BASE = [
     "'self'",
-    "https://cdn.tailwindcss.com",
     "https://cdnjs.cloudflare.com",
     "https://unpkg.com",
 ]

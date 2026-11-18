@@ -508,3 +508,11 @@ docker compose -f docker-compose.prod.yml restart nginx
 
 Verificação: `curl -sk https://localhost/api/v2/health` deve voltar 200 com
 `"status": "healthy"`.
+
+## CSS do frontend
+
+A página carrega os utilitários de estilo do próprio artefato. Ao alterar as classes ou o tema, regenere o CSS a partir da raiz do repositório e inclua a saída na mesma revisão.
+
+```sh
+npx --yes tailwindcss@3.4.17 --config frontend/tailwind.config.cjs --output frontend/css/tailwind.css --minify
+```

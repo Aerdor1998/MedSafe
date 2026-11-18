@@ -27,56 +27,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="css/tailwind.css">
     <script src="js/risk-display.js"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    fontFamily: {
-                        display: ['"Bricolage Grotesque"', 'ui-sans-serif', 'sans-serif'],
-                        sans: ['"Instrument Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-                        mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
-                    },
-                    colors: {
-                        // Cores dirigidas por CSS vars: os MESMOS utilitários que o
-                        // script da aplicação gera dinamicamente (text-slate-*,
-                        // bg-brand-*/15, violet-*, red-*) mudam junto com o tema.
-                        brand: {
-                            DEFAULT: 'rgb(var(--c-teal) / <alpha-value>)',
-                            teal: 'rgb(var(--c-teal) / <alpha-value>)',
-                            cyan: 'rgb(var(--c-cyan) / <alpha-value>)',
-                            emerald: 'rgb(var(--c-emerald) / <alpha-value>)',
-                            amber: 'rgb(var(--c-amber) / <alpha-value>)',
-                            rose: 'rgb(var(--c-rose) / <alpha-value>)',
-                        },
-                        violet: {
-                            400: 'rgb(var(--c-violet-400) / <alpha-value>)',
-                            500: 'rgb(var(--c-violet-500) / <alpha-value>)',
-                        },
-                        red: {
-                            400: 'rgb(var(--c-red-400) / <alpha-value>)',
-                            500: 'rgb(var(--c-red-500) / <alpha-value>)',
-                        },
-                        slate: {
-                            200: 'rgb(var(--tx-1) / <alpha-value>)',
-                            300: 'rgb(var(--tx-2) / <alpha-value>)',
-                            400: 'rgb(var(--tx-3) / <alpha-value>)',
-                            500: 'rgb(var(--tx-4) / <alpha-value>)',
-                            600: 'rgb(var(--tx-5) / <alpha-value>)',
-                        },
-                        surface: {
-                            DEFAULT: 'rgb(var(--sf-1) / <alpha-value>)',
-                            600: 'rgb(var(--sf-3) / <alpha-value>)',
-                            700: 'rgb(var(--sf-2) / <alpha-value>)',
-                        },
-                    },
-                }
-            }
-        };
-    </script>
 
     <style>
         /* =====================================================================
@@ -1747,7 +1699,7 @@
                         <div class="w-6 h-6 rounded bg-brand-teal/15 text-brand-teal flex items-center justify-center text-[10px]">
                             <i class="fas fa-pill"></i>
                         </div>
-                        <span class="text-sm font-medium text-slate-300">${sanitizeText(med.name)}</span>
+                        <span class="text-sm font-medium text-slate-300">${escapeHtml(med.name)}</span>
                     </div>
                     <button onclick="removeCurrentMed(${med.id})" class="w-6 h-6 rounded bg-brand-rose/10 text-brand-rose opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                         <i class="fas fa-times text-[10px]"></i>
@@ -1795,7 +1747,7 @@
                 if (result.drug_name) {
                     const cleanedName = cleanText(result.drug_name);
                     document.getElementById('medication-search').value = cleanedName;
-                    ocrResult.innerHTML = `<i class="fas fa-check-circle mr-2 text-brand-emerald"></i>Medicamento identificado: <strong class="text-brand-cyan">${sanitizeText(cleanedName)}</strong>`;
+                    ocrResult.innerHTML = `<i class="fas fa-check-circle mr-2 text-brand-emerald"></i>Medicamento identificado: <strong class="text-brand-cyan">${escapeHtml(cleanedName)}</strong>`;
                 } else {
                     ocrResult.innerHTML = `<i class="fas fa-info-circle mr-2 text-brand-amber"></i>Texto extraído, mas medicamento não identificado`;
                 }
@@ -2016,7 +1968,7 @@
                 const hrList = document.getElementById('human-review-reasons');
                 if (hrList) {
                     hrList.innerHTML = hrReasons.length
-                        ? hrReasons.map(r => `<li>• ${sanitizeText(String(r))}</li>`).join('')
+                        ? hrReasons.map(r => `<li>• ${escapeHtml(String(r))}</li>`).join('')
                         : '<li>• Resultado requer validação por profissional de saúde.</li>';
                 }
             }
@@ -2144,11 +2096,11 @@
             }
 
             container.innerHTML = items.map(item => {
-                const type = sanitizeText(cleanText(item.type || item.condition || 'Contraindicação'));
+                const type = escapeHtml(cleanText(item.type || item.condition || 'Contraindicação'));
                 // Translate contraindication description
                 const rawDescription = item.description || item.reason || '';
                 const translatedDescription = translateInteraction(rawDescription);
-                const description = sanitizeText(cleanText(translatedDescription));
+                const description = escapeHtml(cleanText(translatedDescription));
                 const severity = item.severity || 'high';
                 const severityPt = translateSeverity(severity);
                 return `
@@ -2172,12 +2124,12 @@
             }
 
             container.innerHTML = '<div class="space-y-2">' + items.map(item => {
-                const drug1 = sanitizeText(cleanText(item.drug1 || ''));
-                const drug2 = sanitizeText(cleanText(item.drug2 || item.interacting_drug || ''));
+                const drug1 = escapeHtml(cleanText(item.drug1 || ''));
+                const drug2 = escapeHtml(cleanText(item.drug2 || item.interacting_drug || ''));
                 // Translate the description from English to Portuguese
                 const rawDescription = item.description || item.effect || '';
                 const translatedDescription = translateInteraction(rawDescription);
-                const description = sanitizeText(cleanText(translatedDescription));
+                const description = escapeHtml(cleanText(translatedDescription));
                 const severity = item.severity || 'medium';
                 const severityPt = translateSeverity(severity);
 
@@ -2213,7 +2165,7 @@
             }
 
             container.innerHTML = '<div class="flex flex-wrap gap-2">' + items.map(item => {
-                const reaction = sanitizeText(cleanText(
+                const reaction = escapeHtml(cleanText(
                     (item && typeof item === 'object')
                         ? (item.description || item.reaction || item.type || item.recommendation || JSON.stringify(item))
                         : item
@@ -2230,7 +2182,7 @@
             }
 
             container.innerHTML = '<ul class="space-y-2">' + items.map(item => {
-                const action = sanitizeText(cleanText(item.action || item.description || item.recommendation || item));
+                const action = escapeHtml(cleanText(item.action || item.description || item.recommendation || item));
                 return `
                     <li class="flex items-start gap-2 text-sm text-slate-300">
                         <i class="fas fa-check mt-1 text-brand-cyan text-xs flex-shrink-0"></i>
@@ -2243,16 +2195,6 @@
         // =============================================================================
         // UTILITIES
         // =============================================================================
-
-        function sanitizeText(text) {
-            if (!text) return '';
-            if (typeof DOMPurify !== 'undefined') {
-                return DOMPurify.sanitize(text, { ALLOWED_TAGS: [] });
-            }
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
 
         function resetAnalysis() {
             patientData = {};
