@@ -416,3 +416,19 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Enforce required job results
+        env:
+          JOBS: ${{ toJSON(needs) }}
+        run: |
+          python - <<'PYTHON'
+          import json, os
+          jobs = json.loads(os.environ["JOBS"])
+          failed = [name for name, job in jobs.items()
+                    if job["result"] != "success"
+                    and not (name == "e2e-tests" and job["result"] == "skipped"
+                             and os.environ["GITHUB_EVENT_NAME"] != "workflow_dispatch"
+                             and os.environ["GITHUB_REF"] != "refs/heads/main")]
+          if failed:
+              raise SystemExit("Required checks incomplete: " + ", ".join(failed))
+          PYTHON

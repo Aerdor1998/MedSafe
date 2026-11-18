@@ -48,7 +48,7 @@ charset-normalizer==3.5.1
     # via requests
 click==8.4.2
     # via uvicorn
-colorama==0.4.6
+colorama==0.4.6 ; sys_platform == "win32"
     # via click
 cryptography==50.0.0
     # via pyjwt
@@ -140,7 +140,7 @@ langgraph==1.2.11
     # via
     #   -r requirements.txt
     #   langchain
-langgraph-checkpoint==4.2.0
+langgraph-checkpoint==4.3.2
     # via
     #   -r requirements.txt
     #   langgraph
@@ -306,7 +306,7 @@ sniffio==1.3.1
     # via
     #   langsmith
     #   openai
-soupsieve==4.0.0
+soupsieve==4.0
     # via beautifulsoup4
 sqlalchemy==2.0.52
     # via
@@ -355,7 +355,7 @@ typing-inspection==0.4.4
     #   fastapi
     #   pydantic
     #   pydantic-settings
-tzdata==2026.3
+tzdata==2026.3 ; sys_platform == "win32"
     # via psycopg
 urllib3==2.8.0
     # via
@@ -367,6 +367,8 @@ uuid-utils==0.17.0
     #   langsmith
 uvicorn==0.52.4
     # via -r requirements.txt
+uvloop==0.23.0 ; sys_platform != "win32" and platform_python_implementation != "PyPy"
+    # via uvicorn
 watchfiles==1.2.0
     # via uvicorn
 websockets==16.1.1

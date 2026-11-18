@@ -59,7 +59,10 @@ def test_pharmacist_can_reject_hitl_analysis_and_read_terminal_status(app, clien
     report_query.filter.return_value = report_query
     report_query.first.return_value = report
     db = MagicMock()
-    db.query.side_effect = [triage_query, report_query]
+    job_query = MagicMock()
+    job_query.filter.return_value.with_for_update.return_value.first.return_value = job
+    report_query.order_by.return_value = report_query
+    db.query.side_effect = [job_query, triage_query, report_query, job_query]
 
     @contextmanager
     def db_context():
@@ -72,7 +75,7 @@ def test_pharmacist_can_reject_hitl_analysis_and_read_terminal_status(app, clien
         with patch.object(
             langgraph_module, "get_orchestrator", return_value=orchestrator
         ), patch.object(
-            langgraph_module, "get_db_context", return_value=db_context()
+            langgraph_module, "get_db_context", side_effect=db_context
         ), patch.object(
             langgraph_module,
             "get_settings",
@@ -86,11 +89,18 @@ def test_pharmacist_can_reject_hitl_analysis_and_read_terminal_status(app, clien
                     "physician_notes": "Interaction remains unsafe",
                 },
             )
+            duplicate = client.post(
+                "/api/v2/hitl/approve",
+                json={"session_id": "review-session", "approved": True},
+            )
             status = client.get("/api/v2/status/review-session")
     finally:
         app.dependency_overrides.pop(can_approve_analysis, None)
         app.dependency_overrides.pop(get_optional_current_user, None)
 
+    assert duplicate.status_code == 400
+    db.commit.assert_called_once()
+    db.add.assert_called_once()
     assert decision.status_code == 200
     assert decision.json()["status"] == "rejected"
     assert decision.json()["message"] == "Analysis rejected by reviewer pharmacist-1."

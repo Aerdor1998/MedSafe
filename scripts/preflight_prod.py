@@ -107,8 +107,16 @@ def validate(args: argparse.Namespace) -> tuple[list[str], list[str]]:
     docker = shutil.which("docker")
     if docker:
         result = subprocess.run(
-            [docker, "compose", "--env-file", str(env_path), "-f",
-             "docker-compose.prod.yml", "config", "--quiet"],
+            [
+                docker,
+                "compose",
+                "--env-file",
+                str(env_path),
+                "-f",
+                "docker-compose.prod.yml",
+                "config",
+                "--quiet",
+            ],
             cwd=ROOT,
             capture_output=True,
             text=True,

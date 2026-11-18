@@ -31,7 +31,7 @@ from ..langgraph_agents import get_settings
 from ..langgraph_agents.graph import finalize_report
 from ..langgraph_agents.hitl_agent import create_hitl_agent
 from ..middleware.rate_limit import limiter
-from ..services.analysis_orchestrator import get_orchestrator
+from ..services.analysis_orchestrator import _json_serialize_state, get_orchestrator
 from ..services.response_formatter import compute_accuracy
 
 logger = logging.getLogger(__name__)
@@ -567,111 +567,115 @@ async def approve_analysis(
         logger.info(f"HITL decision from {current_user} for session: {data.session_id}")
         logger.info(f"   Decision: {'APPROVED' if data.approved else 'REJECTED'}")
 
-        orchestrator = get_orchestrator()
-        job = await orchestrator.get_job_by_session(data.session_id)
-        if not job:
-            raise HTTPException(
-                status_code=404, detail=f"Session {data.session_id} not found"
+        with get_db_context() as db:
+            job = (
+                db.query(AnalysisJob)
+                .filter(AnalysisJob.session_id == data.session_id)
+                .with_for_update()
+                .first()
             )
+            if not job:
+                raise HTTPException(
+                    status_code=404, detail=f"Session {data.session_id} not found"
+                )
 
-        state_values = job.state or {}
-        if (
-            str(job.status) != "awaiting_review"
-            and state_values.get("status") != "awaiting_human_review"
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Session {data.session_id} is not awaiting human review",
+            state_values = job.state or {}
+            if str(job.status) in {"completed", "rejected", "failed"} or (
+                str(job.status) != "awaiting_review"
+                and state_values.get("status") != "awaiting_human_review"
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Session {data.session_id} is not awaiting human review",
+                )
+
+            # Prepare human feedback
+            human_feedback = {
+                "approved": data.approved,
+                "notes": data.physician_notes or "",
+                "modifications": data.modifications or {},
+                "timestamp": datetime.now().isoformat(),
+                "reviewer_id": current_user,
+            }
+
+            # Update state with human feedback
+            updated_state = {
+                **state_values,
+                "human_feedback": human_feedback,
+            }
+
+            # Apply HITL feedback + finalize directly on the SAVED state.
+            # The graph has no checkpointer (state lives in AnalysisJob), so
+            # re-invoking it with the full state would re-run the entire
+            # pipeline from START, recomputing results non-deterministically
+            # and losing report_id / evidence_links from the original run.
+            hitl_agent = create_hitl_agent()
+            hitl_updates = hitl_agent.process(updated_state)
+            result: Dict[str, Any] = dict(
+                finalize_report({**updated_state, **hitl_updates})
             )
+            result["status"] = "completed" if data.approved else "rejected"
 
-        # Prepare human feedback
-        human_feedback = {
-            "approved": data.approved,
-            "notes": data.physician_notes or "",
-            "modifications": data.modifications or {},
-            "timestamp": datetime.now().isoformat(),
-            "reviewer_id": current_user,
-        }
-
-        # Update state with human feedback
-        updated_state = {
-            **state_values,
-            "human_feedback": human_feedback,
-        }
-
-        # Apply HITL feedback + finalize directly on the SAVED state.
-        # The graph has no checkpointer (state lives in AnalysisJob), so
-        # re-invoking it with the full state would re-run the entire
-        # pipeline from START, recomputing results non-deterministically
-        # and losing report_id / evidence_links from the original run.
-        hitl_agent = create_hitl_agent()
-        hitl_updates = hitl_agent.process(updated_state)
-        result: Dict[str, Any] = dict(
-            finalize_report({**updated_state, **hitl_updates})
-        )
-        result["status"] = "completed" if data.approved else "rejected"
-
-        # Update Report in database if exists
-        triage_id = result.get("triage_id")
-        if triage_id:
-            with get_db_context() as db:
+            # Update Report in database if exists
+            triage_id = result.get("triage_id")
+            if triage_id:
                 db_triage = db.query(Triage).filter(Triage.id == triage_id).first()
-                if db_triage:
-                    db_triage.status = "completed" if data.approved else "rejected"
-
-                    # Update or create report
-                    report = (
-                        db.query(Report).filter(Report.triage_id == triage_id).first()
+                if db_triage is None:
+                    raise HTTPException(
+                        status_code=409, detail="Review triage is missing"
                     )
-                    if report:
-                        report.is_final = True
-                        report.confidence_score = result.get("confidence_score", 0.0)
-                        report.status = "final" if data.approved else "rejected"
-                        # Defensive: never lose report_id in the response
-                        if not result.get("report_id"):
-                            result["report_id"] = str(report.id)
+                db_triage.status = result["status"]
 
-                    # Persist HITL decision (audit)
-                    review = HITLReview(
-                        session_id=data.session_id,
-                        job_id=job.id,
-                        triage_id=triage_id,
-                        reviewer_id=current_user,
-                        approved=bool(data.approved),
-                        physician_notes=data.physician_notes,
-                        modifications=data.modifications or {},
+                report_query = db.query(Report).filter(Report.triage_id == triage_id)
+                if result.get("report_id"):
+                    report_query = report_query.filter(Report.id == result["report_id"])
+                report = report_query.order_by(Report.created_at.desc()).first()
+                if report is None:
+                    raise HTTPException(
+                        status_code=409, detail="Review report is missing"
                     )
-                    db.add(review)
-                    db.commit()
+                report.is_final = True
+                report.confidence_score = result.get("confidence_score", 0.0)
+                report.status = "final" if data.approved else "rejected"
+                result["report_id"] = str(report.id)
 
-        # Persist job state and mark terminal state
-        await orchestrator.update_job(
-            job_id=str(job.id),
-            status="completed" if data.approved else "rejected",
-            state=result,
-            finished_at=datetime.now(timezone.utc),
-        )
+            db.add(
+                HITLReview(
+                    session_id=data.session_id,
+                    job_id=job.id,
+                    triage_id=triage_id,
+                    reviewer_id=current_user,
+                    approved=data.approved,
+                    physician_notes=data.physician_notes,
+                    modifications=data.modifications or {},
+                )
+            )
+            job.status = result["status"]
+            job.state = _json_serialize_state(result)
+            job.finished_at = datetime.now(timezone.utc)
 
-        # Build response
-        raw_confidence, accuracy_score = _calibrated_accuracy(result, job)
-        response = AnalyzeResponse(
-            session_id=data.session_id,
-            job_id=str(job.id),
-            triage_id=triage_id,
-            report_id=result.get("report_id"),
-            status="completed" if data.approved else "rejected",
-            risk_level=serialize_risk_level(result.get("risk_level")),
-            confidence_score=raw_confidence,
-            accuracy_score=accuracy_score,  # Calibrated metric for UI
-            risk_score=result.get("risk_score"),
-            interactions=result.get("interactions", []),
-            contraindications=result.get("contraindications", []),
-            dosage_adjustments=result.get("dosage_adjustments", []),
-            adverse_reactions=result.get("adverse_reactions", []),
-            evidence_links=result.get("evidence_links", []),
-            final_report=result.get("final_report", {}),
-            message=f"Analysis {'approved' if data.approved else 'rejected'} by reviewer {current_user}.",
-        )
+            # Build response
+            raw_confidence, accuracy_score = _calibrated_accuracy(result, job)
+            response = AnalyzeResponse(
+                session_id=data.session_id,
+                job_id=str(job.id),
+                triage_id=triage_id,
+                report_id=result.get("report_id"),
+                status="completed" if data.approved else "rejected",
+                risk_level=serialize_risk_level(result.get("risk_level")),
+                confidence_score=raw_confidence,
+                accuracy_score=accuracy_score,  # Calibrated metric for UI
+                risk_score=result.get("risk_score"),
+                interactions=result.get("interactions", []),
+                contraindications=result.get("contraindications", []),
+                dosage_adjustments=result.get("dosage_adjustments", []),
+                adverse_reactions=result.get("adverse_reactions", []),
+                evidence_links=result.get("evidence_links", []),
+                final_report=result.get("final_report", {}),
+                message=f"Analysis {'approved' if data.approved else 'rejected'} by reviewer {current_user}.",
+            )
+
+            db.commit()
 
         logger.info(f"   HITL completed: {response.status}")
 
