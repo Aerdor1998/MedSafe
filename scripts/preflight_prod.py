@@ -87,7 +87,12 @@ def validate(args: argparse.Namespace) -> tuple[list[str], list[str]]:
     ):
         path = ROOT / relative_path
         try:
-            yaml.safe_load(path.read_text(encoding="utf-8"))
+            source = path.read_text(encoding="utf-8")
+            if relative_path == "docker-compose.prod.yml":
+                # Compose owns merge tags such as !override; check syntax here.
+                yaml.compose(source, Loader=yaml.SafeLoader)
+            else:
+                yaml.safe_load(source)
         except (OSError, yaml.YAMLError) as exc:
             errors.append(f"YAML inválido em {relative_path}: {type(exc).__name__}")
 
@@ -102,7 +107,8 @@ def validate(args: argparse.Namespace) -> tuple[list[str], list[str]]:
     docker = shutil.which("docker")
     if docker:
         result = subprocess.run(
-            [docker, "compose", "-f", "docker-compose.prod.yml", "config", "--quiet"],
+            [docker, "compose", "--env-file", str(env_path), "-f",
+             "docker-compose.prod.yml", "config", "--quiet"],
             cwd=ROOT,
             capture_output=True,
             text=True,

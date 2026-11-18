@@ -49,7 +49,9 @@ services:
     container_name: medsafe_redis
     logging: *default-logging
     # SECURITY: Password MUST be set via .env - no default allowed in production
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}"]
     volumes:
       - redis_data:/data
     # FIX: avoid binding host port 6379 (often already used).
@@ -59,7 +61,7 @@ services:
     ports:
       - "127.0.0.1:${REDIS_HOST_PORT:-6380}:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      test: ["CMD-SHELL", 'test "$$(redis-cli --raw ping)" = PONG']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -155,6 +157,8 @@ services:
       # FIX: validador de produção (config.py:355) exige POSTGRES_PASSWORD no env do
       # container — sem isto a app sobe com o default CHANGE_ME e crash-loopa.
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-medsafe}
+      - POSTGRES_USER=${POSTGRES_USER:-medsafe}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       # Ollama nativo do host (GPU via WSL) — ver comentário no serviço "ollama"
       - OLLAMA_HOST=http://host.docker.internal:11434
@@ -194,7 +198,7 @@ services:
       # conforme CLAUDE.md, só volte a true com autorização explícita.
       - ALLOW_ANONYMOUS_ANALYSIS=false
       # HITL (LangGraph human-in-the-loop; resume cross-process via PostgresSaver)
-      - MEDSAFE_ENABLE_HITL=${MEDSAFE_ENABLE_HITL:-true}
+      - MEDSAFE_ENABLE_HITL=true
       # CSP estrito (nonces, sem 'unsafe-inline'): lido em middleware/security.py:42.
       # Default false = o default seguro do próprio código; ver env.prod.example.
       - CSP_STRICT_MODE=${CSP_STRICT_MODE:-false}
@@ -266,6 +270,8 @@ services:
       # FIX: validador de produção (config.py:355) exige POSTGRES_PASSWORD no env do
       # container — sem isto a app sobe com o default CHANGE_ME e crash-loopa.
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-medsafe}
+      - POSTGRES_USER=${POSTGRES_USER:-medsafe}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       # Ollama nativo do host (GPU via WSL) — ver comentário no serviço "ollama"
       - OLLAMA_HOST=http://host.docker.internal:11434
@@ -282,7 +288,7 @@ services:
       - ENABLE_LEGACY_V1=${ENABLE_LEGACY_V1:-false}
       - LEGACY_V1_SUNSET_DATE=${LEGACY_V1_SUNSET_DATE:-2025-03-01}
       # HITL (deve espelhar o serviço api — worker executa o grafo que interrompe)
-      - MEDSAFE_ENABLE_HITL=${MEDSAFE_ENABLE_HITL:-true}
+      - MEDSAFE_ENABLE_HITL=true
       # Shutdown/recuperação (analysis_worker.py:32,38). Drain 300s < stop_grace_period
       # 360s acima — senão o SIGKILL chega antes de o drain terminar.
       - MEDSAFE_WORKER_DRAIN_TIMEOUT=${MEDSAFE_WORKER_DRAIN_TIMEOUT:-300.0}
