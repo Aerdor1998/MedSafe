@@ -67,18 +67,27 @@ const waitVisible = (page, sel, timeout = 15_000) =>
 // waitResult v4: condição terminal = step-4 visível E risk-label com rect
 // não-nulo E texto real (≠ '' e ≠ 'Calculando'). Versões anteriores aceitavam
 // banner HITL OU risk-label como terminal e geravam falsos resultados.
-const waitResult = (page, timeout = ANALYSIS_TIMEOUT) =>
-  waitFor(() => page.evaluate(() => {
-    const vis = (s) => {
-      const el = document.querySelector(s);
-      if (!el || el.classList.contains('hidden')) return false;
-      const r = el.getBoundingClientRect();
-      return r.width > 0 && r.height > 0;
-    };
-    if (!vis('#step-4') || !vis('#risk-label')) return false;
-    const txt = (document.querySelector('#risk-label').textContent || '').trim();
-    return txt !== '' && txt.toLowerCase() !== 'calculando';
-  }), { timeout, interval: 500, label: 'resultado da análise (step-4 + risk-label real)' });
+const analysisErrors = new WeakMap();
+async function waitResult(page, timeout = ANALYSIS_TIMEOUT) {
+  const until = Date.now() + timeout;
+  while (Date.now() < until) {
+    if (analysisErrors.has(page)) throw new Error(analysisErrors.get(page));
+    const ready = await page.evaluate(() => {
+      const visible = (selector) => {
+        const el = document.querySelector(selector);
+        if (!el || el.classList.contains('hidden')) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      };
+      if (!visible('#step-4') || !visible('#risk-label')) return false;
+      const label = document.querySelector('#risk-label').textContent.trim();
+      return label !== '' && label.toLowerCase() !== 'calculando';
+    });
+    if (ready) return;
+    await sleep(500);
+  }
+  throw new Error('Timeout esperando resultado da análise');
+}
 
 const text = (page, sel) =>
   page.evaluate((s) => (document.querySelector(s)?.textContent || '').trim(), sel);
@@ -95,6 +104,21 @@ async function main() {
   });
   const page = await ctx.newPage();
 
+  page.on('response', async (response) => {
+    const pathname = new URL(response.url()).pathname;
+    const analyze = pathname === '/api/v2/analyze';
+    const poll = pathname.startsWith('/api/v2/status/');
+    if (!analyze && !poll) return;
+    const stage = analyze ? 'envio' : 'consulta';
+    if (analyze) console.log(`POST /analyze HTTP ${response.status()}`);
+    if (response.status() >= 400 && response.status() !== 429) {
+      analysisErrors.set(page, `Falha de ${stage}: HTTP ${response.status()}`);
+    } else if (poll && response.ok()) {
+      const data = await response.json().catch(() => ({}));
+      if (data.status === 'failed') analysisErrors.set(page, 'Worker marcou a análise como falha');
+    }
+  });
+  page.on('pageerror', error => analysisErrors.set(page, `Erro de interface: ${error.name}`));
   const tests = [];
   const test = (id, name, fn) => tests.push({ id, name, fn });
 

@@ -67,6 +67,10 @@ jobs:
       - name: Summarize completed synthetic analyses
         if: always()
         run: |
+          docker compose ps --format '{{.Service}} {{.Status}}'
+          # Somente nomes de exceções e caminhos do código. Exclui payloads e mensagens.
+          docker compose logs --no-color worker api | grep -oE 'File "/app/backend/[^"]+", line [0-9]+|[[:alnum:]_.]*(Error|Exception):' | tail -50 || true
+          docker compose logs --no-color staging-ollama | grep -oE '[0-9]{3} [|].*POST +"/api/(chat|generate|embed)"' | tail -8 || true
           docker compose exec -T db psql -U medsafe -d medsafe_ci -v ON_ERROR_STOP=1 -c "
             SELECT status, state->>'risk_level' AS risk,
                    state->'analysis_metadata'->>'fallback_triggered' AS used_fallback,
