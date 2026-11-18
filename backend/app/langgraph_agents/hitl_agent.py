@@ -239,14 +239,11 @@ Be direct and action-oriented."""
 
         # Extract decision
         approved = human_feedback.get("approved", False)
-        physician_notes = human_feedback.get("notes", "")
         modifications = human_feedback.get("modifications", {})
 
         logger.info(
             f" HITLAgent: Reviewer decision = {'APPROVED' if approved else 'REJECTED'}"
         )
-        if physician_notes:
-            logger.info(f"   Notes: {physician_notes[:100]}")
 
         # Apply modifications if provided
         updates = {
@@ -283,10 +280,11 @@ Be direct and action-oriented."""
         updates["timestamps"] = timestamps
 
         # Calculate HITL duration
-        if state.get("timestamps", {}).get("hitl_started"):
-            hitl_duration = (
-                datetime.now() - state["timestamps"]["hitl_started"]
-            ).total_seconds()
+        started = timestamps.get("hitl_started")
+        if isinstance(started, str):
+            started = datetime.fromisoformat(started)
+        if isinstance(started, datetime):
+            hitl_duration = (datetime.now(started.tzinfo) - started).total_seconds()
             logger.info(f"   HITL review duration: {hitl_duration:.1f}s")
 
         self.log_step(

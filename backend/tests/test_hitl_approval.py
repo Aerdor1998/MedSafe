@@ -32,7 +32,7 @@ def test_pharmacist_can_reject_hitl_analysis_and_read_terminal_status(app, clien
             "dosage_adjustments": [],
             "adverse_reactions": [],
             "evidence_links": [],
-            "timestamps": {},
+            "timestamps": {"hitl_started": "2026-11-18T10:00:00+00:00"},
         },
     )
 

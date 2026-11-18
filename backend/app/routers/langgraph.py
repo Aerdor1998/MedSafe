@@ -611,6 +611,8 @@ async def approve_analysis(
             # and losing report_id / evidence_links from the original run.
             hitl_agent = create_hitl_agent()
             hitl_updates = hitl_agent.process(updated_state)
+            if hitl_updates.get("status") != "human_reviewed":
+                raise HTTPException(status_code=500, detail="Could not apply review")
             result: Dict[str, Any] = dict(
                 finalize_report({**updated_state, **hitl_updates})
             )
@@ -634,6 +636,9 @@ async def approve_analysis(
                     raise HTTPException(
                         status_code=409, detail="Review report is missing"
                     )
+                report.risk_level = serialize_risk_level(result.get("risk_level"))
+                report.dosage_adjustments = result.get("dosage_adjustments", [])
+                report.adverse_reactions = result.get("adverse_reactions", [])
                 report.is_final = True
                 report.confidence_score = result.get("confidence_score", 0.0)
                 report.status = "final" if data.approved else "rejected"
