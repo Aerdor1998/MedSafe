@@ -3,6 +3,8 @@
 import logging
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from backend.app.utils.logging_config import AgentLogger
 
 
@@ -24,11 +26,14 @@ def test_agent_logger_error_exc_info_true_without_exception():
     assert log.logger.handle.call_args[0][0].exc_info is None
 
 
+@pytest.mark.parametrize("failure", ["offline", "invalid_format", "rules_error"])
 @patch("backend.app.langgraph_agents.clinical_agent.get_interaction_service")
 @patch("backend.app.langgraph_agents.clinical_agent.get_rules_engine")
 @patch("backend.app.langgraph_agents.clinical_agent.get_vector_store")
 @patch("backend.app.langgraph_agents.base_agent.ChatOllama")
-def test_llm_failure_forces_human_review(mock_ollama, mock_vs, mock_rules, mock_int):
+def test_llm_failure_forces_human_review(
+    mock_ollama, mock_vs, mock_rules, mock_int, failure
+):
     from backend.app.langgraph_agents.clinical_agent import ClinicalAgent
 
     mock_ollama.return_value = MagicMock()
@@ -46,6 +51,15 @@ def test_llm_failure_forces_human_review(mock_ollama, mock_vs, mock_rules, mock_
         side_effect=ConnectionError("Ollama down")
     )
 
+    if failure == "invalid_format":
+        agent._generate_recommendations = MagicMock(
+            return_value={"unstructured_fallback": True}
+        )
+    elif failure == "rules_error":
+        agent.rules_engine.check_escalation_needed.side_effect = RuntimeError(
+            "rules unavailable"
+        )
+
     state = {
         "medication_text": "varfarina, amiodarona",
         "medications": ["varfarina", "amiodarona"],
@@ -58,7 +72,12 @@ def test_llm_failure_forces_human_review(mock_ollama, mock_vs, mock_rules, mock_
 
     assert result["requires_human_review"] is True
     assert result["status"] == "analyzed_partial"
-    assert any("LLM indisponível" in r for r in result["escalation_reasons"])
+    reason = {
+        "offline": "LLM indisponível",
+        "invalid_format": "estrutura válida",
+        "rules_error": "erro interno",
+    }[failure]
+    assert any(reason in r for r in result["escalation_reasons"])
     meta = result.get("analysis_metadata", {})
     assert meta.get("fallback_triggered") is True
     assert meta.get("partial_analysis") is True

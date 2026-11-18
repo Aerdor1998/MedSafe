@@ -355,6 +355,7 @@ async function main() {
       try {
         await page.screenshot({ path: path.join(SHOTS, `${t.id}-fail.png`), fullPage: true });
       } catch { /* página pode estar fechada */ }
+      if (process.env.E2E_FAIL_FAST === '1') break;
     }
   }
 
