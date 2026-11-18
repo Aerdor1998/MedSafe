@@ -380,7 +380,7 @@ xxhash==4.0.1
     # via
     #   langgraph
     #   langsmith
-yarl==1.24.5
+yarl==1.25.1
     # via aiohttp
 zstandard==0.25.0
     # via langsmith
